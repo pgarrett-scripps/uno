@@ -1,0 +1,17 @@
+[package]
+name = "uno-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[dependencies]
+serde.workspace = true
+csv.workspace = true
+rayon.workspace = true
+rustc-hash.workspace = true
+anyhow.workspace = true
+log.workspace = true
+sage-core.workspace = true
+gbdt.workspace = true
+uno-lightgbm-sys.workspace = true

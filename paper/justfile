@@ -1,0 +1,9 @@
+# uno paper (Typst, arkheion template)
+default:
+  @just --list
+paper:
+  typst compile paper.typ
+watch:
+  typst watch paper.typ
+clean:
+  rm -f paper.pdf

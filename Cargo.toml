@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = ["crates/uno-core", "crates/uno", "crates/uno-rt-train", "crates/uno-lightgbm-sys"]
+
+[profile.release]
+# Whole-program optimization for the numeric hot paths (matching, RT/MLP
+# inference, the protein greedy-parsimony grid). LTO + a single codegen unit let
+# the optimizer inline across crate boundaries (e.g. into sage-core); the cost is
+# slower compiles, paid once.
+lto = "thin"
+codegen-units = 1
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["Patrick Garrett"]
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+csv = "1.3"
+clap = { version = "4", features = ["derive"] }
+rayon = "1.10"
+rustc-hash = "2"
+anyhow = "1"
+log = "0.4"
+env_logger = "0.11"
+gbdt = "0.1.3"
+uno-lightgbm-sys = { path = "crates/uno-lightgbm-sys" }
+# Digestion / peptide mass / decoys — reuse Sage's core library.
+sage-core = { path = "../sage/crates/sage" }
