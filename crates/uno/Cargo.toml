@@ -1,0 +1,19 @@
+[package]
+name = "uno"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "uno"
+path = "src/main.rs"
+
+[dependencies]
+uno-core = { path = "../uno-core" }
+clap.workspace = true
+anyhow.workspace = true
+log.workspace = true
+env_logger.workspace = true
+serde.workspace = true
+toml.workspace = true

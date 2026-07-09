@@ -1,0 +1,21 @@
+# Rust build artifacts
+/target
+**/target
+
+# Python virtual environment
+.venv/
+__pycache__/
+*.pyc
+
+# Experiments / scratch outputs (large)
+/experiments
+
+# RT training data (large; regenerate or fetch separately)
+/data
+
+# Claude Code local state
+.claude/
+
+# OS / editor cruft
+.DS_Store
+*.swp

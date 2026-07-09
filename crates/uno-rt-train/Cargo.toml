@@ -1,0 +1,17 @@
+[package]
+name = "uno-rt-train"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "uno-rt-train"
+path = "src/main.rs"
+
+[dependencies]
+uno-core = { path = "../uno-core" }
+clap.workspace = true
+anyhow.workspace = true
+gbdt.workspace = true
+rayon.workspace = true
