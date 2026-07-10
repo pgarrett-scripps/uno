@@ -44,7 +44,7 @@ cargo build --release
 cargo run --release -p uno -- \
   --intensity-matrix path/to/intensity_matrix.tsv \
   --fasta path/to/proteins.fasta \
-  --rt-model models/rt_cnn_chrono_ch32.urtc \
+  --rt-model models/rt_cnn_chrono_global_v3_ch32.urtc \
   --config example_config.toml \
   --out-proteins proteins.tsv \
   --out-peptides peptides.tsv

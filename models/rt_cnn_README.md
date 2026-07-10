@@ -11,10 +11,23 @@ better than absolute-position one-hot. AA-only — C is implicitly carbamidometh
 (uno's fixed mod); no variable mods.
 
 ## Files
-- `rt_cnn_chrono_ch32.urtc` — **DEPLOYED DEFAULT** (2026-06-27): trained on the
-  Chronologer harmonized corpus (1.5M real-LC peptides, HI space). The
-  speed/accuracy sweet spot — see in-search table below. ~40k params, 60k pred/s.
-- `rt_cnn_chrono_ch64.urtc` — same data, ch=64: +12% depth (760 vs 670), 4x slower.
+- `rt_cnn_chrono_global_v3_ch32.urtc` — **SHIPPED DEFAULT** (2026-07-09): ch32 on the
+  Chronologer corpus **plus 11 global physicochemical features** (URTC v2 format,
+  N_GLOBAL=11). Best in-domain val MAE (0.447). ⚠️ On the run10 honest benchmark it
+  scores 248 @1% — LOWER than the 5-feature variant (401) and the no-global baseline
+  (259); shipped by explicit product decision (val-MAE / broader-generalization
+  rationale), not because it wins run10. The build expects N_GLOBAL=11, so this is
+  the only global model it loads. See "Global features" below.
+- `rt_cnn_chrono_global_ch32.urtc` — 5-feature variant (URTC v2, N_GLOBAL=5). Best
+  run10 depth of any model tested: **401 @1%** (+55% over baseline). Superseded as
+  default by v3 above; **does NOT load with the current N_GLOBAL=11 build** (kept for
+  the record / rebuild if reverting to 5 features).
+- `rt_cnn_chrono_ch32.urtc` — original plain ch32, no global feats (URTC v1, still
+  loadable): Chronologer corpus, 259 @1% on run10. ~40k params, 60k pred/s.
+- `rt_cnn_chrono_global_ch64.urtc` — ch64 + 5 global feats. Best val MAE among the
+  v2 set (0.423) but REGRESSES in-search (229 @1%): ch64 overfits, loses under domain
+  shift. Do NOT use; also N_GLOBAL=5 so won't load with the current build.
+- `rt_cnn_chrono_ch64.urtc` — plain ch64: +12% depth (760 vs 670) under the OLD config below, 4x slower.
 - `rt_cnn_chrono_ch16.urtc` — same data, ch=16: fastest (205k pred/s) but loses depth.
 - `rt_cnn_ch32.urtc` / `rt_cnn_ch64.urtc` — OLD, Prosit-iRT-only. Do NOT use: they
   overfit synthetic iRT and HALVE in-search depth (546 vs 760 for ch64). Kept for history.
@@ -34,6 +47,52 @@ Honest = yeast-covered entrapment library; emp FDR from yeast IDs.
 
 chrono ch32 = 81% of DeepLC's depth, pure-Rust, ~40x faster, no Python. Retrain/extend:
 see [`../crates/uno-rt-train/PRETRAIN_PLAN.md`](../crates/uno-rt-train/PRETRAIN_PLAN.md).
+
+## Global features (URTC v2) — the current lever
+DeepLC's edge over uno's CNN on run10 (residual σ 1.44 vs 5.07 min) traces partly
+to its explicit global physicochemical descriptors. Appending 5 of them to uno's
+`[mean;max]` pool before the head closes much of the gap. `N_GLOBAL = 5`:
+`[len/50, (D+E)/len, (K+R)/len, His/len, (FWYLIVM)/len]` — must stay in lockstep
+between `global_feats` (rt_cnn.rs) and `feat_global` (train_rt.py). v1 models carry
+n_global=0 and load unchanged; v2 stores the count in the header.
+
+A/B on run10 (entrap_db_C; max_len=30, offsets[-1,0,1], top_k=50, ondata_rt;
+honest yeast-entrapment FDR — NOT comparable to the 670-row table above, which used
+a different config):
+
+| RT model            | val MAE (iRT) | honest @1% | honest @5% |
+|---------------------|---------------|------------|------------|
+| ch32 (no global)    |     ~0.50     |    259     |    690     |
+| **ch32 + global**   |     0.456     |  **401**   |    707     |
+| ch64 + global       |     0.423     |    229     |    568     |
+
+The gain is NOT a tighter global RT sigma (two-stage rt_sig pins at the 3.50 clamp
+in both) — it's that more accurate per-peptide RT predictions win the target/decoy
+deviation competition, so the grid picks a tighter cut (dev_cut 6→3). ch64 again
+proves holdout/val MAE is anti-predictive of search depth.
+
+**On run10 depth, 5 features beat 11.** The v3 set (N_GLOBAL=11: + KD-hydropathy sum,
+GRAVY, aromatic FWY, Pro, N-term KD, C-term KD) scored 248 @1% — below the 5-feature
+401 and even the 259 baseline — despite the best val MAE of all (0.447). Likely cause:
+the hydropathy sum ≈ the HI label, so the net leans on it and predicts a smooth
+composition-only RT that matches many candidates equally, eroding the per-peptide
+discrimination the target/decoy competition needs.
+
+Full A/B (run10, same config; honest yeast-entrapment FDR):
+
+| RT model                | val MAE (iRT) | honest @1% | honest @5% |
+|-------------------------|---------------|------------|------------|
+| ch32 (0 global)         |     ~0.50     |    259     |    690     |
+| ch32 + 5 global         |     0.456     |  **401**   |    707     |
+| ch32 + 11 global (v3)   |   **0.447**   |    248     |    648     |
+| ch64 + 5 global         |     0.423     |    229     |    568     |
+
+**v3 (11 global) is the SHIPPED default** by product decision despite the lower run10
+depth — it has the best in-domain val MAE and its features are domain-invariant
+physics (rationale: broader-dataset generalization). If optimizing run10 depth
+specifically, rebuild with N_GLOBAL=5 and use `rt_cnn_chrono_global_ch32.urtc` (401).
+To push RT further, don't pile on global scalars — ablate + add order-aware/atom
+encoding one change at a time.
 
 ## Benchmark (ProteomeTools/Prosit holdout, peptide-disjoint split) — HISTORICAL, misleading
 Aligned = after affine calibration to true iRT (how uno calibrates per-run).
