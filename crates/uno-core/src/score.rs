@@ -227,6 +227,14 @@ fn featurize(
         // absent (koth aligned matrices), so this is inert there.
         (1.0 + f.n_isotopes.unwrap_or(0.0)).ln() as f32,
         (1.0 + f.n_scans.unwrap_or(0.0)).ln() as f32,
+        // koth single-run PFM-quality columns (dropped by cross-run alignment).
+        // These are the exact signals ms1searchpy's LightGBM PFM filter uses to
+        // drop the random-match rate p to ~0.135 (its @5% depth). 0.0 when absent
+        // (aligned matrices), so inert there — active only on single-run inputs.
+        f.cosine_score.unwrap_or(0.0) as f32,
+        f.isotope_score.unwrap_or(0.0) as f32,
+        f.ppm_error.unwrap_or(0.0) as f32,
+        f.neutron_offset.unwrap_or(0.0) as f32,
     ]
 }
 
@@ -626,7 +634,7 @@ fn mass_anchor_calibration(
 
     // RT accuracy from confident-protein peptides' best-RT (real-feature) residuals,
     // Gaussian core, clamped to weight RT ~its true accuracy in the deviation.
-    let est_rt_sig = |cal: &Calibration, confident: &HashSet<String>| -> f64 {
+    let est_rt_sig = |cal: &Calibration, confident: &HashSet<String>, m_shift: f64, m_gate: f64| -> f64 {
         let mut rr: Vec<f64> = Vec::new();       // best rt_diff per peptide (uno legacy)
         let mut all_rd: Vec<f64> = Vec::new();   // ALL confident-peptide PFM rt_diffs (ms1's noisygaus input)
         for (&pi, pfm_list) in &pep_pfms {
@@ -636,7 +644,7 @@ fn mass_anchor_calibration(
             }
             let mut best_rd: Option<f64> = None;
             for &(err, pos) in pfm_list {
-                if (err - shift).abs() > mass_gate { continue; }
+                if (err - m_shift).abs() > m_gate { continue; }
                 if let Some(rd) = rt_diff_at(cal, pos) {
                     all_rd.push(rd);
                     if best_rd.map_or(true, |b: f64| rd.abs() < b.abs()) { best_rd = Some(rd); }
@@ -667,12 +675,49 @@ fn mass_anchor_calibration(
         clipped_sigma(rr.into_iter()).clamp(0.3, 3.5)
     };
 
+    // Per-stage MASS recalibration on the confident set (ms1searchpy's biggest p
+    // drop is mass recal: p 0.68->0.30 at stage 1, then RT/ML tighten to 0.136;
+    // uno's bootstrap tightened mass ONCE then froze it, leaving p~0.44). Each stage,
+    // refit the mass shift + Gaussian-core sigma on the CURRENT confident target
+    // peptides' best RT-consistent match, and tighten the gate to 3*sigma (NEVER
+    // widen -- monotone, so coincidental matches fall outside the shrinking window
+    // while real ones stay in). Returns (shift, sigma, gate). Gated by UNO_STAGE_MASS
+    // (default on); when off, stages reuse the frozen bootstrap mass (old behavior).
+    let recal_mass = |conf: &HashSet<String>, cal: &Calibration, cur_shift: f64, cur_sigma: f64, cur_gate: f64| -> (f64, f64, f64) {
+        let mut errs: Vec<f64> = Vec::new();
+        for (&pi, pfm_list) in &pep_pfms {
+            let pep = &db.peptides[pi];
+            if pep.decoy || !pep.proteins.iter().any(|pr| conf.contains(pr.as_ref())) { continue; }
+            // mass error of this peptide's best RT-consistent match (min |rt_diff|
+            // within the current mass gate) -- the same match the deviation pass keys on.
+            let mut best: Option<(f64, f64)> = None; // (|rt_diff|, mass_err)
+            for &(err, pos) in pfm_list {
+                if (err - cur_shift).abs() > cur_gate { continue; }
+                if let Some(rd) = rt_diff_at(cal, pos) {
+                    if best.map_or(true, |(b, _): (f64, f64)| rd.abs() < b) { best = Some((rd.abs(), err)); }
+                }
+            }
+            if let Some((_, err)) = best { errs.push(err); }
+        }
+        if errs.len() < 50 { return (cur_shift, cur_sigma, cur_gate); }
+        let shift = median(&mut errs.clone());
+        let sigma = clipped_sigma(errs.iter().map(|&e| e - shift)).max(0.05);
+        // never widen the gate: monotone tightening only.
+        let gate = (3.0 * sigma).min(cur_gate);
+        (shift, sigma, gate)
+    };
+    // Default OFF: measured negative (per-stage recal RE-ESTIMATES sigma LOOSER than
+    // the bootstrap's tightest-round subset -- 0.63->0.91 ppm -- so it widens, not
+    // tightens; CNN 904->705, DeepLC 723->687). The bootstrap already tightens mass
+    // optimally; mass is not uno's p bottleneck. Kept env-gated for future work.
+    let stage_mass = std::env::var("UNO_STAGE_MASS").map(|v| v == "1").unwrap_or(false);
+
     // One deviation pass (given a calibration + rt_sig): per peptide, ANY-FEATURE
     // match by MINIMUM COMBINED deviation dev = mass_z^2 + (rt_diff/rt_sig)^2 (finds
     // the real feature, tight in BOTH dims; rejects coincidences tight in one). Scan
     // the cutoff, protein binomial, target/decoy FDR. Returns the best result and
     // the confident (q<=1%) target accessions (for two-stage recalibration).
-    let run_deviation = |cal: &Calibration, rt_sig: f64| -> (usize, f64, Vec<ProteinId>, HashSet<String>) {
+    let run_deviation = |cal: &Calibration, rt_sig: f64, m_shift: f64, m_sigma: f64, m_gate: f64| -> (usize, f64, Vec<ProteinId>, HashSet<String>) {
         let mut pep_dev: HashMap<usize, (bool, f64, usize)> = HashMap::new();
         // Per peptide, ALL (dev, feature) pairs across its PFMs (charge states /
         // scans), so feature-competition can keep a peptide alive until EVERY one of
@@ -692,8 +737,8 @@ fn mass_anchor_calibration(
                 let mut best: Option<(f64, usize)> = None;
                 let mut feats: Vec<(f64, usize)> = Vec::new();
                 for &(err, pos) in pfm_list {
-                    let mz = (err - shift) / sigma;
-                    if mz.abs() > mass_gate / sigma { continue; }
+                    let mz = (err - m_shift) / m_sigma;
+                    if mz.abs() > m_gate / m_sigma { continue; }
                     if cs_gate > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx].combined_score < cs_gate { continue; }
                     if let Some(rd) = rt_diff_at(cal, pos) {
                         let dev = mz * mz + (rd / rt_sig).powi(2);
@@ -763,8 +808,8 @@ fn mass_anchor_calibration(
                     // recompute per-PFM mass/RT residuals against the winning calibration
                     if let Some(list) = pep_pfms.get(&pi) {
                         for &(err, pos) in list {
-                            let mz = (err - shift) / sigma;
-                            if mz.abs() > mass_gate / sigma { continue; }
+                            let mz = (err - m_shift) / m_sigma;
+                            if mz.abs() > m_gate / m_sigma { continue; }
                             if let Some(rd) = rt_diff_at(cal, pos) {
                                 let dev = mz * mz + (rd / rt_sig).powi(2);
                                 let feat = pfms[reduced[pos]].feature_idx;
@@ -944,8 +989,8 @@ fn mass_anchor_calibration(
     // Stage 1: deviation on the mass-bootstrap calibration.
     let mass_conf_accs: HashSet<String> =
         mass_confident.iter().filter(|(d, _)| !d).map(|(_, a)| a.to_string()).collect();
-    let rt_sig1 = est_rt_sig(&cal, &mass_conf_accs);
-    let (n1, cut1, prot1, conf1) = run_deviation(&cal, rt_sig1);
+    let rt_sig1 = est_rt_sig(&cal, &mass_conf_accs, shift, mass_gate);
+    let (n1, cut1, prot1, conf1) = run_deviation(&cal, rt_sig1, shift, sigma, mass_gate);
 
     // ITERATIVE multi-stage RT calibration (ms1searchpy drives the random-match rate
     // p 0.68->0.30->0.28->0.12 across stages; uno used to do ONE recalibration and
@@ -954,14 +999,14 @@ fn mass_anchor_calibration(
     // gate tightens and p falls. Deterministic: cal_pairs are total-ordered before
     // the fit (pep_pfms is a std HashMap; fit_robust's stable x-sort would otherwise
     // let ties wobble the fit and swing depth). Keep the best-scoring stage.
-    let build_cal_pairs = |conf: &HashSet<String>, cal: &Calibration| -> Vec<(f64, f64)> {
+    let build_cal_pairs = |conf: &HashSet<String>, cal: &Calibration, m_shift: f64, m_gate: f64| -> Vec<(f64, f64)> {
         let mut cp: Vec<(f64, f64)> = Vec::new();
         for (&pi, pfm_list) in &pep_pfms {
             let pep = &db.peptides[pi];
             if pep.decoy || !pep.proteins.iter().any(|pr| conf.contains(pr.as_ref())) { continue; }
             let mut best: Option<(f64, usize)> = None;
             for &(err, pos) in pfm_list {
-                if (err - shift).abs() > mass_gate { continue; }
+                if (err - m_shift).abs() > m_gate { continue; }
                 if let Some(rd) = rt_diff_at(cal, pos) {
                     if best.map_or(true, |(b, _): (f64, usize)| rd.abs() < b.abs()) { best = Some((rd, pos)); }
                 }
@@ -978,19 +1023,30 @@ fn mass_anchor_calibration(
     let n_stages: usize = std::env::var("UNO_RT_STAGES").ok().and_then(|s| s.parse().ok()).unwrap_or(4);
     let (mut best_n, mut best_cut, mut best_proteins, mut best_cal) =
         (n1, cut1, prot1.clone(), cal.clone());
+    // Track the mass calibration (shift/sigma/gate) alongside the RT calibration so
+    // the winning stage's TIGHTENED mass carries into the ML/hill/store steps.
+    let (mut best_shift, mut best_sigma, mut best_gate) = (shift, sigma, mass_gate);
     let (mut cur_cal, mut cur_conf) = (cal.clone(), conf1.clone());
+    let (mut cur_shift, mut cur_sigma, mut cur_gate) = (shift, sigma, mass_gate);
     for stage in 2..=n_stages.max(2) {
-        let cal_pairs = build_cal_pairs(&cur_conf, &cur_cal);
+        // Retighten MASS on the current confident set FIRST (ms1's big p-drop lever),
+        // then recalibrate RT under the tightened mass, then re-search.
+        let (s_shift, s_sigma, s_gate) = if stage_mass {
+            recal_mass(&cur_conf, &cur_cal, cur_shift, cur_sigma, cur_gate)
+        } else { (shift, sigma, mass_gate) };
+        let cal_pairs = build_cal_pairs(&cur_conf, &cur_cal, s_shift, s_gate);
         if cal_pairs.len() < 100 { break; }
         let cal_s = Calibration::fit_robust(&cal_pairs, 60, 200);
-        let rt_sig_s = est_rt_sig(&cal_s, &cur_conf);
-        let (ns, cuts, prots, confs) = run_deviation(&cal_s, rt_sig_s);
-        log::info!("mass-anchor stage {}: {} confident (rt_sig {:.2}, {} conf-peptides for recal)",
-            stage, ns, rt_sig_s, cal_pairs.len());
+        let rt_sig_s = est_rt_sig(&cal_s, &cur_conf, s_shift, s_gate);
+        let (ns, cuts, prots, confs) = run_deviation(&cal_s, rt_sig_s, s_shift, s_sigma, s_gate);
+        log::info!("mass-anchor stage {}: {} confident (rt_sig {:.2}, mass {:.2}+/-{:.2}ppm gate {:.2}, {} conf-peptides)",
+            stage, ns, rt_sig_s, s_shift, s_sigma, s_gate, cal_pairs.len());
         if ns > best_n {
             best_n = ns; best_cut = cuts; best_proteins = prots; best_cal = cal_s.clone();
+            best_shift = s_shift; best_sigma = s_sigma; best_gate = s_gate;
         }
         // stop when the confident set stops growing (converged) or shrinks.
+        cur_shift = s_shift; cur_sigma = s_sigma; cur_gate = s_gate;
         if confs.len() <= cur_conf.len() { break; }
         cur_cal = cal_s;
         cur_conf = confs;
@@ -1012,9 +1068,9 @@ fn mass_anchor_calibration(
     // Hand the winning RT calibration (+ RT sigma, mass shift/sigma) to the hill
     // second pass so it predicts peptide RT in the SAME on-data-calibrated space.
     {
-        let rt_sig_final = est_rt_sig(&best_cal, &conf1).max(0.02);
+        let rt_sig_final = est_rt_sig(&best_cal, &conf1, best_shift, best_gate).max(0.02);
         MASS_ANCHOR_CAL.with(|c| {
-            *c.borrow_mut() = Some((best_cal.clone(), rt_sig_final, shift, sigma));
+            *c.borrow_mut() = Some((best_cal.clone(), rt_sig_final, best_shift, best_sigma));
         });
     }
 
@@ -1042,7 +1098,7 @@ fn mass_anchor_calibration(
             // feature under the winning calibration. Scoring every PFM and taking the
             // per-peptide MAX inflates random peptides (max-of-many); ms1searchpy
             // applies the ML to mass+RT-gated PFMs, so we gate to the best one here.
-            let rt_sig_ml = est_rt_sig(&best_cal, &conf).max(0.5);
+            let rt_sig_ml = est_rt_sig(&best_cal, &conf, best_shift, best_gate).max(0.5);
             // combined_score gate on the ML CANDIDATE set (koth feature-quality ML
             // score). Junk low-quality features carry most of the coincidental yeast
             // matches that flood the mid-tier (@5%); a real human peptide keeps its
@@ -1055,8 +1111,8 @@ fn mass_anchor_calibration(
                 let decoy = db.peptides[pi].decoy;
                 let mut best: Option<(f64, usize)> = None;
                 for &(err, pos) in pfm_list {
-                    let mz = (err - shift) / sigma;
-                    if mz.abs() > mass_gate / sigma {
+                    let mz = (err - best_shift) / best_sigma;
+                    if mz.abs() > best_gate / best_sigma {
                         continue;
                     }
                     if cs_gate_ml > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx].combined_score < cs_gate_ml {
