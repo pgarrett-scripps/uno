@@ -39,6 +39,12 @@ const META_COLUMNS: &[&str] = &[
     "isoerror",
     "isoerror2",
     "rt_width",
+    // koth single-run PFM-quality columns (dropped by cross-run alignment). ms1's
+    // LightGBM PFM filter runs on these to reach p~0.135; wire them to uno's ML.
+    "cosine_score",
+    "isotope_score",
+    "ppm_error",
+    "neutron_offset",
 ];
 
 /// One consensus LC-MS feature: a deisotoped, charge-resolved, RT-aligned
@@ -68,6 +74,14 @@ pub struct Feature {
     pub isoerror: Option<f64>,
     pub isoerror2: Option<f64>,
     pub rt_width: Option<f64>,
+    /// Optional koth single-run PFM-quality columns (present in the raw
+    /// `.features.tsv`, DROPPED by cross-run alignment). ms1searchpy's LightGBM
+    /// PFM filter runs on exactly these to drop the random-match rate p from ~0.68
+    /// to ~0.135 — the source of its @5% depth. `None` on aligned matrices.
+    pub cosine_score: Option<f64>,
+    pub isotope_score: Option<f64>,
+    pub ppm_error: Option<f64>,
+    pub neutron_offset: Option<f64>,
     /// Per-sample integrated intensities (aligned to [`FeatureMatrix::run_names`]).
     /// `0.0` means not detected in that run.
     pub intensities: Vec<f64>,
@@ -284,6 +298,10 @@ struct MatrixRow {
     isoerror: Option<f64>,
     isoerror2: Option<f64>,
     rt_width: Option<f64>,
+    cosine_score: Option<f64>,
+    isotope_score: Option<f64>,
+    ppm_error: Option<f64>,
+    neutron_offset: Option<f64>,
     values: Vec<f64>,
 }
 
@@ -302,6 +320,10 @@ impl MatrixRow {
             isoerror: self.isoerror,
             isoerror2: self.isoerror2,
             rt_width: self.rt_width,
+            cosine_score: self.cosine_score,
+            isotope_score: self.isotope_score,
+            ppm_error: self.ppm_error,
+            neutron_offset: self.neutron_offset,
             intensities: self.values,
             q_values,
         })
@@ -323,6 +345,10 @@ struct Layout {
     isoerror: Option<usize>,
     isoerror2: Option<usize>,
     rt_width: Option<usize>,
+    cosine_score: Option<usize>,
+    isotope_score: Option<usize>,
+    ppm_error: Option<usize>,
+    neutron_offset: Option<usize>,
     sample_cols: Vec<usize>,
     sample_names: Vec<String>,
 }
@@ -362,6 +388,10 @@ impl Layout {
             isoerror: find_opt("isoerror"),
             isoerror2: find_opt("isoerror2"),
             rt_width: find_opt("rt_width"),
+            cosine_score: find_opt("cosine_score"),
+            isotope_score: find_opt("isotope_score"),
+            ppm_error: find_opt("ppm_error"),
+            neutron_offset: find_opt("neutron_offset"),
             sample_cols,
             sample_names,
         })
@@ -423,6 +453,10 @@ fn read_matrix(path: &Path) -> Result<(Vec<String>, Vec<MatrixRow>)> {
         let isoerror = opt_f64(layout.isoerror);
         let isoerror2 = opt_f64(layout.isoerror2);
         let rt_width = opt_f64(layout.rt_width);
+        let cosine_score = opt_f64(layout.cosine_score);
+        let isotope_score = opt_f64(layout.isotope_score);
+        let ppm_error = opt_f64(layout.ppm_error);
+        let neutron_offset = opt_f64(layout.neutron_offset);
 
         let values = layout
             .sample_cols
@@ -451,6 +485,10 @@ fn read_matrix(path: &Path) -> Result<(Vec<String>, Vec<MatrixRow>)> {
             isoerror,
             isoerror2,
             rt_width,
+            cosine_score,
+            isotope_score,
+            ppm_error,
+            neutron_offset,
             values,
         });
     }
