@@ -29,7 +29,7 @@ def load_tsv(path):
     seqs, ys = [], []
     with open(path) as f:
         for line in f:
-            s, y = line.rstrip("\n").split("\t")
+            s, y = line.rstrip().split("\t")
             seqs.append(s)
             ys.append(float(y))
     return seqs, np.asarray(ys, dtype=np.float32)
@@ -62,11 +62,17 @@ def feat_tokens(seqs):
 # Explicit global physicochemical features appended to the pooled conv vector
 # (DeepLC-style). Order + formulas MUST match `global_feats` / `N_GLOBAL` in
 # crates/uno-core/src/rt_cnn.rs EXACTLY. Computed from the FULL sequence.
-N_GLOBAL = 5
-_ACIDIC, _BASIC, _PHOB = set("DE"), set("KR"), set("FWYLIVM")
+N_GLOBAL = 11
+_ACIDIC, _BASIC, _PHOB, _AROM = set("DE"), set("KR"), set("FWYLIVM"), set("FWY")
+# Kyte-Doolittle hydropathy; keep identical to kd() in rt_cnn.rs.
+_KD = {"A": 1.8, "R": -4.5, "N": -3.5, "D": -3.5, "C": 2.5, "Q": -3.5, "E": -3.5,
+       "G": -0.4, "H": -3.2, "I": 4.5, "L": 3.8, "K": -3.9, "M": 1.9, "F": 2.8,
+       "P": -1.6, "S": -0.8, "T": -0.7, "W": -0.9, "Y": -1.3, "V": 4.2}
 
 def feat_global(seqs):
-    """(N, N_GLOBAL) float32: [len/50, (D+E)/len, (K+R)/len, H/len, hydrophobic/len]."""
+    """(N, N_GLOBAL) float32, order matching global_feats() in rt_cnn.rs (v3):
+    [len/50, (D+E)/len, (K+R)/len, H/len, hydrophobic/len, KDsum/50, GRAVY,
+     aromatic/len, Pro/len, Nterm_KD/4.5, Cterm_KD/4.5]."""
     G = np.zeros((len(seqs), N_GLOBAL), dtype=np.float32)
     for i, s in enumerate(seqs):
         n = max(len(s), 1)
@@ -74,7 +80,14 @@ def feat_global(seqs):
         kr = sum(c in _BASIC for c in s)
         h = s.count("H")
         phob = sum(c in _PHOB for c in s)
-        G[i] = (len(s) / 50.0, de / n, kr / n, h / n, phob / n)
+        arom = sum(c in _AROM for c in s)
+        pro = s.count("P")
+        kd_sum = sum(_KD.get(c, 0.0) for c in s)
+        nterm = _KD.get(s[0], 0.0) if s else 0.0
+        cterm = _KD.get(s[-1], 0.0) if s else 0.0
+        G[i] = (len(s) / 50.0, de / n, kr / n, h / n, phob / n,
+                kd_sum / 50.0, kd_sum / n, arom / n, pro / n,
+                nterm / 4.5, cterm / 4.5)
     return G
 
 

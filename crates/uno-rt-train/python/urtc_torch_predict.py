@@ -48,7 +48,7 @@ with torch.no_grad():
     h[2].bias.copy_(torch.from_numpy(arr(1)))
 assert p == len(b), f"trailing bytes: {p} != {len(b)}"
 
-seqs = [l.split("\t")[0] for l in open(seqs_file)]
+seqs = [l.rstrip().split("\t")[0] for l in open(seqs_file)]
 T, L = feat_tokens(seqs)
 G = feat_global(seqs)
 model.eval()
