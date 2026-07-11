@@ -235,6 +235,7 @@ def load_urtc_weights(model, path):
     u32(); f32(); f32()                       # version, y_mean, y_std
     emb = u32(); ch = u32(); k = u32(); nb = u32()
     dils = [u32() for _ in range(nb)]; head = u32()
+    nglobal = u32()                           # v2: count of appended global feats (MUST be read)
     with torch.no_grad():
         model.emb.weight.copy_(torch.from_numpy(arr((NAA + 1) * emb).reshape(NAA + 1, emb)))
         model.stem.weight.copy_(torch.from_numpy(arr(ch * emb * k).reshape(ch, emb, k)))
@@ -245,7 +246,8 @@ def load_urtc_weights(model, path):
             blk.c2.weight.copy_(torch.from_numpy(arr(ch * ch * k).reshape(ch, ch, k)))
             blk.c2.bias.copy_(torch.from_numpy(arr(ch)))
         h = list(model.head)
-        h[0].weight.copy_(torch.from_numpy(arr(head * 2 * ch).reshape(head, 2 * ch)))
+        hin = 2 * ch + nglobal            # head input = pooled(2ch) + global feats
+        h[0].weight.copy_(torch.from_numpy(arr(head * hin).reshape(head, hin)))
         h[0].bias.copy_(torch.from_numpy(arr(head)))
         h[2].weight.copy_(torch.from_numpy(arr(head).reshape(1, head)))
         h[2].bias.copy_(torch.from_numpy(arr(1)))

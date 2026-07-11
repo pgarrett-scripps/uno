@@ -1273,13 +1273,13 @@ fn mass_anchor_calibration(
                     use std::io::Write;
                     if let Ok(f) = std::fs::File::create(&path) {
                         let mut w = std::io::BufWriter::new(f);
-                        // label: 1=conf-target, 0=dim-target, -1=decoy ; then feature vector
-                        let _ = writeln!(w, "label\tdecoy\tpeptide\tproteins\t{}", (0..feats[0].len()).map(|i| format!("f{i}")).collect::<Vec<_>>().join("\t"));
+                        // label: 1=conf-target, 0=dim-target, -1=decoy ; ml = CV prediction; then feature vector
+                        let _ = writeln!(w, "label\tdecoy\tml\tpeptide\tproteins\t{}", (0..feats[0].len()).map(|i| format!("f{i}")).collect::<Vec<_>>().join("\t"));
                         for (k, &(pi, decoy, _, _)) in items.iter().enumerate() {
                             let lab = match train_label[k] { Some(l) if l >= 0.5 => 1, Some(_) => 0, None => -1 };
                             let pep = &db.peptides[pi];
                             let prots: Vec<&str> = pep.proteins.iter().map(|p| p.as_ref()).collect();
-                            let _ = writeln!(w, "{}\t{}\t{}\t{}\t{}", lab, decoy as u8, pep.sequence.as_ref(), prots.join(";"), feats[k].iter().map(|x| format!("{x:.4}")).collect::<Vec<_>>().join("\t"));
+                            let _ = writeln!(w, "{}\t{}\t{:.5}\t{}\t{}\t{}", lab, decoy as u8, ml[k], pep.sequence.as_ref(), prots.join(";"), feats[k].iter().map(|x| format!("{x:.4}")).collect::<Vec<_>>().join("\t"));
                         }
                         log::info!("dumped {} ML rows to {}", items.len(), path);
                     }
