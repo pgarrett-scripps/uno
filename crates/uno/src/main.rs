@@ -6,21 +6,20 @@ use std::collections::HashMap;
 use uno_core::im::ImModel;
 use uno_core::{
     match_features, match_features_topk, score,
-    DedupConfig, DigestConfig, FeatureMatrix, MatchConfig, PeptideDb,
+    DigestConfig, FeatureMatrix, MatchConfig, PeptideDb,
     ProteinConfig, RtModel, ScoreConfig,
 };
 
-/// uno — MS1-only protein identification + quantitation over a koth aligned matrix.
+/// uno — MS1-only protein identification over a single-run biosaur2 feature file.
 #[derive(Parser, Debug)]
 #[command(name = "uno", version)]
 struct Cli {
-    /// koth `intensity_matrix.tsv`.
+    /// Single-run biosaur2 feature file (`*.features.tsv`) — the same single-run
+    /// input ms1searchpy consumes. Aligned/consensus matrices are NOT accepted:
+    /// alignment drops the per-feature quality columns that separate target from
+    /// decoy.
     #[arg(long)]
-    intensity_matrix: PathBuf,
-
-    /// koth `qvalue_matrix.tsv` (optional; enables per-sample q filtering).
-    #[arg(long)]
-    qvalue_matrix: Option<PathBuf>,
+    features: PathBuf,
 
     /// Protein FASTA database.
     #[arg(long)]
@@ -58,7 +57,6 @@ struct Cli {
 #[derive(Debug, Default, serde::Deserialize)]
 #[serde(default)]
 struct Config {
-    dedup: DedupConfig,
     digest: DigestConfig,
     matching: MatchConfig,
     scoring: ScoreConfig,
@@ -78,23 +76,12 @@ fn main() -> Result<()> {
     };
 
     let t = Instant::now();
-    let mut matrix = FeatureMatrix::load(&cli.intensity_matrix, cli.qvalue_matrix.as_ref())?;
+    let matrix = FeatureMatrix::load(&cli.features)?;
     log::info!(
-        "loaded {} aligned features across {} samples ({:.1}s)",
+        "loaded {} features from single run ({:.1}s)",
         matrix.len(),
-        matrix.n_samples(),
         t.elapsed().as_secs_f64()
     );
-    if config.dedup.enabled {
-        let before = matrix.len();
-        let removed = matrix.dedup(&config.dedup);
-        log::info!(
-            "dedup: removed {} near-duplicate features ({} -> {})",
-            removed,
-            before,
-            matrix.len()
-        );
-    }
 
     let t = Instant::now();
     let db = PeptideDb::build(&cli.fasta, &config.digest)?;

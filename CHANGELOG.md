@@ -98,12 +98,11 @@ did NOT help — the robust calibration already captures the run-level RT shift 
 
 ## 0.1.0 (unreleased) — initial MS1-only search engine
 
-A complete DirectMS1-style MS1-only protein identification + quantitation pipeline
-in Rust, consuming koth's aligned LFQ matrix. All seven planned phases implemented
-and validated end-to-end on the koth human+ecoli benchmark (55,431 features, 20 runs).
+A complete DirectMS1-style MS1-only protein identification pipeline in Rust,
+consuming a single-run biosaur2 feature file (the same input ms1searchpy uses).
 
 ### Pipeline (crates/uno-core)
-- **input** — reads koth `intensity_matrix.tsv` / `qvalue_matrix.tsv` into a `FeatureMatrix`.
+- **input** — reads a single-run biosaur2 `*.features.tsv` into a `FeatureMatrix`.
 - **database** — in-silico digest via `sage-core` (enzyme, missed cleavages, mods, decoys);
   f64 mass recompute; mass-sorted binary-search candidate lookup. Mass-shifted decoys
   (`decoy_mass_shift`, default 11 Da) so decoys are not mass twins.

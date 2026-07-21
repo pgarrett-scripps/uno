@@ -1,4 +1,4 @@
-//! Phase 3: match aligned features to theoretical peptides by precursor mass.
+//! Phase 3: match single-run features to theoretical peptides by precursor mass.
 //!
 //! For each feature we hypothesise that koth may have mis-assigned the
 //! monoisotopic peak by a small number of C13 neutrons. For each isotope offset
@@ -166,21 +166,18 @@ mod tests {
 
     #[test]
     fn matches_real_data() {
-        let dir =
-            PathBuf::from("/home/patrick-garrett/Repos/koth_rust/benchmark/data/koth/align_output");
-        let fasta = PathBuf::from(
-            "/home/patrick-garrett/Repos/koth_rust/benchmark/data/fasta/human_ecoli.fasta",
+        let features = PathBuf::from(
+            "/home/patrick-garrett/Repos/uno/experiments/koth_ms1searchpy/koth_run10/run10_koth.features.tsv",
         );
-        if !dir.join("intensity_matrix.tsv").exists() || !fasta.exists() {
+        let fasta = PathBuf::from(
+            "/home/patrick-garrett/Repos/uno/experiments/koth_ms1searchpy/fasta/entrap_db_C.fasta",
+        );
+        if !features.exists() || !fasta.exists() {
             eprintln!("skipping: benchmark inputs not present");
             return;
         }
 
-        let matrix = FeatureMatrix::load(
-            dir.join("intensity_matrix.tsv"),
-            Some(dir.join("qvalue_matrix.tsv")),
-        )
-        .unwrap();
+        let matrix = FeatureMatrix::load(&features).unwrap();
         let db = PeptideDb::build(&fasta, &DigestConfig::default()).unwrap();
         let cfg = MatchConfig::default();
         let pfms = match_features(&matrix, &db, &cfg);
