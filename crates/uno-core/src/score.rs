@@ -2157,7 +2157,7 @@ fn discriminant_scores(
         let feats: Vec<Vec<f32>> = reduced
             .iter()
             .enumerate()
-            .map(|(pos, &i)| featurize(&pfms[i], matrix, db, rt_diff[pos], im_diff[pos]))
+            .map(|(pos, &i)| featurize(&pfms[i], matrix, db, rt_diff[pos], im_diff.get(pos).copied().flatten()))
             .collect();
         if cfg.discriminant == "lda" {
             cv_lda_predict(reduced, &feats, folds, &train_label, cfg.n_folds)
@@ -2404,7 +2404,7 @@ fn deviation_scores(
     positives: &[usize],
 ) -> Vec<f64> {
     let rt_sig = robust_sigma(positives.iter().map(|&p| rt_diff[p].unwrap_or(f64::NAN)));
-    let im_sig = robust_sigma(positives.iter().map(|&p| im_diff[p].unwrap_or(f64::NAN)));
+    let im_sig = robust_sigma(positives.iter().map(|&p| im_diff.get(p).copied().flatten().unwrap_or(f64::NAN)));
     log::info!(
         "deviation discriminant: rt_sigma={:.3} min, im_sigma={:.4} 1/K0 (mass z-scored)",
         rt_sig,
@@ -2420,7 +2420,7 @@ fn deviation_scores(
             if let Some(r) = rt_diff[pos] {
                 d2 += (r / rt_sig).powi(2);
             }
-            if let Some(i) = im_diff[pos] {
+            if let Some(i) = im_diff.get(pos).copied().flatten() {
                 d2 += (i / im_sig).powi(2);
             }
             -d2
@@ -2651,16 +2651,27 @@ pub fn score(
         } else {
             std::collections::HashMap::new()
         };
-    let im_diff: Vec<Option<f64>> = reduced
-        .iter()
-        .enumerate()
-        .map(|(pos, &i)| {
-            let f = &matrix.features[pfms[i].feature_idx as usize];
-            let cal = im_calibration.get(&f.charge)?;
-            let im_obs = f.im?;
-            predicted_im[pos].map(|p| im_obs - cal.apply(p))
-        })
-        .collect();
+    // On non-IM data (no IM model, or the run carries no 1/K0) every entry is
+    // `None`; skip the ~272 MB allocation and leave `im_diff` empty. All reads go
+    // through `im_diff.get(pos).copied().flatten()`, which yields `None` for an
+    // empty vector — identical to a full all-`None` vector.
+    let im_diff: Vec<Option<f64>> = if im_calibration.is_empty() {
+        Vec::new()
+    } else {
+        reduced
+            .iter()
+            .enumerate()
+            .map(|(pos, &i)| {
+                let f = &matrix.features[pfms[i].feature_idx as usize];
+                let cal = im_calibration.get(&f.charge)?;
+                let im_obs = f.im?;
+                predicted_im[pos].map(|p| im_obs - cal.apply(p))
+            })
+            .collect()
+    };
+    // `predicted_im` is only needed to build `im_diff` (and the earlier
+    // UNO_DUMP_REDUCED dump); free its ~272 MB now rather than carry it to the end.
+    drop(predicted_im);
 
     let folds: Vec<usize> = reduced
         .par_iter()
@@ -2810,7 +2821,7 @@ pub fn score(
         let before = seed_positions.len();
         let kept: Vec<usize> = seed_positions
             .into_iter()
-            .filter(|&pos| im_diff[pos].map_or(false, |d| d.abs() <= 0.02))
+            .filter(|&pos| im_diff.get(pos).copied().flatten().map_or(false, |d| d.abs() <= 0.02))
             .collect();
         log::info!("IM-purified positives: {} / {} RT-seed features", kept.len(), before);
         kept
@@ -2956,7 +2967,7 @@ pub fn score(
                 }
                 let rt_ok = rt_diff[pos].map_or(false, |d| d.abs() <= rt_gate);
                 let mass_ok = mass_z[pos].abs() <= 2.5;
-                let im_ok = im_diff[pos].map_or(true, |d| d.abs() <= 0.025);
+                let im_ok = im_diff.get(pos).copied().flatten().map_or(true, |d| d.abs() <= 0.025);
                 if rt_ok && mass_ok && im_ok {
                     for prot in &db.peptides[pi].proteins {
                         prot_peps.entry(prot.as_ref()).or_default().push(pos);
@@ -3082,7 +3093,7 @@ pub fn score(
                 mass_error_ppm: p.mass_error_ppm,
                 isotope_offset: p.isotope_offset,
                 rt_diff: rt_diff[pos].unwrap_or(f64::NAN),
-                im_diff: im_diff[pos].unwrap_or(f64::NAN),
+                im_diff: im_diff.get(pos).copied().flatten().unwrap_or(f64::NAN),
             }
         })
         .collect();
@@ -3103,7 +3114,7 @@ pub fn score(
     for pos in 0..reduced.len() {
         let p = &pfms[reduced[pos]];
         let ard = rt_diff[pos].map(|d| d.abs()).unwrap_or(f64::INFINITY);
-        let aid = im_diff[pos].map(|d| d.abs()).unwrap_or(f64::INFINITY);
+        let aid = im_diff.get(pos).copied().flatten().map(|d| d.abs()).unwrap_or(f64::INFINITY);
         let amz = mass_z[pos].abs();
         let fq = matrix.features[p.feature_idx as usize].n_isotopes.unwrap_or(0.0);
         let sel = -amz; // tightest mass wins (RT-independent representative)
