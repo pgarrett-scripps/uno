@@ -264,7 +264,7 @@ mod tests {
 
     fn features_file() -> PathBuf {
         PathBuf::from(
-            "/home/patrick-garrett/Repos/uno/experiments/koth_ms1searchpy/koth_run10/run10_koth.features.tsv",
+            "/home/patrick-garrett/Repos/uno/benchmark/data/run10.features.tsv",
         )
     }
 
