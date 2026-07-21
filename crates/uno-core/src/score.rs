@@ -1310,6 +1310,10 @@ fn mass_anchor_calibration(
                     }
                 }
             }
+            // The ML feature matrix is only needed to fit/score/diagnose the
+            // qpred ensemble above; the rest of this stage ranks by `ml` scores and
+            // `pfms`/`reduced`, so free it now (one Vec<f32> per candidate peptide).
+            drop(feats);
             // ms1searchpy `final_iteration` (main.py:140, 1965-2010): NOT a single
             // peptide-quality cutoff. Rank peptides by ML score (best first), then
             // sweep 10 CUMULATIVE inclusion thresholds (top 10%, 20%, ..., 100% of
