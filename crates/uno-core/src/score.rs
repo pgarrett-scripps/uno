@@ -1760,7 +1760,7 @@ fn sequoia_fold(
     let ev = |k: &str, d: f64| std::env::var(k).ok().and_then(|s| s.parse().ok()).unwrap_or(d);
     let max_bin = ev("UNO_SEQ_BINS", 256.0) as usize;
     let lambda = ev("UNO_SEQ_LAMBDA", 1.0);
-    let mcw = ev("UNO_SEQ_MCW", 20.0);
+    let mcw = ev("UNO_SEQ_MCW", 80.0);
     let alpha = ev("UNO_SEQ_ALPHA", 0.0);
     let gamma = ev("UNO_SEQ_GAMMA", 0.0);
     let subsample = ev("UNO_SEQ_SUB", 0.8);
@@ -1878,11 +1878,12 @@ fn cv_train_predict_lgbm(feats: &[Vec<f32>], folds: &[usize], train_label: &[Opt
             .unwrap_or((1u32 << depth.min(8)).saturating_sub(1).max(2));
         let lr: f64 = std::env::var("UNO_ML_LR").ok().and_then(|s| s.parse().ok()).unwrap_or(cfg.shrinkage.min(0.05) as f64);
         let rank = std::env::var("UNO_ML_RANK").ok().map(|s| s != "0").unwrap_or(false);
-        // A/B (2026-07-21): UNO_ML_SEQUOIA=1 swaps the per-fold tree trainer from the
-        // C LightGBM to the pure-Rust sequoia-boost (XGBoost clone). Same CV folds,
-        // same balancing, same depth/lr/iters/0.8-subsample; only the library differs.
-        // Goal: keep uno pure-Rust if sequoia matches LightGBM on speed + honest depth.
-        if std::env::var("UNO_ML_SEQUOIA").is_ok() {
+        // DEFAULT ML backend = pure-Rust sequoia-boost (XGBoost clone), tuned mcw=80.
+        // Validated 2026-07-21 (honest @1%): run10 sequoia 1218 = LightGBM 1218;
+        // deephela-240min sequoia 1954 > LightGBM 1752 (+11.5%). Pure-Rust (drops the
+        // vendored C lib_lightgbm.so) and byte-deterministic. Set UNO_ML_LIGHTGBM=1 to
+        // fall back to the C LightGBM trainer.
+        if !std::env::var("UNO_ML_LIGHTGBM").is_ok() {
             let mut scores = vec![0.0f64; n];
             for f in 0..cfg.n_folds { sequoia_fold(feats, folds, train_label, depth, lr, iters, f, rank, &mut scores); }
             return scores;
