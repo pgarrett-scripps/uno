@@ -727,6 +727,11 @@ fn mass_anchor_calibration(
         // many coincidental decoy/wrong matches. biosaur's combined_score is const
         // 1.0 so this is inert there; koth's is a real isotope-fit quality. Env knob.
         let cs_gate: f64 = std::env::var("UNO_CS_GATE").ok().and_then(|s| s.parse().ok()).unwrap_or(0.0);
+        // `pep_all_feats` (the per-PFM (dev, feature) list) is ONLY read by the
+        // UNO_MULTI_FEAT cut-sweep branch; when that's off (default) building it is
+        // pure waste (a Vec alloc + 17M pushes + a map insert per stage). Read the
+        // flag up front and skip the work entirely in the common case.
+        let want_feats = std::env::var("UNO_MULTI_FEAT").is_ok();
         // Per-peptide min-combined-deviation match over all its PFMs. Independent per
         // peptide -> parallel map, deterministic collect (results reinserted into the
         // maps; key order is irrelevant to correctness).
@@ -736,14 +741,19 @@ fn mass_anchor_calibration(
                 let decoy = db.peptides[pi].decoy;
                 let mut best: Option<(f64, usize)> = None;
                 let mut feats: Vec<(f64, usize)> = Vec::new();
+                // Every PFM of a peptide shares the same abstract (predicted) RT, so the
+                // calibration interpolation is identical across the list -- compute it
+                // ONCE per peptide instead of per PFM (17M `cal.apply` -> ~1.1M).
+                let pred = pfm_list.first().and_then(|&(_, pos)| abstract_rt[pos]).map(|a| cal.apply(a));
                 for &(err, pos) in pfm_list {
                     let mz = (err - m_shift) / m_sigma;
                     if mz.abs() > m_gate / m_sigma { continue; }
                     if cs_gate > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx].combined_score < cs_gate { continue; }
-                    if let Some(rd) = rt_diff_at(cal, pos) {
+                    if let Some(pr) = pred {
+                        let rd = matrix.features[pfms[reduced[pos]].feature_idx].rt - pr;
                         let dev = mz * mz + (rd / rt_sig).powi(2);
                         if best.map_or(true, |(b, _)| dev < b) { best = Some((dev, pos)); }
-                        feats.push((dev, pfms[reduced[pos]].feature_idx));
+                        if want_feats { feats.push((dev, pfms[reduced[pos]].feature_idx)); }
                     }
                 }
                 best.map(|(dev, pos)| (pi, (decoy, dev, pos), feats))
@@ -1382,17 +1392,26 @@ fn mass_anchor_calibration(
             } else {
                 (lo..=hi).map(|step| (n * step / n_steps).max(1).min(n)).collect()
             };
-            let mut acc: HashMap<(bool, String), (f64, usize, usize)> = HashMap::new();
-            for &keep in &steps {
-                let mut observed: rustc_hash::FxHashMap<(bool, &str), rustc_hash::FxHashSet<usize>> = rustc_hash::FxHashMap::default();
-                for &(_, decoy, pi) in &rows[..keep] {
-                    for prot in &db.peptides[pi].proteins {
-                        observed.entry((decoy, prot.as_ref())).or_default().insert(pi);
+            // The inclusion steps are INDEPENDENT protein-inference passes -> run them
+            // in parallel (each the dominant per-pass greedy cost). Results collect in
+            // `steps` order, and the `acc` accumulation is then done SERIALLY in that
+            // same order, so the float sums stay bit-identical to the old serial loop.
+            let per_step: Vec<Vec<ProteinId>> = steps
+                .par_iter()
+                .map(|&keep| {
+                    let mut observed: rustc_hash::FxHashMap<(bool, &str), rustc_hash::FxHashSet<usize>> = rustc_hash::FxHashMap::default();
+                    for &(_, decoy, pi) in &rows[..keep] {
+                        for prot in &db.peptides[pi].proteins {
+                            observed.entry((decoy, prot.as_ref())).or_default().insert(pi);
+                        }
                     }
-                }
-                let scored = crate::protein::score_proteins_feature_compete(
-                    observed, &pep_feat_ml, &theo, decoy_theo_sum, 0.01);
-                for p in &scored {
+                    crate::protein::score_proteins_feature_compete(
+                        observed, &pep_feat_ml, &theo, decoy_theo_sum, 0.01)
+                })
+                .collect();
+            let mut acc: HashMap<(bool, String), (f64, usize, usize)> = HashMap::new();
+            for scored in &per_step {
+                for p in scored {
                     let e = acc.entry((p.decoy, p.accession.clone())).or_insert((0.0, 0, 0));
                     e.0 += p.binomial_score;
                     e.1 = e.1.max(p.observed_peptides);
@@ -1884,8 +1903,20 @@ fn cv_train_predict_lgbm(feats: &[Vec<f32>], folds: &[usize], train_label: &[Opt
         // vendored C lib_lightgbm.so) and byte-deterministic. Set UNO_ML_LIGHTGBM=1 to
         // fall back to the C LightGBM trainer.
         if !std::env::var("UNO_ML_LIGHTGBM").is_ok() {
+            // Same byte-identical fold parallelization as the LightGBM path below: each
+            // fold is single-threaded (sequoia nthread=1) + seed-pinned and writes only
+            // its own held-out rows, so training the folds concurrently and merging by
+            // row-ownership reproduces the serial scatter exactly.
+            let fold_scores: Vec<Vec<f64>> = (0..cfg.n_folds)
+                .into_par_iter()
+                .map(|f| {
+                    let mut s = vec![0.0f64; n];
+                    sequoia_fold(feats, folds, train_label, depth, lr, iters, f, rank, &mut s);
+                    s
+                })
+                .collect();
             let mut scores = vec![0.0f64; n];
-            for f in 0..cfg.n_folds { sequoia_fold(feats, folds, train_label, depth, lr, iters, f, rank, &mut scores); }
+            for i in 0..n { scores[i] = fold_scores[folds[i]][i]; }
             return scores;
         }
         let params = format!(
@@ -1893,8 +1924,25 @@ fn cv_train_predict_lgbm(feats: &[Vec<f32>], folds: &[usize], train_label: &[Opt
              verbosity=-1 min_data_in_leaf=20 feature_fraction=0.8 bagging_fraction=0.8 bagging_freq=1 \
              num_threads=1 deterministic=true force_row_wise=true seed=42 \
              feature_fraction_seed=42 bagging_seed=42 data_random_seed=42");
+        // The folds are INDEPENDENT (each trains on its complement and writes only its
+        // own held-out test rows) and each LightGBM booster is single-threaded &
+        // seed-pinned, so training them concurrently is byte-identical to the serial
+        // loop -- only much faster (3 sequential single-thread trainings -> 3 parallel).
+        // Each fold writes into its own buffer; the merge is by ownership (row i is a
+        // test row of exactly fold `folds[i]`), so it reproduces the serial scatter
+        // exactly (no float-equality heuristics).
+        let fold_scores: Vec<Vec<f64>> = (0..cfg.n_folds)
+            .into_par_iter()
+            .map(|f| {
+                let mut s = vec![0.0f64; n];
+                lgbm_fold(feats, folds, train_label, &params, iters, f, rank, &mut s);
+                s
+            })
+            .collect();
         let mut scores = vec![0.0f64; n];
-        for f in 0..cfg.n_folds { lgbm_fold(feats, folds, train_label, &params, iters, f, rank, &mut scores); }
+        for i in 0..n {
+            scores[i] = fold_scores[folds[i]][i];
+        }
         return scores;
     }
     // Search: evaluate each trial on fold 0 (train folds 1..k, predict fold 0), pick
@@ -2347,7 +2395,10 @@ fn deviation_scores(
         rt_sig,
         im_sig
     );
+    // Order-preserving parallel map over immutable inputs -> byte-identical to the
+    // serial version, but fans the 17M-row deviation computation across cores.
     (0..reduced.len())
+        .into_par_iter()
         .map(|pos| {
             // mass_z is already in sigma units (recalibrated), so it enters directly.
             let mut d2 = mass_z[pos].powi(2);
@@ -2471,7 +2522,7 @@ pub fn score(
                     reduced.len(),
                     t.elapsed().as_secs_f64()
                 );
-                reduced.iter().map(|&i| pred_of.get(&pfms[i].peptide_idx).copied()).collect()
+                reduced.par_iter().map(|&i| pred_of.get(&pfms[i].peptide_idx).copied()).collect()
             }
             None => vec![None; reduced.len()],
         }
@@ -2597,14 +2648,16 @@ pub fn score(
         .collect();
 
     let folds: Vec<usize> = reduced
-        .iter()
+        .par_iter()
         .map(|&i| fold_of(pfms[i].feature_idx, cfg.n_folds))
         .collect();
 
     // rt_diff per reduced PFM under the current calibration.
     let compute_rt_diff = |calibration: &Calibration| -> Vec<Option<f64>> {
+        // Order-preserving parallel indexed map (each row independent) -> byte-identical
+        // to the serial version; parallelizes the 17M `calibration.apply` calls.
         reduced
-            .iter()
+            .par_iter()
             .enumerate()
             .map(|(pos, &i)| {
                 let obs = matrix.features[pfms[i].feature_idx].rt;
@@ -2757,7 +2810,7 @@ pub fn score(
     let mut mass_z: Vec<f64> = if let Some((shift, sigma)) = mass_anchor_shift {
         // Mass shift/sigma already estimated cleanly in the mass-anchor bootstrap.
         log::info!("mass recalibration (mass-anchor): shift={:.3} ppm, sigma={:.3} ppm", shift, sigma);
-        reduced.iter().map(|&i| (pfms[i].mass_error_ppm - shift) / sigma).collect()
+        reduced.par_iter().map(|&i| (pfms[i].mass_error_ppm - shift) / sigma).collect()
     } else {
         let mut seed_mass: Vec<f64> = positives
             .iter()
@@ -2777,7 +2830,7 @@ pub fn score(
                 positives.len()
             );
             reduced
-                .iter()
+                .par_iter()
                 .map(|&i| (pfms[i].mass_error_ppm - shift) / sigma)
                 .collect()
         } else {
