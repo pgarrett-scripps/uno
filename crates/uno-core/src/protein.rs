@@ -836,33 +836,50 @@ pub(crate) fn score_proteins_feature_compete(
     }
     let mut obs: FxHashMap<(bool, &str), usize> =
         prot_peps.iter().map(|(&k, v)| (k, v.len())).collect();
-    let mut by_n: FxHashMap<usize, Vec<(bool, &str)>> = FxHashMap::default();
-    for &k in prot_peps.keys() {
-        let n = theo_of(&k);
-        if n > 0 {
-            by_n.entry(n).or_default().push(k);
-        }
-    }
     let decoy_theo_f = decoy_theo.max(1) as f64;
     let mut decoy_obs_sum: f64 =
         obs.iter().filter(|((d, _), _)| *d).map(|(_, &c)| c as f64).sum();
 
-    fn best_for_n<'a>(
-        n: usize,
-        by_n: &FxHashMap<usize, Vec<(bool, &'a str)>>,
+    // Per-theoretical-count (bucket) selection of the max-observed protein.
+    //
+    // `obs[k]` only ever DECREASES over the greedy (peptides get removed as their
+    // peaks are claimed; the winner is zeroed). Exploit that monotonicity: keep,
+    // per bucket `n`, a lazy max-heap of `(obs_snapshot, Reverse(key))`. The head
+    // is the current best UNLESS its snapshot is stale (obs decremented since it
+    // was pushed); on read we pop stale/zeroed heads, re-pushing decremented ones
+    // at their current count, until the head's snapshot matches its live `obs`.
+    // Because `obs` is non-increasing and every live key holds exactly one heap
+    // entry with `snapshot >= live obs`, the first head with `snapshot == live`
+    // is the exact `max_by_key(obs, Reverse(key))` the old full-bucket rescan
+    // returned — byte-identical selection, but amortized O(log) per read instead
+    // of O(bucket_size). (The old rescan cost O(iters * bucket_size) ~ billions of
+    // scans; this bounds re-pushes by the total peptide-removal count.)
+    type BucketHeap<'a> = std::collections::BinaryHeap<(usize, std::cmp::Reverse<(bool, &'a str)>)>;
+    #[inline]
+    fn peek_best<'a>(
+        heap: &mut BucketHeap<'a>,
         obs: &FxHashMap<(bool, &'a str), usize>,
-    ) -> Option<(bool, &'a str)> {
-        by_n.get(&n).and_then(|ks| {
-            ks.iter()
-                .filter(|k| obs.get(*k).copied().unwrap_or(0) > 0)
-                .max_by_key(|k| (obs[*k], std::cmp::Reverse(**k)))
-                .copied()
-        })
+    ) -> Option<(usize, (bool, &'a str))> {
+        while let Some(&(snap, std::cmp::Reverse(key))) = heap.peek() {
+            let cur = obs.get(&key).copied().unwrap_or(0);
+            if cur == 0 {
+                heap.pop();
+                continue;
+            }
+            if cur < snap {
+                heap.pop();
+                heap.push((cur, std::cmp::Reverse(key)));
+                continue;
+            }
+            return Some((cur, key));
+        }
+        None
     }
-    let mut best_per_n: FxHashMap<usize, (bool, &str)> = FxHashMap::default();
-    for &n in by_n.keys() {
-        if let Some(k) = best_for_n(n, &by_n, &obs) {
-            best_per_n.insert(n, k);
+    let mut heaps: FxHashMap<usize, BucketHeap> = FxHashMap::default();
+    for (&k, &c) in &obs {
+        let n = theo_of(&k);
+        if n > 0 && c > 0 {
+            heaps.entry(n).or_default().push((c, std::cmp::Reverse(k)));
         }
     }
 
@@ -870,14 +887,19 @@ pub(crate) fn score_proteins_feature_compete(
     let (mut t, mut d) = (0usize, 0usize);
     let mut dead: FxHashSet<usize> = FxHashSet::default();
     let mut banned_feat: FxHashSet<usize> = FxHashSet::default();
+    let mut empty_buckets: Vec<usize> = Vec::new();
     loop {
         let p = (decoy_obs_sum / decoy_theo_f).clamp(1e-9, 0.999);
         let mut best: Option<((bool, &str), f64, usize, usize)> = None;
-        for (&n, &k) in &best_per_n {
-            let kobs = obs.get(&k).copied().unwrap_or(0);
-            if kobs == 0 {
-                continue;
-            }
+        empty_buckets.clear();
+        for (&n, heap) in heaps.iter_mut() {
+            let (kobs, k) = match peek_best(heap, &obs) {
+                Some(x) => x,
+                None => {
+                    empty_buckets.push(n);
+                    continue;
+                }
+            };
             let s = -binom_sf_ge_k(kobs as u32, n as u32, p).log10();
             let better = match best {
                 None => true,
@@ -886,6 +908,9 @@ pub(crate) fn score_proteins_feature_compete(
             if better {
                 best = Some((k, s, kobs, n));
             }
+        }
+        for n in empty_buckets.drain(..) {
+            heaps.remove(&n);
         }
         let (key, score, kobs, n) = match best {
             Some(x) => x,
@@ -945,7 +970,8 @@ pub(crate) fn score_proteins_feature_compete(
                 _ => to_kill.push(*pi),
             }
         }
-        let mut dirty_n: FxHashSet<usize> = FxHashSet::default();
+        // Removing peptides only DECREMENTS `obs`; the per-bucket lazy heaps pick up
+        // the new counts on their next read (no eager bucket recompute needed).
         for pj in to_kill {
             if !dead.insert(pj) {
                 continue;
@@ -960,7 +986,6 @@ pub(crate) fn score_proteins_feature_compete(
                             if k2.0 {
                                 decoy_obs_sum -= 1.0;
                             }
-                            dirty_n.insert(theo_of(&k2));
                         }
                     }
                 }
@@ -970,17 +995,6 @@ pub(crate) fn score_proteins_feature_compete(
         obs.insert(key, 0);
         if let Some(s) = prot_peps.get_mut(&key) {
             s.clear();
-        }
-        dirty_n.insert(n);
-        for dn in dirty_n {
-            match best_for_n(dn, &by_n, &obs) {
-                Some(k) => {
-                    best_per_n.insert(dn, k);
-                }
-                None => {
-                    best_per_n.remove(&dn);
-                }
-            }
         }
     }
     proteins.sort_by(|a, b| {
