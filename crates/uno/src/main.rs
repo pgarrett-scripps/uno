@@ -5,7 +5,8 @@ use std::time::Instant;
 use std::collections::HashMap;
 use uno_core::im::ImModel;
 use uno_core::{
-    hill_search, infer_proteins, load_hills, match_features, peptide_quant, protein_quant, score,
+    hill_search, infer_proteins, load_hills, match_features, match_features_topk, peptide_quant,
+    protein_quant, score,
     DedupConfig, DigestConfig, FeatureMatrix, HillConfig, HillIndex, MatchConfig, PeptideDb,
     PeptideMatch, ProteinConfig, QuantRow, RtModel, ScoreConfig,
 };
@@ -137,28 +138,29 @@ fn main() -> Result<()> {
         t.elapsed().as_secs_f64()
     );
 
-    let t = Instant::now();
-    let pfms = match_features(&matrix, &db, &config.matching);
-    let n_decoy = pfms.iter().filter(|p| p.decoy).count();
-    log::info!(
-        "generated {} PFMs ({} target, {} decoy) at {} ppm, offsets {:?} ({:.1}s)",
-        pfms.len(),
-        pfms.len() - n_decoy,
-        n_decoy,
-        config.matching.ppm_tolerance,
-        config.matching.isotope_offsets,
-        t.elapsed().as_secs_f64()
-    );
-
-    // Dump unique candidate peptide sequences (for building a DeepLC RT library).
+    // The candidate-peptide dump needs the full (unreduced) PFM set so the RT
+    // library covers every match; the scoring path only ever consumes the top-k
+    // per feature, so we stream that reduction during generation and never
+    // materialise the full ~41M-PFM vector (~1.3GB on run10). `reduce_top_k`
+    // inside `score` is idempotent on this already-reduced set, so output is
+    // byte-identical to generating-then-reducing.
     if let Some(path) = &cli.dump_candidate_peptides {
+        let t = Instant::now();
+        let pfms = match_features(&matrix, &db, &config.matching);
+        log::info!(
+            "generated {} PFMs at {} ppm, offsets {:?} ({:.1}s)",
+            pfms.len(),
+            config.matching.ppm_tolerance,
+            config.matching.isotope_offsets,
+            t.elapsed().as_secs_f64()
+        );
         use std::io::Write;
         let mut seen = std::collections::HashSet::new();
         let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
         // Include decoys: they need RT predictions too, else they escape the RT
         // penalty and the target-decoy FDR collapses.
         for p in &pfms {
-            let seq = db.peptides[p.peptide_idx].sequence.as_ref();
+            let seq = db.peptides[p.peptide_idx as usize].sequence.as_ref();
             if seen.insert(seq.to_string()) {
                 writeln!(w, "{}", seq)?;
             }
@@ -166,6 +168,20 @@ fn main() -> Result<()> {
         log::info!("dumped {} unique candidate peptides to {}", seen.len(), path.display());
         return Ok(());
     }
+
+    let t = Instant::now();
+    let pfms = match_features_topk(&matrix, &db, &config.matching, config.scoring.top_k);
+    let n_decoy = pfms.iter().filter(|p| p.decoy).count();
+    log::info!(
+        "generated {} reduced PFMs ({} target, {} decoy) at {} ppm, offsets {:?}, top-{} ({:.1}s)",
+        pfms.len(),
+        pfms.len() - n_decoy,
+        n_decoy,
+        config.matching.ppm_tolerance,
+        config.matching.isotope_offsets,
+        config.scoring.top_k,
+        t.elapsed().as_secs_f64()
+    );
 
     // Optional precomputed RT library (DeepLC). peptide<TAB>rt per line.
     let rt_library: Option<HashMap<String, f64>> = match &cli.rt_library {
@@ -238,12 +254,12 @@ fn main() -> Result<()> {
             "feature_idx\tpeptide\tdecoy\tscore\tq_value\tmass_error_ppm\tisotope_offset\trt_diff\tim_diff\tcharge\trt\tcombined_score\tn_contributing_runs"
         )?;
         for id in ids {
-            let f = &matrix.features[id.feature_idx];
-            let pep = &db.peptides[id.peptide_idx];
+            let f = &matrix.features[id.feature_idx as usize];
+            let pep = &db.peptides[id.peptide_idx as usize];
             writeln!(
                 w,
                 "{}\t{}\t{}\t{:.4}\t{:.4}\t{:.3}\t{}\t{:.3}\t{:.4}\t{}\t{:.3}\t{:.4}\t{}",
-                id.feature_idx,
+                id.feature_idx as usize,
                 pep.sequence,
                 id.decoy as u8,
                 id.score,
@@ -444,7 +460,7 @@ fn main() -> Result<()> {
                 let mut pep_t = std::collections::HashSet::new();
                 let mut pep_d = std::collections::HashSet::new();
                 for h in &hits {
-                    if h.decoy { pep_d.insert(h.peptide_idx); } else { pep_t.insert(h.peptide_idx); }
+                    if h.decoy { pep_d.insert(h.peptide_idx as usize); } else { pep_t.insert(h.peptide_idx as usize); }
                 }
                 log::info!(
                     "hill pass: {} hills; {} clusters over {} target / {} decoy peptides ({:.1}s)",
@@ -468,7 +484,7 @@ fn main() -> Result<()> {
                     writeln!(w, "decoy\tconfident\tmass_z\trt_diff\tenvelope\tcoelution\tn_iso\tscore")?;
                     for h in &hits {
                         let c = !h.decoy
-                            && db.peptides[h.peptide_idx].proteins.iter().any(|a| conf.contains(a.as_ref()));
+                            && db.peptides[h.peptide_idx as usize].proteins.iter().any(|a| conf.contains(a.as_ref()));
                         writeln!(w, "{}\t{}\t{:.4}\t{:.4}\t{:.4}\t{:.4}\t{}\t{:.4}",
                             h.decoy as u8, c as u8, h.abs_mass_z, h.abs_rt_diff,
                             h.envelope, h.coelution, h.n_isotopes, h.score)?;
@@ -483,7 +499,7 @@ fn main() -> Result<()> {
                 let hill_pms: Vec<PeptideMatch> = hits
                     .iter()
                     .map(|h| PeptideMatch {
-                        peptide_idx: h.peptide_idx,
+                        peptide_idx: h.peptide_idx as usize,
                         decoy: h.decoy,
                         abs_rt_diff: h.abs_rt_diff,
                         abs_im_diff: f64::INFINITY,
@@ -541,7 +557,7 @@ fn main() -> Result<()> {
                         if let Some(t) = coel_tol {
                             dev += ((1.0 - h.coelution) / t.max(1e-3)).powi(2);
                         }
-                        (h.peptide_idx, h.decoy, dev, h.mono_hill)
+                        (h.peptide_idx as usize, h.decoy, dev, h.mono_hill)
                     })
                     .collect();
                 let hill_ma = uno_core::score_by_deviation(&db, &hill_dev, 0.01);
@@ -573,14 +589,14 @@ fn main() -> Result<()> {
                     .map(|h| {
                         if h.decoy {
                             Some(0.0)
-                        } else if db.peptides[h.peptide_idx].proteins.iter().any(|a| conf.contains(a.as_ref())) {
+                        } else if db.peptides[h.peptide_idx as usize].proteins.iter().any(|a| conf.contains(a.as_ref())) {
                             Some(1.0)
                         } else {
                             None
                         }
                     })
                     .collect();
-                let pep_idx: Vec<usize> = hits.iter().map(|h| h.peptide_idx).collect();
+                let pep_idx: Vec<usize> = hits.iter().map(|h| h.peptide_idx as usize).collect();
                 let disc = uno_core::cv_lda_rescore(&feats, &pep_idx, &labels, 3);
                 // Map discriminant (higher = better) to a deviation (lower = better)
                 // landing in the rollup's 1..25 cut range: standardize, then
@@ -593,7 +609,7 @@ fn main() -> Result<()> {
                     .zip(&disc)
                     .map(|(h, &d)| {
                         let z = (d - mean) / sd;
-                        ((h.peptide_idx), h.decoy, (10.0 - 3.0 * z).max(0.0), h.mono_hill)
+                        ((h.peptide_idx as usize), h.decoy, (10.0 - 3.0 * z).max(0.0), h.mono_hill)
                     })
                     .collect();
                 let hill_perc = uno_core::score_by_deviation(&db, &perc_dev, 0.01);
