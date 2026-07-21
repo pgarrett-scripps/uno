@@ -29,5 +29,7 @@ log = "0.4"
 env_logger = "0.11"
 gbdt = "0.1.3"
 uno-lightgbm-sys = { path = "crates/uno-lightgbm-sys" }
+# Pure-Rust XGBoost reimplementation (A/B vs LightGBM; kept for pure-Rust option).
+sequoia-boost = { path = "../Sequoia/crates/sequoia-boost" }
 # Digestion / peptide mass / decoys — reuse Sage's core library.
 sage-core = { path = "../sage/crates/sage" }
