@@ -188,7 +188,7 @@ mod tests {
         let n_target = pfms.iter().filter(|p| !p.decoy).count();
         let n_decoy = pfms.iter().filter(|p| p.decoy).count();
         let n_feat_matched = {
-            let mut v: Vec<usize> = pfms.iter().map(|p| p.feature_idx).collect();
+            let mut v: Vec<u32> = pfms.iter().map(|p| p.feature_idx).collect();
             v.sort_unstable();
             v.dedup();
             v.len()
