@@ -204,8 +204,8 @@ fn featurize(
     rt_diff: Option<f64>,
     im_diff: Option<f64>,
 ) -> Vec<f32> {
-    let f = &matrix.features[pfm.feature_idx];
-    let p = &db.peptides[pfm.peptide_idx];
+    let f = &matrix.features[pfm.feature_idx as usize];
+    let p = &db.peptides[pfm.peptide_idx as usize];
     let n_detected = f.intensities.iter().filter(|&&x| x > 0.0).count();
     let sum_int: f64 = f.intensities.iter().sum();
     vec![
@@ -449,10 +449,10 @@ fn mass_anchor_calibration(
         if pfms[i].isotope_offset != 0 {
             continue;
         }
-        if has_iso && matrix.features[pfms[i].feature_idx].n_isotopes.unwrap_or(0.0) < MIN_ISOTOPES {
+        if has_iso && matrix.features[pfms[i].feature_idx as usize].n_isotopes.unwrap_or(0.0) < MIN_ISOTOPES {
             continue;
         }
-        let e = best.entry(pfms[i].peptide_idx).or_insert((f64::INFINITY, pos));
+        let e = best.entry(pfms[i].peptide_idx as usize).or_insert((f64::INFINITY, pos));
         if pfms[i].mass_error_ppm.abs() < e.0.abs() {
             *e = (pfms[i].mass_error_ppm, pos);
         }
@@ -474,7 +474,7 @@ fn mass_anchor_calibration(
         if pfms[i].isotope_offset != 0 {
             continue;
         }
-        pep_pfms.entry(pfms[i].peptide_idx).or_default().push((pfms[i].mass_error_ppm, pos));
+        pep_pfms.entry(pfms[i].peptide_idx as usize).or_default().push((pfms[i].mass_error_ppm, pos));
     }
     // Theoretical peptide count per (decoy, accession), and the decoy totals used
     // for the binomial background rate p = mean(decoy matched)/mean(decoy theo).
@@ -597,7 +597,7 @@ fn mass_anchor_calibration(
     // 6. RANSAC RT calibration on the (abstract, observed) pairs of the anchors.
     let pairs: Vec<(f64, f64)> = anchor_pos
         .iter()
-        .filter_map(|&pos| abstract_rt[pos].map(|a| (a, matrix.features[pfms[reduced[pos]].feature_idx].rt)))
+        .filter_map(|&pos| abstract_rt[pos].map(|a| (a, matrix.features[pfms[reduced[pos]].feature_idx as usize].rt)))
         .collect();
     if pairs.len() < 50 {
         return (Calibration::default(), anchor_pos, shift, sigma);
@@ -628,7 +628,7 @@ fn mass_anchor_calibration(
     // and stable. A peptide is "seen" if ANY of its features is consistent in both
     // mass and RT (the low-isotope-recovery that gives the RT multiplier).
     let rt_diff_at = |cal: &Calibration, pos: usize| -> Option<f64> {
-        abstract_rt[pos].map(|a| matrix.features[pfms[reduced[pos]].feature_idx].rt - cal.apply(a))
+        abstract_rt[pos].map(|a| matrix.features[pfms[reduced[pos]].feature_idx as usize].rt - cal.apply(a))
     };
     let mass_gate = (3.0_f64 * sigma).min(10.0);
 
@@ -748,12 +748,12 @@ fn mass_anchor_calibration(
                 for &(err, pos) in pfm_list {
                     let mz = (err - m_shift) / m_sigma;
                     if mz.abs() > m_gate / m_sigma { continue; }
-                    if cs_gate > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx].combined_score < cs_gate { continue; }
+                    if cs_gate > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx as usize].combined_score < cs_gate { continue; }
                     if let Some(pr) = pred {
-                        let rd = matrix.features[pfms[reduced[pos]].feature_idx].rt - pr;
+                        let rd = matrix.features[pfms[reduced[pos]].feature_idx as usize].rt - pr;
                         let dev = mz * mz + (rd / rt_sig).powi(2);
                         if best.map_or(true, |(b, _)| dev < b) { best = Some((dev, pos)); }
-                        if want_feats { feats.push((dev, pfms[reduced[pos]].feature_idx)); }
+                        if want_feats { feats.push((dev, pfms[reduced[pos]].feature_idx as usize)); }
                     }
                 }
                 best.map(|(dev, pos)| (pi, (decoy, dev, pos), feats))
@@ -778,7 +778,7 @@ fn mass_anchor_calibration(
                 if weights.get(&pi).copied().unwrap_or(0.0) <= 1e-3 {
                     continue;
                 }
-                pep_feat.insert(pi, vec![pfms[reduced[pos]].feature_idx]);
+                pep_feat.insert(pi, vec![pfms[reduced[pos]].feature_idx as usize]);
                 for prot in &db.peptides[pi].proteins {
                     observed.entry((decoy, prot.as_ref())).or_default().insert(pi);
                 }
@@ -822,7 +822,7 @@ fn mass_anchor_calibration(
                             if mz.abs() > m_gate / m_sigma { continue; }
                             if let Some(rd) = rt_diff_at(cal, pos) {
                                 let dev = mz * mz + (rd / rt_sig).powi(2);
-                                let feat = pfms[reduced[pos]].feature_idx;
+                                let feat = pfms[reduced[pos]].feature_idx as usize;
                                 let _ = writeln!(w, "{}\t{}\t{:.3}\t{}\t{:.4}\t{:.4}\t{}",
                                     pep.sequence.as_ref(), decoy as u8, dev, feat, err, rd, pstr);
                             }
@@ -896,10 +896,10 @@ fn mass_anchor_calibration(
                                 .unwrap_or_default();
                             f.sort_unstable();
                             f.dedup();
-                            if f.is_empty() { f.push(pfms[reduced[pos]].feature_idx); }
+                            if f.is_empty() { f.push(pfms[reduced[pos]].feature_idx as usize); }
                             f
                         } else {
-                            vec![pfms[reduced[pos]].feature_idx]
+                            vec![pfms[reduced[pos]].feature_idx as usize]
                         };
                         pep_feat.insert(pi, feats);
                         for prot in &db.peptides[pi].proteins {
@@ -1038,7 +1038,7 @@ fn mass_anchor_calibration(
             }
             if let Some((_, pos)) = best {
                 if let Some(a) = abstract_rt[pos] {
-                    cp.push((a, matrix.features[pfms[reduced[pos]].feature_idx].rt));
+                    cp.push((a, matrix.features[pfms[reduced[pos]].feature_idx as usize].rt));
                 }
             }
         }
@@ -1140,7 +1140,7 @@ fn mass_anchor_calibration(
                     if mz.abs() > best_gate / best_sigma {
                         continue;
                     }
-                    if cs_gate_ml > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx].combined_score < cs_gate_ml {
+                    if cs_gate_ml > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx as usize].combined_score < cs_gate_ml {
                         continue;
                     }
                     if let Some(rd) = rt_diff_at(&best_cal, pos) {
@@ -1192,7 +1192,7 @@ fn mass_anchor_calibration(
                         for &(err, pos) in list {
                             mzs.push(((err - shift) / sigma).abs());
                             if let Some(rd) = rt_diff_at(&best_cal, pos) { rtds.push(rd.abs()); }
-                            let f = &matrix.features[pfms[reduced[pos]].feature_idx];
+                            let f = &matrix.features[pfms[reduced[pos]].feature_idx as usize];
                             chs.insert(f.charge);
                             ims.insert((f.im.unwrap_or(0.0) * 100.0) as i64);
                         }
@@ -1208,7 +1208,7 @@ fn mass_anchor_calibration(
             const AAS: &[u8] = b"GASPVTCLINDQKEMHFRYW";
             let featurize_ml = |pos: usize, pi: usize| -> Vec<f32> {
                 let mut v = featurize(&pfms[reduced[pos]], matrix, db, rt_diff_at(&best_cal, pos), None);
-                let seq = db.peptides[pfms[reduced[pos]].peptide_idx].sequence.as_bytes();
+                let seq = db.peptides[pfms[reduced[pos]].peptide_idx as usize].sequence.as_bytes();
                 let mut comp = [0f32; 20];
                 let len = seq.len().max(1) as f32;
                 for &b in seq {
@@ -1237,7 +1237,7 @@ fn mass_anchor_calibration(
                 // biosaur2 discriminators (isotope-pattern fit error + peak width):
                 // the real-vs-random signal absent from n_isotopes/n_scans. 0 when the
                 // matrix lacks them (inert on koth aligned inputs).
-                let f = &matrix.features[pfms[reduced[pos]].feature_idx];
+                let f = &matrix.features[pfms[reduced[pos]].feature_idx as usize];
                 v.push(f.isoerror.unwrap_or(0.0) as f32);
                 v.push(f.isoerror.map(|x| x.abs()).unwrap_or(0.0) as f32);
                 v.push(f.isoerror2.unwrap_or(0.0) as f32);
@@ -1310,6 +1310,10 @@ fn mass_anchor_calibration(
                     }
                 }
             }
+            // The ML feature matrix is only needed to fit/score/diagnose the
+            // qpred ensemble above; the rest of this stage ranks by `ml` scores and
+            // `pfms`/`reduced`, so free it now (one Vec<f32> per candidate peptide).
+            drop(feats);
             // ms1searchpy `final_iteration` (main.py:140, 1965-2010): NOT a single
             // peptide-quality cutoff. Rank peptides by ML score (best first), then
             // sweep 10 CUMULATIVE inclusion thresholds (top 10%, 20%, ..., 100% of
@@ -1325,7 +1329,7 @@ fn mass_anchor_calibration(
             // ensemble, ported to Rust.
             let pep_feat_ml: rustc_hash::FxHashMap<usize, Vec<usize>> = items
                 .iter()
-                .map(|&(pi, _, pos, _)| (pi, vec![pfms[reduced[pos]].feature_idx]))
+                .map(|&(pi, _, pos, _)| (pi, vec![pfms[reduced[pos]].feature_idx as usize]))
                 .collect();
             // One row per peptide, ranked best-first. Default: ML score desc.
             // UNO_ENS_BY=dev ranks by mass+RT DEVIATION ascending instead -- this
@@ -1529,7 +1533,7 @@ fn seed_calibration(
         if p.decoy || p.isotope_offset != 0 || p.mass_error_ppm.abs() > 5.0 {
             continue;
         }
-        let f = &matrix.features[p.feature_idx];
+        let f = &matrix.features[p.feature_idx as usize];
         if f.combined_score < 0.5 || f.n_contributing_runs < min_runs {
             continue;
         }
@@ -1538,7 +1542,7 @@ fn seed_calibration(
             None => continue,
         };
         let err = p.mass_error_ppm.abs();
-        let entry = best.entry(p.feature_idx).or_insert((err, a, pos));
+        let entry = best.entry(p.feature_idx as usize).or_insert((err, a, pos));
         if err < entry.0 {
             *entry = (err, a, pos);
         }
@@ -1554,7 +1558,7 @@ fn seed_calibration(
     // calibration (and everything downstream) differ run-to-run. Sort by feature.
     let mut seed_items: Vec<(usize, f64, f64, usize)> = best
         .iter()
-        .map(|(&fi, &(_, a, pos))| (fi, a, matrix.features[pfms[reduced[pos]].feature_idx].rt, pos))
+        .map(|(&fi, &(_, a, pos))| (fi, a, matrix.features[pfms[reduced[pos]].feature_idx as usize].rt, pos))
         .collect();
     seed_items.sort_unstable_by_key(|&(fi, ..)| fi);
     let items: Vec<(f64, f64, usize)> =
@@ -1600,9 +1604,9 @@ fn reduce_top_k(pfms: &[Pfm], n_features: usize, k: usize) -> Vec<usize> {
     let mut by_feature: Vec<(Vec<usize>, Vec<usize>)> = vec![(Vec::new(), Vec::new()); n_features];
     for (i, p) in pfms.iter().enumerate() {
         let bucket = if p.decoy {
-            &mut by_feature[p.feature_idx].1
+            &mut by_feature[p.feature_idx as usize].1
         } else {
-            &mut by_feature[p.feature_idx].0
+            &mut by_feature[p.feature_idx as usize].0
         };
         bucket.push(i);
     }
@@ -2157,7 +2161,7 @@ fn discriminant_scores(
         let feats: Vec<Vec<f32>> = reduced
             .iter()
             .enumerate()
-            .map(|(pos, &i)| featurize(&pfms[i], matrix, db, rt_diff[pos], im_diff[pos]))
+            .map(|(pos, &i)| featurize(&pfms[i], matrix, db, rt_diff[pos], im_diff.get(pos).copied().flatten()))
             .collect();
         if cfg.discriminant == "lda" {
             cv_lda_predict(reduced, &feats, folds, &train_label, cfg.n_folds)
@@ -2404,7 +2408,7 @@ fn deviation_scores(
     positives: &[usize],
 ) -> Vec<f64> {
     let rt_sig = robust_sigma(positives.iter().map(|&p| rt_diff[p].unwrap_or(f64::NAN)));
-    let im_sig = robust_sigma(positives.iter().map(|&p| im_diff[p].unwrap_or(f64::NAN)));
+    let im_sig = robust_sigma(positives.iter().map(|&p| im_diff.get(p).copied().flatten().unwrap_or(f64::NAN)));
     log::info!(
         "deviation discriminant: rt_sigma={:.3} min, im_sigma={:.4} 1/K0 (mass z-scored)",
         rt_sig,
@@ -2420,7 +2424,7 @@ fn deviation_scores(
             if let Some(r) = rt_diff[pos] {
                 d2 += (r / rt_sig).powi(2);
             }
-            if let Some(i) = im_diff[pos] {
+            if let Some(i) = im_diff.get(pos).copied().flatten() {
                 d2 += (i / im_sig).powi(2);
             }
             -d2
@@ -2439,13 +2443,13 @@ fn compete_and_qvalue(
     // (common before RT separates them) resolve without bias toward targets.
     let eff = |pos: usize| -> f64 {
         let p = &pfms[reduced[pos]];
-        scores[pos] + 1e-9 * (tiebreak(p.feature_idx, p.peptide_idx) - 0.5)
+        scores[pos] + 1e-9 * (tiebreak(p.feature_idx as usize, p.peptide_idx as usize) - 0.5)
     };
 
     // feature -> (reduced position, effective score)
     let mut best: Vec<Option<(usize, f64)>> = vec![None; n_features];
     for pos in 0..reduced.len() {
-        let fi = pfms[reduced[pos]].feature_idx;
+        let fi = pfms[reduced[pos]].feature_idx as usize;
         let e = eff(pos);
         if best[fi].map_or(true, |(_, s)| e > s) {
             best[fi] = Some((pos, e));
@@ -2507,7 +2511,7 @@ pub fn score(
         let v: Vec<Option<f64>> = reduced
             .iter()
             .map(|&i| {
-                let seq = db.peptides[pfms[i].peptide_idx].sequence.as_ref();
+                let seq = db.peptides[pfms[i].peptide_idx as usize].sequence.as_ref();
                 let r = lib.get(seq).copied();
                 if r.is_some() {
                     hits += 1;
@@ -2528,7 +2532,7 @@ pub fn score(
                 // Predict once per UNIQUE peptide_idx, then scatter back. The reduced
                 // set repeats each peptide across many features (~9M PFMs, ~1M unique),
                 // so deduplicating cuts RT inference ~9x.
-                let mut uniq: Vec<usize> = reduced.iter().map(|&i| pfms[i].peptide_idx).collect();
+                let mut uniq: Vec<usize> = reduced.iter().map(|&i| pfms[i].peptide_idx as usize).collect();
                 uniq.sort_unstable();
                 uniq.dedup();
                 let seqs: Vec<&str> =
@@ -2554,7 +2558,7 @@ pub fn score(
                     reduced.len(),
                     t.elapsed().as_secs_f64()
                 );
-                reduced.par_iter().map(|&i| pred_of.get(&pfms[i].peptide_idx).copied()).collect()
+                reduced.par_iter().map(|&i| pred_of.get(&(pfms[i].peptide_idx as usize)).copied()).collect()
             }
             None => vec![None; reduced.len()],
         }
@@ -2570,7 +2574,7 @@ pub fn score(
                 .iter()
                 .map(|&i| {
                     let p = &pfms[i];
-                    (db.peptides[p.peptide_idx].sequence.as_ref(), matrix.features[p.feature_idx].charge)
+                    (db.peptides[p.peptide_idx as usize].sequence.as_ref(), matrix.features[p.feature_idx as usize].charge)
                 })
                 .collect();
             let preds = m.predict_many(&items);
@@ -2588,11 +2592,11 @@ pub fn score(
         writeln!(w, "feature_idx\tdecoy\tcharge\tmass_err_ppm\tabstract_rt\tobs_rt\tpred_im\tobs_im\tpeptide").ok();
         for (pos, &i) in reduced.iter().enumerate() {
             let p = &pfms[i];
-            let f = &matrix.features[p.feature_idx];
+            let f = &matrix.features[p.feature_idx as usize];
             writeln!(
                 w,
                 "{}\t{}\t{}\t{:.3}\t{}\t{:.5}\t{}\t{}\t{}",
-                p.feature_idx,
+                p.feature_idx as usize,
                 p.decoy as u8,
                 f.charge,
                 p.mass_error_ppm,
@@ -2600,7 +2604,7 @@ pub fn score(
                 f.rt,
                 predicted_im[pos].map(|v| format!("{:.5}", v)).unwrap_or_default(),
                 f.im.map(|v| format!("{:.5}", v)).unwrap_or_default(),
-                db.peptides[p.peptide_idx].sequence.as_ref(),
+                db.peptides[p.peptide_idx as usize].sequence.as_ref(),
             ).ok();
         }
         log::info!("dumped {} reduced candidates to /tmp/uno_reduced.tsv", reduced.len());
@@ -2646,7 +2650,7 @@ pub fn score(
                 std::collections::HashMap::new();
             let mut pooled: Vec<(f64, f64)> = Vec::new();
             for &pos in &seed_positions {
-                let f = &matrix.features[pfms[reduced[pos]].feature_idx];
+                let f = &matrix.features[pfms[reduced[pos]].feature_idx as usize];
                 if let (Some(im_obs), Some(p)) = (f.im, predicted_im[pos]) {
                     by_charge.entry(f.charge).or_default().push((p, im_obs));
                     pooled.push((p, im_obs));
@@ -2668,20 +2672,31 @@ pub fn score(
         } else {
             std::collections::HashMap::new()
         };
-    let im_diff: Vec<Option<f64>> = reduced
-        .iter()
-        .enumerate()
-        .map(|(pos, &i)| {
-            let f = &matrix.features[pfms[i].feature_idx];
-            let cal = im_calibration.get(&f.charge)?;
-            let im_obs = f.im?;
-            predicted_im[pos].map(|p| im_obs - cal.apply(p))
-        })
-        .collect();
+    // On non-IM data (no IM model, or the run carries no 1/K0) every entry is
+    // `None`; skip the ~272 MB allocation and leave `im_diff` empty. All reads go
+    // through `im_diff.get(pos).copied().flatten()`, which yields `None` for an
+    // empty vector — identical to a full all-`None` vector.
+    let im_diff: Vec<Option<f64>> = if im_calibration.is_empty() {
+        Vec::new()
+    } else {
+        reduced
+            .iter()
+            .enumerate()
+            .map(|(pos, &i)| {
+                let f = &matrix.features[pfms[i].feature_idx as usize];
+                let cal = im_calibration.get(&f.charge)?;
+                let im_obs = f.im?;
+                predicted_im[pos].map(|p| im_obs - cal.apply(p))
+            })
+            .collect()
+    };
+    // `predicted_im` is only needed to build `im_diff` (and the earlier
+    // UNO_DUMP_REDUCED dump); free its ~272 MB now rather than carry it to the end.
+    drop(predicted_im);
 
     let folds: Vec<usize> = reduced
         .par_iter()
-        .map(|&i| fold_of(pfms[i].feature_idx, cfg.n_folds))
+        .map(|&i| fold_of(pfms[i].feature_idx as usize, cfg.n_folds))
         .collect();
 
     // rt_diff per reduced PFM under the current calibration.
@@ -2692,7 +2707,7 @@ pub fn score(
             .par_iter()
             .enumerate()
             .map(|(pos, &i)| {
-                let obs = matrix.features[pfms[i].feature_idx].rt;
+                let obs = matrix.features[pfms[i].feature_idx as usize].rt;
                 if cfg.rt_calibrated {
                     // Library is already in this run's RT space: use it directly.
                     return abstract_rt[pos].map(|a| obs - a);
@@ -2720,7 +2735,7 @@ pub fn score(
         let mut uniq_pids: Vec<usize> = Vec::new();
         rt_feat_idx.reserve(reduced.len());
         for &i in &reduced {
-            let pi = pfms[i].peptide_idx;
+            let pi = pfms[i].peptide_idx as usize;
             let u = *pi_to_uniq.entry(pi).or_insert_with(|| {
                 let n = uniq_pids.len() as u32;
                 uniq_pids.push(pi);
@@ -2773,7 +2788,7 @@ pub fn score(
     // Refit the on-data RT model on `pos` features (observed RT as target) and
     // return rt_diff = obs_rt - on_data_pred for every reduced PFM. Falls back to
     // the existing rt_diff if the fit is degenerate or too few points.
-    let obs_rt = |p: usize| -> f64 { matrix.features[pfms[reduced[p]].feature_idx].rt };
+    let obs_rt = |p: usize| -> f64 { matrix.features[pfms[reduced[p]].feature_idx as usize].rt };
     let predict_rt = |w: &[f64], p: usize| -> f64 {
         rt_feat_uniq[rt_feat_idx[p] as usize].iter().zip(w).map(|(f, c)| f * c).sum()
     };
@@ -2840,7 +2855,7 @@ pub fn score(
         let before = seed_positions.len();
         let kept: Vec<usize> = seed_positions
             .into_iter()
-            .filter(|&pos| im_diff[pos].map_or(false, |d| d.abs() <= 0.02))
+            .filter(|&pos| im_diff.get(pos).copied().flatten().map_or(false, |d| d.abs() <= 0.02))
             .collect();
         log::info!("IM-purified positives: {} / {} RT-seed features", kept.len(), before);
         kept
@@ -2926,7 +2941,7 @@ pub fn score(
         let cal_pairs: Vec<(f64, f64)> = next
             .iter()
             .filter_map(|&pos| {
-                abstract_rt[pos].map(|a| (a, matrix.features[pfms[reduced[pos]].feature_idx].rt))
+                abstract_rt[pos].map(|a| (a, matrix.features[pfms[reduced[pos]].feature_idx as usize].rt))
             })
             .collect();
         let n_id = winners
@@ -2967,7 +2982,7 @@ pub fn score(
             let mut best_pos: std::collections::HashMap<usize, (f64, usize)> =
                 std::collections::HashMap::new();
             for pos in 0..reduced.len() {
-                let pi = pfms[reduced[pos]].peptide_idx;
+                let pi = pfms[reduced[pos]].peptide_idx as usize;
                 let e = best_pos.entry(pi).or_insert((f64::NEG_INFINITY, pos));
                 if scores[pos] > e.0 {
                     *e = (scores[pos], pos);
@@ -2986,7 +3001,7 @@ pub fn score(
                 }
                 let rt_ok = rt_diff[pos].map_or(false, |d| d.abs() <= rt_gate);
                 let mass_ok = mass_z[pos].abs() <= 2.5;
-                let im_ok = im_diff[pos].map_or(true, |d| d.abs() <= 0.025);
+                let im_ok = im_diff.get(pos).copied().flatten().map_or(true, |d| d.abs() <= 0.025);
                 if rt_ok && mass_ok && im_ok {
                     for prot in &db.peptides[pi].proteins {
                         prot_peps.entry(prot.as_ref()).or_default().push(pos);
@@ -3010,7 +3025,7 @@ pub fn score(
             let pairs: Vec<(f64, f64)> = trusted
                 .iter()
                 .filter_map(|&pos| {
-                    abstract_rt[pos].map(|a| (a, matrix.features[pfms[reduced[pos]].feature_idx].rt))
+                    abstract_rt[pos].map(|a| (a, matrix.features[pfms[reduced[pos]].feature_idx as usize].rt))
                 })
                 .collect();
             if pairs.len() < 50 {
@@ -3057,9 +3072,9 @@ pub fn score(
                 let mut seen = std::collections::HashSet::new();
                 for &pos in &positives {
                     let p = &pfms[reduced[pos]];
-                    let seq = db.peptides[p.peptide_idx].sequence.as_ref();
+                    let seq = db.peptides[p.peptide_idx as usize].sequence.as_ref();
                     if seen.insert(seq.to_string()) {
-                        let rt = matrix.features[p.feature_idx].rt;
+                        let rt = matrix.features[p.feature_idx as usize].rt;
                         let _ = writeln!(w, "{}\t{}", seq, rt);
                     }
                 }
@@ -3104,15 +3119,15 @@ pub fn score(
             let ri = reduced[pos];
             let p = &pfms[ri];
             Identification {
-                feature_idx: p.feature_idx,
-                peptide_idx: p.peptide_idx,
+                feature_idx: p.feature_idx as usize,
+                peptide_idx: p.peptide_idx as usize,
                 decoy: p.decoy,
                 score,
                 q_value: qv,
                 mass_error_ppm: p.mass_error_ppm,
                 isotope_offset: p.isotope_offset,
                 rt_diff: rt_diff[pos].unwrap_or(f64::NAN),
-                im_diff: im_diff[pos].unwrap_or(f64::NAN),
+                im_diff: im_diff.get(pos).copied().flatten().unwrap_or(f64::NAN),
             }
         })
         .collect();
@@ -3133,11 +3148,11 @@ pub fn score(
     for pos in 0..reduced.len() {
         let p = &pfms[reduced[pos]];
         let ard = rt_diff[pos].map(|d| d.abs()).unwrap_or(f64::INFINITY);
-        let aid = im_diff[pos].map(|d| d.abs()).unwrap_or(f64::INFINITY);
+        let aid = im_diff.get(pos).copied().flatten().map(|d| d.abs()).unwrap_or(f64::INFINITY);
         let amz = mass_z[pos].abs();
-        let fq = matrix.features[p.feature_idx].n_isotopes.unwrap_or(0.0);
+        let fq = matrix.features[p.feature_idx as usize].n_isotopes.unwrap_or(0.0);
         let sel = -amz; // tightest mass wins (RT-independent representative)
-        let e = by_peptide.entry(p.peptide_idx).or_insert((
+        let e = by_peptide.entry(p.peptide_idx as usize).or_insert((
             f64::NEG_INFINITY,
             f64::NEG_INFINITY,
             f64::INFINITY,
@@ -3193,7 +3208,7 @@ pub fn score(
         let mut dt = std::collections::HashSet::new();
         let mut dd = std::collections::HashSet::new();
         for &i in &reduced {
-            if pfms[i].decoy { dd.insert(pfms[i].peptide_idx); } else { dt.insert(pfms[i].peptide_idx); }
+            if pfms[i].decoy { dd.insert(pfms[i].peptide_idx as usize); } else { dt.insert(pfms[i].peptide_idx as usize); }
         }
         let pm_t = peptide_matches.iter().filter(|m| !m.decoy).count();
         let pm_d = peptide_matches.iter().filter(|m| m.decoy).count();
@@ -3213,7 +3228,7 @@ pub fn score(
         .map(|pos| {
             let p = &pfms[reduced[pos]];
             (
-                p.peptide_idx,
+                p.peptide_idx as usize,
                 p.decoy,
                 mass_z[pos].abs(),
                 rt_diff[pos].map(|d| d.abs()).unwrap_or(f64::INFINITY),

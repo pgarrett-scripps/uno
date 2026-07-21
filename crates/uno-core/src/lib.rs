@@ -24,7 +24,7 @@ pub use database::{DigestConfig, PeptideDb, TheoPeptide};
 pub use hill::{hill_search, load_hills, Hill, HillConfig, HillHit, HillIndex};
 pub use im::{im_features, ImModel, IM_N_FEATURES};
 pub use input::{DedupConfig, Feature, FeatureMatrix};
-pub use matching::{match_features, MatchConfig, Pfm};
+pub use matching::{match_features, match_features_topk, MatchConfig, Pfm};
 pub use protein::{infer_proteins, ProteinConfig, ProteinId};
 pub use quant::{peptide_quant, protein_quant, QuantRow};
 pub use rt::{rt_features, RtModel, RT_N_FEATURES};

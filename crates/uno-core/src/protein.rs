@@ -1345,12 +1345,12 @@ pub fn infer_proteins(
             // peaks. iso_thresh 0 (or no shape descriptors) leaves this inert.
             let shape_ok = m.feat_quality >= iso_thresh;
             if shape_ok && m.abs_rt_diff.is_finite() && m.abs_rt_diff <= rt_thresh && im_ok && mass_ok {
-                if seen.insert(m.peptide_idx) {
-                    let pep = &db.peptides[m.peptide_idx];
+                if seen.insert(m.peptide_idx as usize) {
+                    let pep = &db.peptides[m.peptide_idx as usize];
                     let mz = if m.abs_mass_z.is_finite() { m.abs_mass_z } else { 0.0 };
                     let sc = if m.score.is_finite() { m.score } else { 0.0 };
                     for prot in &pep.proteins {
-                        observed.entry((pep.decoy, prot.as_ref())).or_default().insert(m.peptide_idx);
+                        observed.entry((pep.decoy, prot.as_ref())).or_default().insert(m.peptide_idx as usize);
                         let e = rt_acc.entry((pep.decoy, prot.as_ref())).or_insert((0.0, 0.0, 0.0, 0));
                         e.0 += m.abs_rt_diff;
                         e.1 += mz;
