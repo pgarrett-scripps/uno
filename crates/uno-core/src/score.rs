@@ -1344,10 +1344,19 @@ fn mass_anchor_calibration(
             // real peptide-rich proteins barely beat chance (scores collapse ~2.5 at
             // the FDR margin). Restricting to TIGHTER steps lowers the averaged p.
             // Env-tunable: UNO_ENS_STEPS resolution, UNO_ENS_LO..UNO_ENS_HI the
-            // included step band (defaults 1..=10 = the original uniform sweep).
+            // included step band.
+            //
+            // DEFAULT = "top-30%" (lo=1, hi=3): average only the 3 TIGHTEST of the 10
+            // inclusion bands (top 10/20/30% of ML-ranked peptides), dropping the loose
+            // junk-heavy passes (top 40-100%) that inflate the random-match background p.
+            // Validated 2026-07-20 on 2 large HeLa runs (run10 775->1218, deephela-240min
+            // 1585->1752; neutral on a small run), dual-null calibrated (internal decoy
+            // FDR and yeast-entrapment agree) and byte-deterministic. Takes uno from
+            // behind ms1searchpy-DeepLC to a tie. Set `UNO_ENS_HI=10` for the old full
+            // 1..=10 uniform sweep (the pre-2026-07-20 default).
             let n_steps: usize = std::env::var("UNO_ENS_STEPS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
             let lo: usize = std::env::var("UNO_ENS_LO").ok().and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
-            let hi: usize = std::env::var("UNO_ENS_HI").ok().and_then(|s| s.parse().ok()).unwrap_or(n_steps).min(n_steps);
+            let hi: usize = std::env::var("UNO_ENS_HI").ok().and_then(|s| s.parse().ok()).unwrap_or(3).min(n_steps);
             let mut n_used = (hi + 1).saturating_sub(lo).max(1);
             // ms1searchpy's peptide filter (UNO_ML_DECOYCUT): instead of averaging a
             // 10-step cutoff ensemble, keep peptides in the top ML-quality quantile
