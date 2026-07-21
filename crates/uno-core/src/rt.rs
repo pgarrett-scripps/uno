@@ -188,6 +188,28 @@ impl RtModel {
         }
     }
 
+    /// Predict abstract RT AND return the penultimate embedding per sequence in a
+    /// single pass, when the on-data RT fine-tune will consume both. Returns
+    /// `(preds, Some(embeds))` for backends with a usable embedding (MLP/CNN) and
+    /// `(preds, None)` for the gbdt student. Byte-identical to calling
+    /// `predict_many` and `embed_many` separately, but the CNN backend runs its
+    /// forward pass once instead of twice over the same ~1.1M unique peptides.
+    pub fn predict_embed_many<S: AsRef<str> + Sync>(
+        &self,
+        seqs: &[S],
+    ) -> (Vec<f64>, Option<Vec<Vec<f64>>>) {
+        match self {
+            RtModel::Cnn(m) => {
+                let (p, e) = m.predict_embed_many(seqs);
+                (p, Some(e))
+            }
+            // MLP: predict and embed remain separate passes (no fused kernel), but
+            // still correct + byte-identical to the old two-call path.
+            RtModel::Mlp(m) => (m.predict_many(seqs), Some(m.embed_many(seqs))),
+            RtModel::Gbdt(_) => (self.predict_many(seqs), None),
+        }
+    }
+
     /// Predict abstract RT for many sequences in one batch.
     pub fn predict_many<S: AsRef<str> + Sync>(&self, seqs: &[S]) -> Vec<f64> {
         match self {
