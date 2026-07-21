@@ -30,11 +30,14 @@ user-CPU (load-immune) + wall + peak RSS._
 - **Honest metric.** ms1's *own* internal-FDR count was 1319 @1% (rep1), but by the shared
   **yeast-entrapment** metric it is 1220 — its target/decoy FDR is looser than the entrapment
   truth. uno's 1309 already is the honest-entrapment number.
-- **Identical feature usage.** Both engines feed the same biosaur/koth per-feature quality
-  columns to their boosted classifier: `combined_score, cosine_score, isotope_score,
-  neutron_offset, ppm_error` (+ `nIsotopes/nScans`). `isoerror/isoerror2/rt_width` are not in
-  this file, so both skip them. This is why single-run input matters — aligned matrices drop
-  these columns.
+- **Feature usage (A/B tested).** uno's classifier *reads* the biosaur quality columns
+  (`cosine_score, isotope_score, ppm_error, neutron_offset, combined_score`), the same ones
+  ms1 feeds LightGBM — but they are **not** what drives uno's depth. Stripping all of them
+  changes honest depth by ~0 @1% (1309 → 1306) and only +6.5% @5% (1887 → 1772); the ML
+  ensemble still jumps 737 → ~1240 confident without them. uno's depth comes from its
+  **ensemble band-averaging + mass/RT/composition** features, not the quality columns.
+  Single-run input still matters — for a fair same-input comparison and the small @5% gain —
+  just not as a big depth lever.
 - **RT.** uno used its CNN; ms1 used DeepLC (second-stage calibrated RT σ ≈ 4.2 min).
 
 Reproduce: `./run.sh` (writes `results/summary.tsv`).
