@@ -1721,6 +1721,92 @@ fn lgbm_fold(
     }
 }
 
+/// Pure-Rust twin of [`lgbm_fold`] using `sequoia-boost` (an XGBoost reimplementation)
+/// instead of the C LightGBM. IDENTICAL CV split, negative balancing (3x cap, same
+/// hash order) and hyperparameters (binary:logistic, hist, depth/lr/iters, 0.8 row +
+/// col subsample, seed 42, single-thread for determinism). Only the tree library
+/// differs. Gated by `UNO_ML_SEQUOIA`.
+fn sequoia_fold(
+    feats: &[Vec<f32>], folds: &[usize], train_label: &[Option<f64>],
+    depth: u32, lr: f64, iters: usize, test_fold: usize, rank_norm: bool, scores: &mut [f64],
+) {
+    use sequoia_boost::prelude::*;
+    let (mut pos_rows, mut neg_rows) = (Vec::new(), Vec::new());
+    for p in 0..feats.len() {
+        if folds[p] == test_fold { continue; }
+        match train_label[p] {
+            Some(l) if l >= 0.5 => pos_rows.push(p),
+            Some(_) => neg_rows.push(p),
+            None => {}
+        }
+    }
+    if pos_rows.is_empty() || neg_rows.is_empty() { return; }
+    let neg_cap = (pos_rows.len() * 3).max(20_000);
+    if neg_rows.len() > neg_cap {
+        neg_rows.sort_by_key(|&p| { let mut x = (p as u64).wrapping_mul(0x9e3779b97f4a7c15); x ^= x >> 29; x });
+        neg_rows.truncate(neg_cap);
+    }
+    let ncol = feats.first().map(|f| f.len()).unwrap_or(0);
+    if ncol == 0 { return; }
+    let train_rows: Vec<usize> = pos_rows.iter().chain(neg_rows.iter()).copied().collect();
+    let mut flat: Vec<f32> = Vec::with_capacity(train_rows.len() * ncol);
+    for &p in &train_rows { flat.extend_from_slice(&feats[p]); }
+    let labels: Vec<f32> = pos_rows.iter().map(|_| 1.0f32).chain(neg_rows.iter().map(|_| 0.0f32)).collect();
+    let dtrain = match DMatrix::from_dense(&flat, train_rows.len(), ncol).and_then(|d| d.with_labels(&labels)) {
+        Ok(d) => d, Err(e) => { log::warn!("sequoia fold {test_fold} DMatrix failed: {e}"); return; }
+    };
+    // Env-tunable hyperparameters (for the tuning sweep). depth/lr/iters come from the
+    // caller (UNO_ML_DEPTH/LR/ITERS); these are sequoia/XGBoost-specific knobs.
+    let ev = |k: &str, d: f64| std::env::var(k).ok().and_then(|s| s.parse().ok()).unwrap_or(d);
+    let max_bin = ev("UNO_SEQ_BINS", 256.0) as usize;
+    let lambda = ev("UNO_SEQ_LAMBDA", 1.0);
+    let mcw = ev("UNO_SEQ_MCW", 20.0);
+    let alpha = ev("UNO_SEQ_ALPHA", 0.0);
+    let gamma = ev("UNO_SEQ_GAMMA", 0.0);
+    let subsample = ev("UNO_SEQ_SUB", 0.8);
+    let colsample = ev("UNO_SEQ_COL", 0.8);
+    let params = match TrainingParams::builder()
+        .objective("binary:logistic")
+        .tree_method(TreeMethod::Hist)
+        .max_depth(depth as usize)
+        .eta(lr)
+        .subsample(subsample)
+        .colsample_bytree(colsample)
+        .min_child_weight(mcw)
+        .lambda(lambda)
+        .alpha(alpha)
+        .gamma(gamma)
+        .max_bin(max_bin)
+        .nthread(1)
+        .seed(42)
+        .build() {
+        Ok(p) => p, Err(e) => { log::warn!("sequoia fold {test_fold} params failed: {e}"); return; }
+    };
+    let model = match train(&params, &dtrain, iters) {
+        Ok(m) => m, Err(e) => { log::warn!("sequoia fold {test_fold} training failed: {e}"); return; }
+    };
+    let test_idx: Vec<usize> = (0..feats.len()).filter(|&p| folds[p] == test_fold).collect();
+    if test_idx.is_empty() { return; }
+    let mut tflat: Vec<f32> = Vec::with_capacity(test_idx.len() * ncol);
+    for &p in &test_idx { tflat.extend_from_slice(&feats[p]); }
+    let dtest = match DMatrix::from_dense(&tflat, test_idx.len(), ncol) {
+        Ok(d) => d, Err(e) => { log::warn!("sequoia fold {test_fold} test DMatrix failed: {e}"); return; }
+    };
+    let preds = match model.predict(&dtest) {
+        Ok(p) => p, Err(e) => { log::warn!("sequoia fold {test_fold} prediction failed: {e}"); return; }
+    };
+    if rank_norm {
+        let n = preds.len();
+        let mut order: Vec<usize> = (0..n).collect();
+        order.sort_by(|&a, &b| preds[a].partial_cmp(&preds[b]).unwrap().then(a.cmp(&b)));
+        let mut rn = vec![0.0f64; n];
+        for (rank, &k) in order.iter().enumerate() { rn[k] = (rank + 1) as f64 / n as f64; }
+        for (k, &p) in test_idx.iter().enumerate() { scores[p] = rn[k]; }
+    } else {
+        for (k, &p) in test_idx.iter().enumerate() { scores[p] = preds[k] as f64; }
+    }
+}
+
 /// AUC (Mann-Whitney) of conf(label 1) vs dim(label 0) over labeled rows; decoys
 /// (label None) excluded. Used to score a hyperparameter set during the search.
 fn lgbm_auc(scores: &[f64], train_label: &[Option<f64>]) -> f64 {
@@ -1792,6 +1878,15 @@ fn cv_train_predict_lgbm(feats: &[Vec<f32>], folds: &[usize], train_label: &[Opt
             .unwrap_or((1u32 << depth.min(8)).saturating_sub(1).max(2));
         let lr: f64 = std::env::var("UNO_ML_LR").ok().and_then(|s| s.parse().ok()).unwrap_or(cfg.shrinkage.min(0.05) as f64);
         let rank = std::env::var("UNO_ML_RANK").ok().map(|s| s != "0").unwrap_or(false);
+        // A/B (2026-07-21): UNO_ML_SEQUOIA=1 swaps the per-fold tree trainer from the
+        // C LightGBM to the pure-Rust sequoia-boost (XGBoost clone). Same CV folds,
+        // same balancing, same depth/lr/iters/0.8-subsample; only the library differs.
+        // Goal: keep uno pure-Rust if sequoia matches LightGBM on speed + honest depth.
+        if std::env::var("UNO_ML_SEQUOIA").is_ok() {
+            let mut scores = vec![0.0f64; n];
+            for f in 0..cfg.n_folds { sequoia_fold(feats, folds, train_label, depth, lr, iters, f, rank, &mut scores); }
+            return scores;
+        }
         let params = format!(
             "objective=binary num_leaves={num_leaves} max_depth={depth} learning_rate={lr} \
              verbosity=-1 min_data_in_leaf=20 feature_fraction=0.8 bagging_fraction=0.8 bagging_freq=1 \
