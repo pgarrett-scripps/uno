@@ -380,6 +380,38 @@ impl RtCnn {
             .collect()
     }
 
+    /// Predict AND embed in one pass: the on-data RT fine-tune re-embeds exactly
+    /// the same unique peptides that abstract-RT prediction already pooled, so a
+    /// separate `embed_many` pass repeats ~1.1M full CNN forwards. Fusing them
+    /// runs `pool` once per peptide and derives both the head prediction and the
+    /// pooled embedding from it. Byte-identical to calling `predict_many` and
+    /// `embed_many` separately (same `pool`, same `head`, same pooled+1.0).
+    pub fn predict_embed_many<S: AsRef<str> + Sync>(&self, seqs: &[S]) -> (Vec<f64>, Vec<Vec<f64>>) {
+        let both: Vec<(f64, Vec<f64>)> = seqs
+            .par_chunks(2048)
+            .flat_map(|chunk| {
+                let mut buf = Buffers::default();
+                chunk
+                    .iter()
+                    .map(|s| {
+                        self.pool(s.as_ref(), &mut buf);
+                        let pred = self.head(&buf.pooled, &mut buf.hid);
+                        let mut emb: Vec<f64> = buf.pooled.iter().map(|&v| v as f64).collect();
+                        emb.push(1.0);
+                        (pred, emb)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let mut preds = Vec::with_capacity(both.len());
+        let mut embs = Vec::with_capacity(both.len());
+        for (p, e) in both {
+            preds.push(p);
+            embs.push(e);
+        }
+        (preds, embs)
+    }
+
     /// Pooled embedding (+intercept) for on-data readout fine-tuning, mirroring
     /// `RtMlp::embed`: refit a linear map over these frozen pooled features.
     pub fn embed(&self, seq: &str) -> Vec<f64> {
@@ -391,7 +423,25 @@ impl RtCnn {
     }
 
     pub fn embed_many<S: AsRef<str> + Sync>(&self, seqs: &[S]) -> Vec<Vec<f64>> {
-        seqs.par_iter().map(|s| self.embed(s.as_ref())).collect()
+        // Reuse one scratch `Buffers` per chunk (like `predict_many`) instead of
+        // allocating a fresh one per sequence via `embed`. `pool` fully overwrites
+        // every buffer it uses, so the pooled output per sequence is bit-identical
+        // to the per-call-allocated version -- this only drops ~1.1M redundant
+        // buffer allocations (the dominant cost of the old per-element path).
+        seqs.par_chunks(2048)
+            .flat_map(|chunk| {
+                let mut buf = Buffers::default();
+                chunk
+                    .iter()
+                    .map(|s| {
+                        self.pool(s.as_ref(), &mut buf);
+                        let mut out: Vec<f64> = buf.pooled.iter().map(|&v| v as f64).collect();
+                        out.push(1.0);
+                        out
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 }
 
