@@ -167,10 +167,10 @@ mod tests {
     #[test]
     fn matches_real_data() {
         let features = PathBuf::from(
-            "/home/patrick-garrett/Repos/uno/experiments/koth_ms1searchpy/koth_run10/run10_koth.features.tsv",
+            "/home/patrick-garrett/Repos/uno/benchmark/data/run10.features.tsv",
         );
         let fasta = PathBuf::from(
-            "/home/patrick-garrett/Repos/uno/experiments/koth_ms1searchpy/fasta/entrap_db_C.fasta",
+            "/home/patrick-garrett/Repos/uno/benchmark/data/entrap_human_yeast.fasta",
         );
         if !features.exists() || !fasta.exists() {
             eprintln!("skipping: benchmark inputs not present");
