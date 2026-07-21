@@ -1379,9 +1379,9 @@ fn mass_anchor_calibration(
             // FDR and yeast-entrapment agree) and byte-deterministic. Takes uno from
             // behind ms1searchpy-DeepLC to a tie. Set `UNO_ENS_HI=10` for the old full
             // 1..=10 uniform sweep (the pre-2026-07-20 default).
-            let n_steps: usize = std::env::var("UNO_ENS_STEPS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
+            let n_steps: usize = std::env::var("UNO_ENS_STEPS").ok().and_then(|s| s.parse().ok()).unwrap_or(40);
             let lo: usize = std::env::var("UNO_ENS_LO").ok().and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
-            let hi: usize = std::env::var("UNO_ENS_HI").ok().and_then(|s| s.parse().ok()).unwrap_or(3).min(n_steps);
+            let hi: usize = std::env::var("UNO_ENS_HI").ok().and_then(|s| s.parse().ok()).unwrap_or(14).min(n_steps);
             let mut n_used = (hi + 1).saturating_sub(lo).max(1);
             // ms1searchpy's peptide filter (UNO_ML_DECOYCUT): instead of averaging a
             // 10-step cutoff ensemble, keep peptides in the top ML-quality quantile
