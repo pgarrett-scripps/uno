@@ -35,13 +35,20 @@ impl Default for MatchConfig {
 }
 
 /// One peptide-feature match.
+///
+/// Field order + widths are chosen to keep the struct at 24 bytes (down from 32):
+/// the `f64` leads (8-byte aligned), the two indices are `u32` (feature and
+/// peptide counts are well under 2^32 — 211k features, ~1.2M peptides on run10),
+/// and the two 1-byte tails pack into the trailing padding. At ~17M reduced PFMs
+/// this saves ~136 MB versus `usize` indices. Values are exact, so output is
+/// unchanged.
 #[derive(Debug, Clone)]
 pub struct Pfm {
-    pub feature_idx: usize,
-    pub peptide_idx: usize,
-    pub isotope_offset: i8,
     /// Signed mass error (peptide - offset-corrected feature center), in ppm.
     pub mass_error_ppm: f64,
+    pub feature_idx: u32,
+    pub peptide_idx: u32,
+    pub isotope_offset: i8,
     pub decoy: bool,
 }
 
@@ -74,8 +81,8 @@ pub fn match_features(matrix: &FeatureMatrix, db: &PeptideDb, cfg: &MatchConfig)
                         break;
                     }
                     out.push(Pfm {
-                        feature_idx: fi,
-                        peptide_idx: start + j,
+                        feature_idx: fi as u32,
+                        peptide_idx: (start + j) as u32,
                         isotope_offset: offset,
                         mass_error_ppm: (pep.mass - center) / center * 1e6,
                         decoy: pep.decoy,
@@ -83,6 +90,70 @@ pub fn match_features(matrix: &FeatureMatrix, db: &PeptideDb, cfg: &MatchConfig)
                 }
             }
             out.into_iter()
+        })
+        .collect()
+}
+
+/// Generate PFMs already reduced to the top-`k` mass matches per feature, split
+/// by target/decoy, without ever materialising the full (unreduced) PFM vector.
+///
+/// This is a memory-streaming fusion of [`match_features`] followed by the
+/// downstream `reduce_top_k`: per feature we collect the candidate PFMs (in the
+/// same offset-then-peptide scan order as [`match_features`]), then stable-sort
+/// each of the target/decoy buckets by `|mass_error_ppm|` and truncate to `k`.
+/// The emitted order — for each feature, its target bucket then its decoy bucket
+/// — is byte-for-byte the order `reduce_top_k` produces, so re-running
+/// `reduce_top_k` on this set is idempotent and downstream output is unchanged.
+/// The full ~41M-PFM intermediate (~1.3GB on run10) is never allocated.
+pub fn match_features_topk(
+    matrix: &FeatureMatrix,
+    db: &PeptideDb,
+    cfg: &MatchConfig,
+    k: usize,
+) -> Vec<Pfm> {
+    matrix
+        .features
+        .par_iter()
+        .enumerate()
+        .flat_map_iter(|(fi, feature)| {
+            let mut targets: Vec<Pfm> = Vec::new();
+            let mut decoys: Vec<Pfm> = Vec::new();
+            if feature.charge >= cfg.min_charge {
+                for &offset in &cfg.isotope_offsets {
+                    let center = feature.mass - (offset as f64) * NEUTRON;
+                    if center <= 0.0 {
+                        continue;
+                    }
+                    let tol = center * cfg.ppm_tolerance * 1e-6;
+                    let lo = center - tol;
+                    let hi = center + tol;
+                    let start = db.peptides.partition_point(|p| p.mass < lo);
+                    for (j, pep) in db.peptides[start..].iter().enumerate() {
+                        if pep.mass > hi {
+                            break;
+                        }
+                        let pfm = Pfm {
+                            feature_idx: fi as u32,
+                            peptide_idx: (start + j) as u32,
+                            isotope_offset: offset,
+                            mass_error_ppm: (pep.mass - center) / center * 1e6,
+                            decoy: pep.decoy,
+                        };
+                        if pep.decoy {
+                            decoys.push(pfm);
+                        } else {
+                            targets.push(pfm);
+                        }
+                    }
+                }
+            }
+            for bucket in [&mut targets, &mut decoys] {
+                bucket.sort_by(|a, b| {
+                    a.mass_error_ppm.abs().partial_cmp(&b.mass_error_ppm.abs()).unwrap()
+                });
+                bucket.truncate(k);
+            }
+            targets.into_iter().chain(decoys)
         })
         .collect()
 }
