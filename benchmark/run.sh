@@ -15,7 +15,9 @@ FEATURES="data/run10.features.tsv"
 FASTA="data/entrap_human_yeast.fasta"
 RT_MODEL="$ROOT/models/rt_cnn_chrono_global_v3_ch32.urtc"
 UNO="$ROOT/target/release/uno"
-PY="$ROOT/.venv/bin/python"                 # env with ms1searchpy + deeplc 3.1.13
+# ms1searchpy console script from its installed venv (ms1searchpy + deeplc 3.1.13
+# + pyteomics + lightgbm). Override with MS1=... if it lives elsewhere.
+MS1="${MS1:-$ROOT/../FeatureFinder/.venv/bin/ms1searchpy}"
 N_MS1="${N_MS1:-3}"                          # ms1 replicates (non-deterministic)
 TIME=/usr/bin/time
 
@@ -56,7 +58,7 @@ echo "uno: depth@1%=$U_D1 @5%=$U_D5  user=${U_USER}s wall=${U_WALL}s rss=${U_RSS
 echo "================= ms1searchpy (-deeplc 1 -ad 1, ${N_MS1} reps) ================="
 for i in $(seq 1 "$N_MS1"); do
   OUT="results/ms1_rep$i"; mkdir -p "$OUT"
-  $TIME -v $PY -m ms1searchpy.search "$FEATURES" \
+  $TIME -v $MS1 "$FEATURES" \
     -d "$FASTA" -deeplc 1 -ad 1 -o "$OUT" \
     > "$OUT/ms1.log" 2>"$OUT/ms1.time"
   PF="$OUT/run10.features_proteins_full.tsv"
