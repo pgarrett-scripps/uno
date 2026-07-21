@@ -2494,6 +2494,11 @@ pub fn score(
     let reduced = reduce_top_k(pfms, n_features, cfg.top_k);
     log::info!("reduced {} PFMs to {} (top-{} per feature)", pfms.len(), reduced.len(), cfg.top_k);
 
+    // Penultimate embeddings per unique peptide_idx, captured in the SAME pass that
+    // predicts abstract RT below (the on-data RT fine-tune re-embeds exactly these
+    // peptides, so a separate embed pass would repeat ~1.1M CNN forwards). Filled
+    // only when the fine-tune will consume them; reused at the rt_feat build.
+    let mut fused_embed_of: Option<std::collections::HashMap<usize, Vec<f64>>> = None;
     // Abstract RT per reduced PFM. Prefer a precomputed DeepLC library (sequence-
     // aware, generalizes — the discriminating signal); fall back to the distilled
     // model. Either is then calibrated on-data to this gradient.
@@ -2528,7 +2533,19 @@ pub fn score(
                 uniq.dedup();
                 let seqs: Vec<&str> =
                     uniq.iter().map(|&pi| db.peptides[pi].sequence.as_ref()).collect();
-                let upreds = m.predict_many(&seqs);
+                // When the on-data RT fine-tune will run, grab the penultimate
+                // embeddings in this same forward pass instead of re-embedding the
+                // identical peptide set later. Byte-identical to `predict_many` +
+                // a separate `embed_many`.
+                let upreds = if cfg.ondata_rt && cfg.ondata_rt_finetune {
+                    let (p, e) = m.predict_embed_many(&seqs);
+                    if let Some(embs) = e {
+                        fused_embed_of = Some(uniq.iter().copied().zip(embs).collect());
+                    }
+                    p
+                } else {
+                    m.predict_many(&seqs)
+                };
                 let pred_of: std::collections::HashMap<usize, f64> =
                     uniq.iter().copied().zip(upreds).collect();
                 log::info!(
@@ -2715,11 +2732,21 @@ pub fn score(
         // (keeps the pretrained representation). Falls back to raw composition features
         // if the model has no embedding (gbdt).
         if cfg.ondata_rt_finetune {
-            let seqs: Vec<&str> = uniq_pids
-                .iter()
-                .map(|&pi| db.peptides[pi].sequence.as_ref())
-                .collect();
-            match rt_model.and_then(|m| m.embed_many(&seqs)) {
+            // Prefer the embeddings already computed in the abstract-RT forward
+            // pass (identical peptide set) -- move each out by peptide index in
+            // uniq_pids order, byte-identical to a fresh `embed_many` over the same
+            // sequences but without repeating the CNN forward. `uniq_pids` is
+            // deduplicated, so every key is present and removed exactly once.
+            let embeds: Option<Vec<Vec<f64>>> = if let Some(mut map) = fused_embed_of.take() {
+                Some(uniq_pids.iter().map(|&pi| map.remove(&pi).unwrap()).collect())
+            } else {
+                let seqs: Vec<&str> = uniq_pids
+                    .iter()
+                    .map(|&pi| db.peptides[pi].sequence.as_ref())
+                    .collect();
+                rt_model.and_then(|m| m.embed_many(&seqs))
+            };
+            match embeds {
                 Some(e) => {
                     log::info!("on-data RT fine-tune: MLP embedding basis ({}-d, {} unique peptides / {} PFMs)",
                         e.first().map_or(0, |v| v.len()), e.len(), reduced.len());
@@ -2797,7 +2824,10 @@ pub fn score(
                     keep.len(),
                     sig
                 );
-                (0..reduced.len()).map(|i| Some(obs_rt(i) - predict_rt(&w, i))).collect()
+                // Order-preserving parallel indexed map (each row independent) ->
+                // byte-identical to the serial version; fans the 17M-row 76-d
+                // projection across cores instead of one thread.
+                (0..reduced.len()).into_par_iter().map(|i| Some(obs_rt(i) - predict_rt(&w, i))).collect()
             }
             None => fallback.to_vec(),
         }
