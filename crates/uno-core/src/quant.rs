@@ -27,10 +27,10 @@ pub fn peptide_quant(
     ids.iter()
         .filter(|id| !id.decoy && id.q_value <= max_q)
         .map(|id| QuantRow {
-            key: db.peptides[id.peptide_idx].sequence.to_string(),
+            key: db.peptides[id.peptide_idx as usize].sequence.to_string(),
             decoy: id.decoy,
             q_value: id.q_value,
-            intensities: matrix.features[id.feature_idx].intensities.clone(),
+            intensities: matrix.features[id.feature_idx as usize].intensities.clone(),
         })
         .collect()
 }
@@ -51,8 +51,8 @@ pub fn protein_quant(
         if id.decoy {
             continue;
         }
-        let f = &matrix.features[id.feature_idx];
-        for prot in &db.peptides[id.peptide_idx].proteins {
+        let f = &matrix.features[id.feature_idx as usize];
+        for prot in &db.peptides[id.peptide_idx as usize].proteins {
             let v = acc.entry(prot.as_ref()).or_insert_with(|| vec![0.0; n]);
             for (s, &x) in f.intensities.iter().enumerate() {
                 v[s] += x;
