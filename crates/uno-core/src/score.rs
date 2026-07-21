@@ -843,11 +843,24 @@ fn mass_anchor_calibration(
         let no_feat_compete = std::env::var("UNO_NO_FEATURE_COMPETE").is_ok();
         let log_pepcount = std::env::var("UNO_LOG_PEPCOUNT").is_ok();
         let mut acc: HashMap<(bool, String), (f64, usize, usize)> = HashMap::new();
+        // Deviation-cut sweep extent. The sweep is a `par_iter` over cuts; the best
+        // cut sits near ~6, and the high-dev tail cuts (>8) are BOTH the most expensive
+        // tasks (they admit ~all peptides, so their build + greedy dominate the sweep
+        // makespan) AND actively harmful: the raw best-cut-by-target-count selection
+        // over-fits to a loose, decoy-heavy high cut. Capping at 8 drops them.
+        // Measured: run10 BYTE-IDENTICAL to the old 25.0 cap (its best cut was <=8);
+        // deephela 1954 -> 2044 honest @1% (+4.6%, the loose cut regularized away) with
+        // the per-stage sweep roughly halved (~189s -> ~97s across 4 stages). Both
+        // deterministic. `cut_step` (fine step over 1..12) and `cut_max` stay env-
+        // tunable; on this bigger single-input the tail was pure cost + FDR noise.
+        let cut_step: f64 = std::env::var("UNO_CUT_STEP").ok().and_then(|s| s.parse().ok()).unwrap_or(0.5);
+        let cut_max: f64 = std::env::var("UNO_CUT_MAX").ok().and_then(|s| s.parse().ok()).unwrap_or(8.0);
         let cut_grid: Vec<f64> = {
             let mut g: Vec<f64> = Vec::new();
             let mut c = 1.0;
-            while c <= 12.0 { g.push(c); c += 0.5; }
+            while c <= 12.0 { g.push(c); c += cut_step; }
             g.extend_from_slice(&[13.0, 14.0, 16.0, 18.0, 20.0, 25.0]);
+            g.retain(|&x| x <= cut_max);
             g
         };
         // Each deviation cut is an INDEPENDENT protein-inference pass: build the
@@ -855,6 +868,7 @@ fn mass_anchor_calibration(
         // the dominant cost (a ~30-way greedy sweep). Fan the cuts across cores; the
         // `collect` preserves cut_grid order, so the downstream best-cut pick and the
         // ensemble accumulation stay byte-identical to the old serial loop.
+        let _sweep_t0 = std::time::Instant::now();
         let mut per_cut: Vec<(f64, usize, usize, usize, Vec<ProteinId>)> = cut_grid
             .par_iter()
             .map(|&cut| {
@@ -921,6 +935,7 @@ fn mass_anchor_calibration(
                 (cut, nt, tgt, decoy_seen.len(), scored)
             })
             .collect();
+        log::info!("run_deviation cut-sweep: {} cuts (max {:.0}) in {:.2}s", cut_grid.len(), cut_max, _sweep_t0.elapsed().as_secs_f64());
         // Deterministic serial reduction over the ordered per-cut results: accumulate
         // ensemble sums in cut order, then pick the FIRST (smallest) cut achieving the
         // max target count -- identical to the old `if nt > best_n` scan.
