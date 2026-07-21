@@ -13,8 +13,8 @@ protein identities from precursor mass and retention time (RT) alone, without
 MS2 fragmentation, enabling very short LC gradients and high sample throughput.
 The reference implementation, ms1searchpy, is written in Python and depends on
 the deep-learning RT predictor DeepLC. We present **uno**, an open-source MS1-only
-search engine written in Rust that consumes aligned feature matrices from the
-koth feature finder. uno delivers three practical advantages over the existing
+search engine written in Rust that consumes single-run biosaur2 feature files —
+the same input as ms1searchpy. uno delivers three practical advantages over the existing
 tooling at equal identification depth: (i) **reproducibility** — on identical
 input, ms1searchpy returned 152–303 proteins across repeated runs (σ≈55) whereas
 uno is deterministic (σ≈1); (ii) **speed** — the core search completes in seconds
@@ -60,10 +60,10 @@ carries a **heavyweight Python/deep-learning dependency** (DeepLC, TensorFlow)
 whose RT-prediction step dominates wall-clock time for a single run.
 
 We present **uno**, an MS1-only identification and label-free quantitation engine
-written in Rust. uno is one component of an all-Rust pipeline: the **koth**
-feature finder performs alignment, deisotoping and XIC/LFQ; uno consumes koth's
-aligned feature matrix and assigns peptide/protein identities, controls FDR, and
-rolls intensities up into quant matrices. uno's design goals are determinism,
+written in Rust. uno consumes a single-run biosaur2 feature file (the same input
+ms1searchpy uses) and assigns peptide/protein identities and controls FDR — the
+single-run feature file carries the per-feature quality columns that separate
+target from decoy. uno's design goals are determinism,
 speed, and minimal external dependencies, while matching the identification
 depth of ms1searchpy. The contributions of this work are:
 
@@ -85,9 +85,10 @@ depth of ms1searchpy. The contributions of this work are:
 
 ### 2.1 Input and pipeline position
 
-uno consumes the aligned feature matrix produced by koth: per-feature
-`massCalib`, `mz`, `charge`, `rtApex`, ion mobility (`im`, where available),
-`combined_score`, and per-sample intensities. RT is in koth's reference-run space,
+uno consumes a single-run biosaur2 feature file: per-feature `massCalib`, `mz`,
+`charge`, `rtApex`, ion mobility (`im`, where available), `combined_score`, the
+PFM-quality columns (`cosine_score`, `isotope_score`, `ppm_error`, ...), and the
+feature intensity.
 so a single calibration suffices rather than per-file calibration.
 
 ### 2.2 Peptide database and decoys
@@ -145,11 +146,10 @@ optional learned (cross-validated LDA) protein rescorer is provided but **disabl
 by default**, because entrapment validation shows it inflates the empirical FDR
 (§3.6); the binomial model is the validated default.
 
-### 2.6 Quantitation
+### 2.6 Scope
 
-Identified peptides/proteins are mapped onto koth's per-sample intensities to
-emit peptide- and protein-level quant matrices; uno does not re-quantify (koth
-owns alignment/XIC/LFQ).
+uno is identification-only: it takes a single-run biosaur2 feature file and emits
+a protein-level identification list with FDR. It does not quantify or align runs.
 
 ### 2.7 Benchmark data and comparison
 

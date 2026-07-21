@@ -82,9 +82,9 @@ pub struct ScoreConfig {
     /// per-PFM classifier itself still barely separates decoys from dim-real
     /// peptides on uno's pure-Rust gbdt (dim_mean ~= DECOY_mean); the gain comes
     /// from the ENSEMBLE STRUCTURE (10 cumulative thresholds, averaged, like
-    /// ms1searchpy's `final_iteration`), not classifier quality. On koth-ALIGNED
-    /// matrices (no isoerror/isoerror2 — lost in cross-run alignment) this
-    /// correctly no-ops (guarded by a strict better-than-baseline check). OFF by
+    /// ms1searchpy's `final_iteration`), not classifier quality. When a feature
+    /// file lacks the quality columns it correctly no-ops (guarded by a strict
+    /// better-than-baseline check). OFF by
     /// default because it re-runs the full protein engine 10x (real runtime cost);
     /// turn on for single-run biosaur2-native searches where depth matters more
     /// than latency.
@@ -164,10 +164,10 @@ fn featurize(
         // Per-feature shape (biosaur2 single-run inputs): a well-formed feature
         // (more isotopic peaks, more scans) is more trustworthy than a junk
         // feature, which contributes random target+decoy matches equally. 0 when
-        // absent (koth aligned matrices), so this is inert there.
+        // the feature file lacks the column, so this is inert there.
         (1.0 + f.n_isotopes.unwrap_or(0.0)).ln() as f32,
         (1.0 + f.n_scans.unwrap_or(0.0)).ln() as f32,
-        // koth single-run PFM-quality columns (dropped by cross-run alignment).
+        // Single-run PFM-quality columns (present on biosaur2 feature files).
         // These are the exact signals ms1searchpy's LightGBM PFM filter uses to
         // drop the random-match rate p to ~0.135 (its @5% depth). 0.0 when absent
         // (aligned matrices), so inert there — active only on single-run inputs.
@@ -1083,7 +1083,7 @@ fn mass_anchor_calibration(
                 v.push((1.0 + n_im as f64).ln() as f32);
                 // biosaur2 discriminators (isotope-pattern fit error + peak width):
                 // the real-vs-random signal absent from n_isotopes/n_scans. 0 when the
-                // matrix lacks them (inert on koth aligned inputs).
+                // feature file lacks them (inert there).
                 let f = &matrix.features[pfms[reduced[pos]].feature_idx as usize];
                 v.push(f.isoerror.unwrap_or(0.0) as f32);
                 v.push(f.isoerror.map(|x| x.abs()).unwrap_or(0.0) as f32);
@@ -1324,9 +1324,9 @@ fn mass_anchor_calibration(
             // yeast (this ensemble) -- deeper AND more honest, not just deeper. The
             // `ml_n > best_n` check is itself a safe no-regression guard (only swaps
             // in a strictly deeper result), so no separate opt-in env var is needed.
-            // On koth-ALIGNED matrices (isoerror/isoerror2 absent, single-run
-            // biosaur2 shape columns lost in alignment) the gbdt has no real signal
-            // over decoys (dim_mean ~= DECOY_mean) and this correctly no-ops.
+            // If a feature file lacks the quality columns (isoerror/isoerror2 etc.)
+            // the gbdt has no real signal over decoys (dim_mean ~= DECOY_mean) and
+            // this correctly no-ops.
             if ml_n > best_n {
                 best_n = ml_n;
                 best_proteins = ensembled;
