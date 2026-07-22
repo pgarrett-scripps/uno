@@ -33,14 +33,34 @@ scored by **yeast entrapment** on **depth and time**.
 
 ## Datasets
 
-All three are HeLa (human) runs searched against the human+yeast entrapment DB, spanning
-scale and instrument:
+**Canonical (paper-faithful): the original DirectMS1 data.** Five high-loading 5-min HeLa
+runs from **PXD015669** (Ivanov et al., DirectMS1, Anal Chem 2020), processed through the
+papers' own **biosaur2** feature-finder (no koth post-processing — biosaur2-only is how
+ms1searchpy is normally run). All HeLa searched against the human+yeast entrapment DB.
 
-| name | features | run |
+| name | features | source |
 |---|---|---|
-| `run10` | 211k | medium HeLa |
-| `deephela` | 305k | large, 240-min gradient |
-| `09744` | 8.8k | small/short, QEHF1 instrument (PXD015669) |
+| `hela5min_09746/09766/09734/09778/09950` | 60k–87k | PXD015669, Q Exactive HF, 5-min, no FAIMS |
+| `faims_LUM2_05433_VG` | 101k | **PXD023977** (ms1searchpy/DirectMS1Quant "2000 proteins"), Lumos + FAIMS |
+
+The FAIMS run is one file with 3 CV fractions (−50/−65/−80 V); uno reads it as one run
+(ignores CV) and still reaches ~2000 @1%.
+
+**Legacy (koth-processed, not paper datasets):** `run10` (211k, medium HeLa), `deephela`
+(305k, 240-min — off-design long gradient), `09744` (8.8k, low-loading PXD015669). These
+carry koth-extra quality columns (proven inert). Kept for continuity; the canonical set
+above is the proper benchmark.
+
+### Rebuilding a dataset from raw
+
+```sh
+# raw -> mzML (docker; pwiz/thermorawfileparser images cached)
+docker run --rm -v $PWD:/data quay.io/biocontainers/thermorawfileparser:1.4.5--ha8f3691_0 \
+  ThermoRawFileParser -i /data/RUN.raw -o /data -f 2
+# mzML -> features (biosaur2)
+biosaur2 RUN.mzML -o data/NAME.features.tsv
+```
+Raw files: `https://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD015669/`
 
 ## Run
 
