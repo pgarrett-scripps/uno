@@ -31,15 +31,28 @@ scored by **yeast entrapment** on **depth and time**.
   so it is run **N=3 replicates** (median + range); uno is byte-deterministic → 1 run.
 - Runs are **serialized** — no concurrent load corrupting the timings.
 
+## Datasets
+
+All three are HeLa (human) runs searched against the human+yeast entrapment DB, spanning
+scale and instrument:
+
+| name | features | run |
+|---|---|---|
+| `run10` | 211k | medium HeLa |
+| `deephela` | 305k | large, 240-min gradient |
+| `09744` | 8.8k | small/short, QEHF1 instrument (PXD015669) |
+
 ## Run
 
 ```sh
-./run.sh                # N_MS1=3 by default
-N_MS1=5 ./run.sh        # more ms1 replicates
+./run.sh                       # all datasets, N_MS1=3 reps each
+DATASETS="run10 09744" ./run.sh   # subset
+N_MS1=5 ./run.sh               # more ms1 replicates
 ```
 
-Requires: `cargo build --release` (uno), and `../.venv` with `ms1searchpy` +
-`deeplc 3.1.13`. Writes `results/summary.tsv` and per-run logs under `results/`.
+Requires: `cargo build --release` (uno), and `ms1searchpy` + `deeplc 3.1.13` (see
+`MS1=` in `run.sh`). Writes `results/summary.tsv` (with a `dataset` column) and per-run
+logs under `results/`.
 
 ## Files
 
@@ -53,5 +66,6 @@ Requires: `cargo build --release` (uno), and `../.venv` with `ms1searchpy` +
 
 ## Adding a dataset
 
-Drop `data/<name>.features.tsv` (biosaur2) + point `FEATURES` in `run.sh` at it (or
-parameterize). The FASTA and everything else stay the same.
+Drop `data/<name>.features.tsv` (biosaur2, HeLa, with quality columns) into `data/`.
+`run.sh` auto-discovers every `data/*.features.tsv`; the FASTA and everything else stay
+the same.
