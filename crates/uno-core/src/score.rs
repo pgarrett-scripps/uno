@@ -15,11 +15,32 @@
 
 use crate::calibrate::Calibration;
 use crate::database::PeptideDb;
-use crate::input::FeatureMatrix;
+use crate::input::{Feature, FeatureMatrix};
 use crate::matching::Pfm;
 use crate::protein::ProteinId;
 use crate::rt::RtModel;
 use rayon::prelude::*;
+use std::cmp::Ordering;
+
+/// Order-invariant "which feature best represents a peptide" comparator, BEST
+/// first. When one peptide matches several features (or koth's exhaustive mode
+/// emits near-duplicates that tie on mass error / deviation), the representative
+/// must be chosen by feature *quality*, not by whichever row happened to be seen
+/// first — otherwise the result depends on the input's feature row order. Higher
+/// `combined_score`, then higher apex intensity, then more isotopes; ties broken
+/// by ascending mass/rt/mz so the order is total and reproducible.
+fn feature_cmp(a: &Feature, b: &Feature) -> Ordering {
+    let ai = a.intensities.first().copied().unwrap_or(0.0);
+    let bi = b.intensities.first().copied().unwrap_or(0.0);
+    b.combined_score
+        .partial_cmp(&a.combined_score)
+        .unwrap()
+        .then(bi.partial_cmp(&ai).unwrap())
+        .then(b.n_isotopes.unwrap_or(0.0).partial_cmp(&a.n_isotopes.unwrap_or(0.0)).unwrap())
+        .then(a.mass.partial_cmp(&b.mass).unwrap())
+        .then(a.rt.partial_cmp(&b.rt).unwrap())
+        .then(a.mz.partial_cmp(&b.mz).unwrap())
+}
 
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(default)]
@@ -299,9 +320,25 @@ fn mass_anchor_calibration(
         if has_iso && matrix.features[pfms[i].feature_idx as usize].n_isotopes.unwrap_or(0.0) < MIN_ISOTOPES {
             continue;
         }
+        let cand_err = pfms[i].mass_error_ppm;
         let e = best.entry(pfms[i].peptide_idx as usize).or_insert((f64::INFINITY, pos));
-        if pfms[i].mass_error_ppm.abs() < e.0.abs() {
-            *e = (pfms[i].mass_error_ppm, pos);
+        let better = if cand_err.abs() < e.0.abs() {
+            true
+        } else if cand_err.abs() == e.0.abs() && e.0.is_finite() {
+            // Exact mass-error tie (koth's exhaustive mode emits near-duplicate
+            // features at the same mass). Break it on feature quality so the
+            // representative feature — and thus this peptide's anchor RT — does not
+            // depend on feature row order. Without this, `best` picks the first-seen
+            // feature, making RANSAC calibration and the whole result swing with the
+            // input's row order.
+            let cf = &matrix.features[pfms[i].feature_idx as usize];
+            let ef = &matrix.features[pfms[reduced[e.1]].feature_idx as usize];
+            feature_cmp(cf, ef) == Ordering::Less
+        } else {
+            false
+        };
+        if better {
+            *e = (cand_err, pos);
         }
     }
     if best.len() < 100 {
@@ -322,6 +359,19 @@ fn mass_anchor_calibration(
             continue;
         }
         pep_pfms.entry(pfms[i].peptide_idx as usize).or_default().push((pfms[i].mass_error_ppm, pos));
+    }
+    // Canonicalize each peptide's PFM list best-feature-first (see `feature_cmp`),
+    // so every downstream "best PFM" selection with a first-seen / strict-`<`
+    // tie-break resolves identically regardless of the input's feature row order.
+    // Without this, koth's exhaustive near-duplicate features (equal mass_error or
+    // equal mass+RT deviation) let row order pick a different representative PFM,
+    // perturbing the ML feature vectors and swinging the final protein count.
+    for v in pep_pfms.values_mut() {
+        v.sort_by(|&(_, pa), &(_, pb)| {
+            let fa = &matrix.features[pfms[reduced[pa]].feature_idx as usize];
+            let fb = &matrix.features[pfms[reduced[pb]].feature_idx as usize];
+            feature_cmp(fa, fb)
+        });
     }
     // Theoretical peptide count per (decoy, accession), and the decoy totals used
     // for the binomial background rate p = mean(decoy matched)/mean(decoy theo).
@@ -1867,7 +1917,7 @@ pub fn score(
                 uniq.dedup();
                 let seqs: Vec<&str> =
                     uniq.iter().map(|&pi| db.peptides[pi].sequence.as_ref()).collect();
-                let upreds = m.predict_many(&seqs);
+                let upreds = crate::rt_cache::predict_many_cached(m, &seqs);
                 let pred_of: std::collections::HashMap<usize, f64> =
                     uniq.iter().copied().zip(upreds).collect();
                 log::info!(

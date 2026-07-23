@@ -153,14 +153,29 @@ impl Calibration {
     /// PWL on the inliers and expands. Returns the calibration and the indices
     /// of the inlier pairs (a likely-correct subset, usable as positives).
     pub fn fit_ransac(pairs: &[(f64, f64)], thresh: f64, iters: usize) -> (Calibration, Vec<usize>) {
-        let pts: Vec<(f64, f64)> = pairs
-            .iter()
-            .copied()
-            .filter(|(a, o)| a.is_finite() && o.is_finite())
+        // Work through a canonical (value-sorted) view of the finite pairs. The
+        // sampling LCG below draws index *positions*, so without a fixed order the
+        // same iteration would pick different points depending on how the caller
+        // ordered `pairs` -> a different consensus, and thus a feature-row-order-
+        // dependent calibration (the source of uno's depth swinging with input
+        // order). Sorting by value makes the RANSAC output a pure function of the
+        // pair *set*. `order[s]` maps a sorted position back to the caller's index,
+        // so returned inlier indices remain in terms of the original `pairs`.
+        let mut order: Vec<usize> = (0..pairs.len())
+            .filter(|&k| pairs[k].0.is_finite() && pairs[k].1.is_finite())
             .collect();
-        let n = pts.len();
+        order.sort_by(|&a, &b| {
+            pairs[a]
+                .0
+                .partial_cmp(&pairs[b].0)
+                .unwrap()
+                .then(pairs[a].1.partial_cmp(&pairs[b].1).unwrap())
+                .then(a.cmp(&b))
+        });
+        let n = order.len();
+        let pt = |s: usize| -> (f64, f64) { pairs[order[s]] };
         if n < 10 {
-            return (Calibration::fit(pairs), (0..n).collect());
+            return (Calibration::fit(pairs), order);
         }
         // deterministic LCG
         let mut state: u64 = 0x2545_f491_4f6c_dd1d;
@@ -169,16 +184,18 @@ impl Calibration {
             ((state >> 33) as usize) % m
         };
 
+        // Inlier sets are tracked as sorted positions `s`; mapped to original
+        // `pairs` indices via `order` only when returned.
         let mut best: Vec<usize> = Vec::new();
         for _ in 0..iters {
             let (i, j) = (next(n), next(n));
-            if (pts[i].0 - pts[j].0).abs() < 1e-9 {
+            if (pt(i).0 - pt(j).0).abs() < 1e-9 {
                 continue;
             }
-            let m = (pts[j].1 - pts[i].1) / (pts[j].0 - pts[i].0);
-            let b = pts[i].1 - m * pts[i].0;
+            let m = (pt(j).1 - pt(i).1) / (pt(j).0 - pt(i).0);
+            let b = pt(i).1 - m * pt(i).0;
             let inl: Vec<usize> = (0..n)
-                .filter(|&k| (pts[k].1 - (m * pts[k].0 + b)).abs() < thresh)
+                .filter(|&s| (pt(s).1 - (m * pt(s).0 + b)).abs() < thresh)
                 .collect();
             if inl.len() > best.len() {
                 best = inl;
@@ -187,9 +204,9 @@ impl Calibration {
         // refine: fit monotone PWL on inliers, re-collect inliers, repeat
         let mut inliers = best;
         for _ in 0..4 {
-            let cal = Calibration::fit(&inliers.iter().map(|&k| pts[k]).collect::<Vec<_>>());
+            let cal = Calibration::fit(&inliers.iter().map(|&s| pt(s)).collect::<Vec<_>>());
             let new: Vec<usize> = (0..n)
-                .filter(|&k| (pts[k].1 - cal.apply(pts[k].0)).abs() < thresh)
+                .filter(|&s| (pt(s).1 - cal.apply(pt(s).0)).abs() < thresh)
                 .collect();
             if new.len() <= inliers.len() {
                 inliers = new;
@@ -197,8 +214,8 @@ impl Calibration {
             }
             inliers = new;
         }
-        let cal = Calibration::fit(&inliers.iter().map(|&k| pts[k]).collect::<Vec<_>>());
-        (cal, inliers)
+        let cal = Calibration::fit(&inliers.iter().map(|&s| pt(s)).collect::<Vec<_>>());
+        (cal, inliers.iter().map(|&s| order[s]).collect())
     }
 
     pub fn is_fit(&self) -> bool {

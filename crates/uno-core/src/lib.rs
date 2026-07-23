@@ -14,6 +14,7 @@ pub mod mass;
 pub mod matching;
 pub mod protein;
 pub mod rt;
+pub mod rt_cache;
 pub mod rt_cnn;
 pub mod rt_mlp;
 pub mod score;

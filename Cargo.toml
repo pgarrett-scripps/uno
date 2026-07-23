@@ -33,3 +33,7 @@ uno-lightgbm-sys = { path = "crates/uno-lightgbm-sys" }
 sequoia-boost = { path = "../Sequoia/crates/sequoia-boost" }
 # Digestion / peptide mass / decoys — reuse Sage's core library.
 sage-core = { path = "../sage/crates/sage" }
+# In-process feature finding straight from raw data (mzML / Bruker .d / Thermo
+# .raw), so uno can run without a prior biosaur2 pass. `tdf` (Bruker) is on by
+# default; `thermo` (native .raw) is opt-in (needs a .NET 8 runtime).
+koth_ff = { path = "../koth_rust/koth_ff" }
