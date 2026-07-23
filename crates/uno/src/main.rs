@@ -1,4 +1,4 @@
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use clap::Parser;
 use std::path::PathBuf;
 use std::time::Instant;
@@ -10,6 +10,8 @@ use uno_core::{
     ProteinConfig, RtModel, ScoreConfig,
 };
 
+mod koth_ingest;
+
 /// uno — MS1-only protein identification over a single-run biosaur2 feature file.
 #[derive(Parser, Debug)]
 #[command(name = "uno", version)]
@@ -17,9 +19,17 @@ struct Cli {
     /// Single-run biosaur2 feature file (`*.features.tsv`) — the same single-run
     /// input ms1searchpy consumes. Aligned/consensus matrices are NOT accepted:
     /// alignment drops the per-feature quality columns that separate target from
-    /// decoy.
+    /// decoy. Mutually exclusive with `--raw`; exactly one is required.
+    #[arg(long, required_unless_present = "raw", conflicts_with = "raw")]
+    features: Option<PathBuf>,
+
+    /// Raw run to find features from in-process, with no intermediate biosaur2
+    /// pass: mzML (`.mzML`/`.mzML.gz`), Bruker `.d`, or Thermo `.raw` (the last
+    /// needs uno built with `--features thermo`). koth's feature finder runs with
+    /// the bundled biosaur2-matching config unless the uno config has a `[koth]`
+    /// table. Mutually exclusive with `--features`.
     #[arg(long)]
-    features: PathBuf,
+    raw: Option<PathBuf>,
 
     /// Protein FASTA database.
     #[arg(long)]
@@ -61,6 +71,9 @@ struct Config {
     matching: MatchConfig,
     scoring: ScoreConfig,
     protein: ProteinConfig,
+    /// Optional override for the built-in koth feature finder (`--raw` only).
+    /// Absent → the bundled biosaur2-matching profile is used.
+    koth: Option<koth_ff::config::KothConfig>,
 }
 
 fn main() -> Result<()> {
@@ -76,7 +89,19 @@ fn main() -> Result<()> {
     };
 
     let t = Instant::now();
-    let matrix = FeatureMatrix::load(&cli.features)?;
+    let matrix = match (&cli.features, &cli.raw) {
+        (Some(features), None) => FeatureMatrix::load(features)?,
+        (None, Some(raw)) => {
+            let koth_cfg = match &config.koth {
+                Some(c) => c.clone(),
+                None => koth_ingest::default_config()?,
+            };
+            koth_ingest::features_from_raw(raw, &koth_cfg)
+                .with_context(|| format!("finding features in {}", raw.display()))?
+        }
+        // clap's required_unless_present/conflicts_with guarantees exactly one.
+        _ => bail!("provide exactly one of --features or --raw"),
+    };
     log::info!(
         "loaded {} features from single run ({:.1}s)",
         matrix.len(),

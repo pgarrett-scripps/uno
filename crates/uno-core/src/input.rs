@@ -1,8 +1,11 @@
 //! Input contract: read a SINGLE-RUN biosaur2 feature file (`*.features.tsv`).
 //!
-//! `uno` does not read raw data or find features. Its input is one run's
-//! biosaur2 feature table (optionally normalized by koth's per-run pass) — the
-//! SAME single-run input ms1searchpy consumes. This is deliberate: a single-run
+//! This module reads a pre-computed feature table; it does not touch raw data.
+//! (uno can also find features from raw data itself via the built-in koth
+//! finder — see `uno::koth_ingest` / `--raw` — which produces the same
+//! `FeatureMatrix` this loader does.) Its input is one run's biosaur2 feature
+//! table (optionally normalized by koth's per-run pass) — the SAME single-run
+//! input ms1searchpy consumes. This is deliberate: a single-run
 //! feature file carries the per-feature quality columns (`cosine_score`,
 //! `isotope_score`, `ppm_error`, `neutron_offset`, `isoerror`, `nScans`, ...)
 //! that separate real peptides from random mass coincidences (and shuffled

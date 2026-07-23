@@ -130,10 +130,9 @@ fn to_f32(v: &[f64]) -> Vec<f32> {
     v.iter().map(|&x| x as f32).collect()
 }
 
-/// A distilled RT model: predicts DeepLC abstract RT from sequence. The values
-/// are in DeepLC's uncalibrated space; per-run calibration to observed RT is
-/// applied downstream (phase 5).
-pub enum RtModel {
+/// Distilled RT backend. Predicts DeepLC abstract RT from sequence; the values
+/// are in DeepLC's uncalibrated space (per-run calibration is applied downstream).
+enum RtBackend {
     /// Distilled gbdt student (legacy; gbdt-rs serialized JSON).
     Gbdt(GBDT),
     /// Distilled MLP student (`UMLP` binary, see [`crate::rt_mlp`]).
@@ -143,48 +142,60 @@ pub enum RtModel {
     Cnn(crate::rt_cnn::RtCnn),
 }
 
+/// A loaded RT model plus a content `fingerprint` (a stable hash of the model
+/// file bytes). The fingerprint keys the on-disk prediction cache
+/// ([`crate::rt_cache`]) so cached predictions are reused only for the exact
+/// model that produced them.
+pub struct RtModel {
+    backend: RtBackend,
+    fingerprint: u64,
+}
+
 impl RtModel {
     /// Load a distilled RT model, auto-detecting the backend by file magic:
-    /// a leading `UMLP` => MLP, otherwise the gbdt-rs JSON format.
+    /// a leading `UMLP` => MLP, `URTC` => CNN, otherwise the gbdt-rs JSON format.
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
-        let mut magic = [0u8; 4];
-        {
-            use std::io::Read;
-            let mut f = std::fs::File::open(path)
-                .map_err(|e| anyhow::anyhow!("opening rt model {}: {e}", path.display()))?;
-            let _ = f.read(&mut magic);
-        }
-        if &magic == b"UMLP" {
-            return Ok(RtModel::Mlp(crate::rt_mlp::RtMlp::load(path)?));
-        }
-        if &magic == b"URTC" {
-            return Ok(RtModel::Cnn(crate::rt_cnn::RtCnn::load(path)?));
-        }
-        let model = GBDT::load_model(&path.to_string_lossy())
-            .map_err(|e| anyhow::anyhow!("loading rt model {}: {e}", path.display()))?;
-        Ok(RtModel::Gbdt(model))
+        let bytes = std::fs::read(path)
+            .map_err(|e| anyhow::anyhow!("opening rt model {}: {e}", path.display()))?;
+        let fingerprint = fingerprint_bytes(&bytes);
+        let magic = bytes.get(0..4).unwrap_or(&[]);
+        let backend = if magic == b"UMLP" {
+            RtBackend::Mlp(crate::rt_mlp::RtMlp::load(path)?)
+        } else if magic == b"URTC" {
+            RtBackend::Cnn(crate::rt_cnn::RtCnn::load(path)?)
+        } else {
+            let model = GBDT::load_model(&path.to_string_lossy())
+                .map_err(|e| anyhow::anyhow!("loading rt model {}: {e}", path.display()))?;
+            RtBackend::Gbdt(model)
+        };
+        Ok(RtModel { backend, fingerprint })
+    }
+
+    /// Stable content hash of the model file, used as the prediction-cache key.
+    pub fn fingerprint(&self) -> u64 {
+        self.fingerprint
     }
 
     /// Predict abstract RT for one sequence.
     pub fn predict_seq(&self, seq: &str) -> f64 {
-        match self {
-            RtModel::Gbdt(model) => {
+        match &self.backend {
+            RtBackend::Gbdt(model) => {
                 let data = vec![Data::new_test_data(to_f32(&rt_features(seq)), None)];
                 model.predict(&data)[0] as f64
             }
-            RtModel::Mlp(m) => m.predict_seq(seq),
-            RtModel::Cnn(m) => m.predict_seq(seq),
+            RtBackend::Mlp(m) => m.predict_seq(seq),
+            RtBackend::Cnn(m) => m.predict_seq(seq),
         }
     }
 
     /// Penultimate-layer embeddings for fine-tuning the readout on-data. Only the
-    /// MLP backend exposes a usable embedding; the gbdt student returns `None`.
+    /// MLP/CNN backends expose a usable embedding; the gbdt student returns `None`.
     pub fn embed_many<S: AsRef<str> + Sync>(&self, seqs: &[S]) -> Option<Vec<Vec<f64>>> {
-        match self {
-            RtModel::Mlp(m) => Some(m.embed_many(seqs)),
-            RtModel::Cnn(m) => Some(m.embed_many(seqs)),
-            RtModel::Gbdt(_) => None,
+        match &self.backend {
+            RtBackend::Mlp(m) => Some(m.embed_many(seqs)),
+            RtBackend::Cnn(m) => Some(m.embed_many(seqs)),
+            RtBackend::Gbdt(_) => None,
         }
     }
 
@@ -198,32 +209,44 @@ impl RtModel {
         &self,
         seqs: &[S],
     ) -> (Vec<f64>, Option<Vec<Vec<f64>>>) {
-        match self {
-            RtModel::Cnn(m) => {
+        match &self.backend {
+            RtBackend::Cnn(m) => {
                 let (p, e) = m.predict_embed_many(seqs);
                 (p, Some(e))
             }
             // MLP: predict and embed remain separate passes (no fused kernel), but
             // still correct + byte-identical to the old two-call path.
-            RtModel::Mlp(m) => (m.predict_many(seqs), Some(m.embed_many(seqs))),
-            RtModel::Gbdt(_) => (self.predict_many(seqs), None),
+            RtBackend::Mlp(m) => (m.predict_many(seqs), Some(m.embed_many(seqs))),
+            RtBackend::Gbdt(_) => (self.predict_many(seqs), None),
         }
     }
 
     /// Predict abstract RT for many sequences in one batch.
     pub fn predict_many<S: AsRef<str> + Sync>(&self, seqs: &[S]) -> Vec<f64> {
-        match self {
-            RtModel::Gbdt(model) => {
+        match &self.backend {
+            RtBackend::Gbdt(model) => {
                 let data: Vec<Data> = seqs
                     .iter()
                     .map(|s| Data::new_test_data(to_f32(&rt_features(s.as_ref())), None))
                     .collect();
                 model.predict(&data).into_iter().map(|v| v as f64).collect()
             }
-            RtModel::Mlp(m) => m.predict_many(seqs),
-            RtModel::Cnn(m) => m.predict_many(seqs),
+            RtBackend::Mlp(m) => m.predict_many(seqs),
+            RtBackend::Cnn(m) => m.predict_many(seqs),
         }
     }
+}
+
+/// FNV-1a over the model bytes. Stable across processes/machines (unlike
+/// `DefaultHasher`, which is randomized), so a cache file written by one run is
+/// keyed identically by the next.
+fn fingerprint_bytes(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for &b in bytes {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    h
 }
 
 /// Read a distillation label file: `SEQUENCE\tRT` per line (no header), as
