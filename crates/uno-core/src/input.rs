@@ -152,8 +152,17 @@ impl FeatureMatrix {
             let intensities: Vec<f64> = (first_run..header.len())
                 .map(|c| rec.get(c).unwrap_or("0").trim().parse::<f64>().unwrap_or(0.0))
                 .collect();
-            let n_present = intensities.iter().filter(|&&x| x > 0.0).count() as u32;
-            if n_present < min_runs {
+            // Reproducibility floor uses koth's `n_contributing_runs` — the number
+            // of runs that DETECTED the feature, NOT the count of non-zero cells.
+            // With MBR, nearly every cell is filled, so counting non-zero cells
+            // would pass ~all junk (defeating the floor); the detected count still
+            // discriminates. Falls back to the non-zero count if the column is
+            // absent (e.g. an older matrix without it).
+            let n_detected = rec
+                .get(c_ncr)
+                .and_then(|s| s.trim().parse::<u32>().ok())
+                .unwrap_or_else(|| intensities.iter().filter(|&&x| x > 0.0).count() as u32);
+            if n_detected < min_runs {
                 continue;
             }
             let im = c_im
@@ -172,7 +181,7 @@ impl FeatureMatrix {
                 rt: parse(&rec, c_rt, "rtApex", line)?,
                 im,
                 combined_score,
-                n_contributing_runs: n_present.max(1),
+                n_contributing_runs: n_detected.max(1),
                 n_isotopes: None,
                 n_scans: None,
                 isoerror: None,
