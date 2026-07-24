@@ -84,6 +84,22 @@ struct Cli {
     /// peptide, decoy, proteins, charge, mass, rt, <run1..runN>.
     #[arg(long)]
     out_peptides: Option<PathBuf>,
+
+    /// Write protein-level differential-expression + abundance to TSV (needs
+    /// `--matrix`, `--design`, `--contrast`). Co-direction binomial + BH FDR over
+    /// the ID-confident proteins; peptide FDR is not used.
+    #[arg(long)]
+    out_quant: Option<PathBuf>,
+
+    /// Design file for quant: lines `<run-name-substring>\t<condition>`. A matrix
+    /// run column joins a condition when the run field is a substring of its name.
+    #[arg(long)]
+    design: Option<PathBuf>,
+
+    /// Two conditions to contrast for `--out-quant`, e.g. `A,E` (B vs A = second
+    /// vs first, so a positive log2FC means higher in the second).
+    #[arg(long)]
+    contrast: Option<String>,
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
@@ -329,6 +345,66 @@ fn main() -> Result<()> {
             "wrote {} RT-gated peptide-intensity rows to {}",
             result.peptides.len(),
             path.display()
+        );
+    }
+
+    // Protein-level differential expression + abundance (multi-sample quant).
+    if let Some(path) = &cli.out_quant {
+        use std::io::Write;
+        let design_path = cli
+            .design
+            .as_ref()
+            .context("--out-quant requires --design")?;
+        let contrast = cli.contrast.as_ref().context("--out-quant requires --contrast")?;
+        let (ca, cb) = contrast
+            .split_once(',')
+            .context("--contrast must be `condA,condB`")?;
+        let design = std::fs::read_to_string(design_path)
+            .with_context(|| format!("reading {}", design_path.display()))?;
+        let (runs_a, runs_b) = uno_core::quant::resolve_contrast(&matrix.run_names, &design, ca, cb)?;
+        log::info!("quant contrast {ca}(n={}) vs {cb}(n={})", runs_a.len(), runs_b.len());
+        // ID-confident target proteins (q <= 1%) define the tested universe.
+        let id_confident: std::collections::HashSet<String> = proteins
+            .iter()
+            .filter(|p| !p.decoy && p.q_value <= 0.01)
+            .map(|p| p.accession.clone())
+            .collect();
+        let quant = uno_core::quant::differential(
+            &matrix,
+            &db,
+            &result.peptides,
+            &id_confident,
+            &runs_a,
+            &runs_b,
+            2,
+        );
+        let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
+        writeln!(
+            w,
+            "accession\tdecoy\tn_peptides\tn_significant\tk\tlog2fc\tabundance_{ca}\tabundance_{cb}\tp_value\tq_value"
+        )?;
+        for q in &quant {
+            writeln!(
+                w,
+                "{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.4e}\t{:.4e}\t{:.3e}\t{:.4e}",
+                q.accession,
+                q.decoy as u8,
+                q.n_peptides,
+                q.n_significant,
+                q.k,
+                q.log2_fc,
+                q.abundance_a,
+                q.abundance_b,
+                q.p_value,
+                q.q_value
+            )?;
+        }
+        let de = quant.iter().filter(|q| !q.decoy && q.q_value <= 0.05).count();
+        log::info!(
+            "wrote {} proteins to {} ({} differentially expressed at 5% FDR)",
+            quant.len(),
+            path.display(),
+            de
         );
     }
 

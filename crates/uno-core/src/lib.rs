@@ -13,6 +13,7 @@ pub mod input;
 pub mod mass;
 pub mod matching;
 pub mod protein;
+pub mod quant;
 pub mod rt;
 pub mod rt_cache;
 pub mod rt_cnn;
