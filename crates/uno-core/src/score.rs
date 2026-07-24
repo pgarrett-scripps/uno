@@ -156,6 +156,9 @@ impl Default for ScoreConfig {
 #[derive(Debug, Clone)]
 pub struct ScoreResult {
     pub proteins: Vec<crate::protein::ProteinId>,
+    /// RT+mass-gated best feature per peptide (target and decoy), for the
+    /// multi-sample quant rollup. Empty when the ML rescore stage did not run.
+    pub peptides: Vec<PeptideHit>,
 }
 
 /// Per-PFM feature vector for the discriminant. `rt_diff`/`im_diff` are `None`
@@ -1054,6 +1057,15 @@ fn mass_anchor_calibration(
                     pep_best.insert(pi, (decoy, pos, dev));
                 }
             }
+            // Publish the RT+mass-gated peptide→feature map for the quant rollup.
+            MASS_ANCHOR_PEPTIDES.with(|c| {
+                *c.borrow_mut() = pep_best
+                    .iter()
+                    .map(|(&pi, &(decoy, pos, _))| {
+                        (pi as u32, pfms[reduced[pos]].feature_idx, decoy)
+                    })
+                    .collect();
+            });
             // Candidate set = mass+RT-gated peptides. The gate must be LOOSE: uno's CNN
             // RT is ~2 min MAE (only ~half of real peptides within 1 min), so a tight
             // dev gate drops exactly the loose-RT real peptides the ML is meant to
@@ -1402,6 +1414,21 @@ thread_local! {
     /// calibration (no refitting). `(cal, rt_sigma_min, mass_shift_ppm, mass_sigma_ppm)`.
     static MASS_ANCHOR_CAL: std::cell::RefCell<Option<(Calibration, f64, f64, f64)>> =
         std::cell::RefCell::new(None);
+    /// RT+mass-gated best feature per peptide (the `pep_best` selection), handed
+    /// out-of-band for the multi-sample quant rollup. `(peptide_idx, feature_idx,
+    /// decoy)`. This is the feature uno actually trusts for the peptide (mass AND
+    /// RT consistent), NOT the best-mass feature — the distinction matters for
+    /// quant, where a mass-coincident contaminant would corrupt the intensity.
+    static MASS_ANCHOR_PEPTIDES: std::cell::RefCell<Vec<(u32, u32, bool)>> =
+        std::cell::RefCell::new(Vec::new());
+}
+
+/// One RT+mass-gated peptide→feature hit, exposed for the quant rollup.
+#[derive(Debug, Clone, Copy)]
+pub struct PeptideHit {
+    pub peptide_idx: u32,
+    pub feature_idx: u32,
+    pub decoy: bool,
 }
 
 /// Reduce all PFMs to the top-K best-mass-error targets and decoys per feature.
@@ -1941,14 +1968,25 @@ pub fn score(
     // `mass_anchor_calibration`, which fills the MASS_ANCHOR_PROTEINS thread-local.
     // RT is required — without it there is no protein evidence and no result.
     let has_rt = abstract_rt.iter().any(|a| a.is_some());
-    let proteins = if has_rt {
+    let (proteins, peptides) = if has_rt {
         mass_anchor_calibration(&reduced, pfms, matrix, db, &abstract_rt, cfg);
-        MASS_ANCHOR_PROTEINS.with(|c| std::mem::take(&mut *c.borrow_mut()))
+        let proteins = MASS_ANCHOR_PROTEINS.with(|c| std::mem::take(&mut *c.borrow_mut()));
+        let peptides = MASS_ANCHOR_PEPTIDES.with(|c| {
+            std::mem::take(&mut *c.borrow_mut())
+                .into_iter()
+                .map(|(peptide_idx, feature_idx, decoy)| PeptideHit {
+                    peptide_idx,
+                    feature_idx,
+                    decoy,
+                })
+                .collect()
+        });
+        (proteins, peptides)
     } else {
         log::warn!(
             "no RT model or RT library available; uno requires retention time -- no proteins produced"
         );
-        Vec::new()
+        (Vec::new(), Vec::new())
     };
-    ScoreResult { proteins }
+    ScoreResult { proteins, peptides }
 }

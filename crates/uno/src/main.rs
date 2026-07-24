@@ -288,31 +288,22 @@ fn main() -> Result<()> {
         log::info!("wrote {} proteins to {}", proteins.len(), path.display());
     }
 
-    // Per-peptide intensity table for the multi-sample quant rollup. Best-mass
-    // feature per peptide; targets + decoys (the decoys are the DE test's null).
+    // Per-peptide intensity table for the multi-sample quant rollup. Uses the
+    // RT+mass-gated feature uno actually trusts for each peptide (`result.peptides`),
+    // NOT the best-mass feature — a mass-coincident contaminant would corrupt the
+    // per-run intensity profile and flatten real fold changes. Targets + decoys
+    // (the decoys are the DE test's null).
     if let Some(path) = &cli.out_peptides {
         use std::io::Write;
-        let pfms = match_features(&matrix, &db, &config.matching);
-        // best |mass error| feature per peptide
-        let mut best: HashMap<u32, (f64, u32)> = HashMap::new();
-        for p in &pfms {
-            if p.isotope_offset != 0 {
-                continue;
-            }
-            let e = best.entry(p.peptide_idx).or_insert((f64::INFINITY, p.feature_idx));
-            if p.mass_error_ppm.abs() < e.0.abs() {
-                *e = (p.mass_error_ppm, p.feature_idx);
-            }
-        }
         let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
         write!(w, "peptide\tdecoy\tproteins\tcharge\tmass\trt")?;
         for rn in &matrix.run_names {
             write!(w, "\t{rn}")?;
         }
         writeln!(w)?;
-        for (pi, (_, fi)) in &best {
-            let pep = &db.peptides[*pi as usize];
-            let f = &matrix.features[*fi as usize];
+        for hit in &result.peptides {
+            let pep = &db.peptides[hit.peptide_idx as usize];
+            let f = &matrix.features[hit.feature_idx as usize];
             let prots = pep
                 .proteins
                 .iter()
@@ -323,7 +314,7 @@ fn main() -> Result<()> {
                 w,
                 "{}\t{}\t{}\t{}\t{:.5}\t{:.4}",
                 pep.sequence.as_ref(),
-                pep.decoy as u8,
+                hit.decoy as u8,
                 prots,
                 f.charge,
                 f.mass,
@@ -334,7 +325,11 @@ fn main() -> Result<()> {
             }
             writeln!(w)?;
         }
-        log::info!("wrote {} peptide-intensity rows to {}", best.len(), path.display());
+        log::info!(
+            "wrote {} RT-gated peptide-intensity rows to {}",
+            result.peptides.len(),
+            path.display()
+        );
     }
 
     Ok(())
