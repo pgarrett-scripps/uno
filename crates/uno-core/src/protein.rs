@@ -179,7 +179,7 @@ fn betacf(a: f64, b: f64, x: f64) -> f64 {
 }
 
 /// Regularized incomplete beta function I_x(a, b).
-fn betai(a: f64, b: f64, x: f64) -> f64 {
+pub(crate) fn betai(a: f64, b: f64, x: f64) -> f64 {
     if x <= 0.0 {
         return 0.0;
     }
