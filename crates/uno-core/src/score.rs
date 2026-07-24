@@ -30,8 +30,11 @@ use std::cmp::Ordering;
 /// `combined_score`, then higher apex intensity, then more isotopes; ties broken
 /// by ascending mass/rt/mz so the order is total and reproducible.
 fn feature_cmp(a: &Feature, b: &Feature) -> Ordering {
-    let ai = a.intensities.first().copied().unwrap_or(0.0);
-    let bi = b.intensities.first().copied().unwrap_or(0.0);
+    // Total intensity (sum over runs); for single-run input this is just the one
+    // value, for an aligned matrix it's the cross-run total — a stable summary in
+    // both cases (unlike `.first()`, which is run 0 and may be an empty cell).
+    let ai: f64 = a.intensities.iter().sum();
+    let bi: f64 = b.intensities.iter().sum();
     b.combined_score
         .partial_cmp(&a.combined_score)
         .unwrap()

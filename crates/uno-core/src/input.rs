@@ -93,6 +93,100 @@ impl FeatureMatrix {
             features,
         })
     }
+
+    /// Load a koth-aligned consensus matrix (`intensity_matrix.tsv`): one row per
+    /// consensus feature, with the leading columns `massCalib, mz, charge, rtApex,
+    /// im, combined_score, seed_run, n_contributing_runs` followed by one
+    /// intensity column per run. Unlike single-run input, each feature carries the
+    /// FULL per-run intensity vector (`intensities`) — that's what the multi-sample
+    /// quant rollup consumes, and the ID featurizer already reads `n_detected`
+    /// (runs with signal) and `sum_int` from it. The per-feature single-run quality
+    /// columns (cosine/isotope/ppm/nScans) are absent here and read as `None`
+    /// (inert in the featurizer); `combined_score` and `n_contributing_runs`
+    /// survive alignment and are used.
+    ///
+    /// `min_runs` drops consensus features detected in fewer than that many runs.
+    /// This filter is REQUIRED for aligned-matrix search, not cosmetic: alignment
+    /// discards the per-feature `nIsotopes` column that uno's single-run path uses
+    /// to reject junk, so without a reproducibility floor the random-match
+    /// background `p` climbs to ~0.83 and the binomial finds nothing. A real
+    /// peptide is detected across replicates; single-run features are dominated by
+    /// noise. `min_runs = 2` is a safe floor (won't drop a condition-specific
+    /// peptide that has ≥2 replicates).
+    pub fn load_matrix(path: impl AsRef<Path>, min_runs: u32) -> Result<Self> {
+        let path = path.as_ref();
+        let mut rdr = csv::ReaderBuilder::new()
+            .delimiter(b'\t')
+            .flexible(false)
+            .from_path(path)
+            .with_context(|| format!("opening {}", path.display()))?;
+        let header = rdr.headers()?.clone();
+        let col = |name: &str| -> Result<usize> {
+            header
+                .iter()
+                .position(|h| h == name)
+                .ok_or_else(|| anyhow!("aligned matrix missing column `{name}`"))
+        };
+        let (c_mass, c_mz, c_charge, c_rt) =
+            (col("massCalib")?, col("mz")?, col("charge")?, col("rtApex")?);
+        let c_im = header.iter().position(|h| h == "im");
+        let c_cs = header.iter().position(|h| h == "combined_score");
+        let c_ncr = col("n_contributing_runs")?;
+        // Run intensity columns are everything after `n_contributing_runs`.
+        let first_run = c_ncr + 1;
+        if first_run >= header.len() {
+            return Err(anyhow!("aligned matrix has no run intensity columns"));
+        }
+        let run_names: Vec<String> = header.iter().skip(first_run).map(|s| s.to_string()).collect();
+
+        let parse = |rec: &csv::StringRecord, c: usize, what: &str, line: usize| -> Result<f64> {
+            rec.get(c)
+                .unwrap_or("")
+                .parse::<f64>()
+                .map_err(|_| anyhow!("line {line}: cannot parse {what}"))
+        };
+        let mut features = Vec::new();
+        for (n, rec) in rdr.records().enumerate() {
+            let line = n + 2;
+            let rec = rec.with_context(|| format!("reading record at line {line}"))?;
+            let intensities: Vec<f64> = (first_run..header.len())
+                .map(|c| rec.get(c).unwrap_or("0").trim().parse::<f64>().unwrap_or(0.0))
+                .collect();
+            let n_present = intensities.iter().filter(|&&x| x > 0.0).count() as u32;
+            if n_present < min_runs {
+                continue;
+            }
+            let im = c_im
+                .and_then(|c| rec.get(c))
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .and_then(|s| s.parse::<f64>().ok());
+            let combined_score = c_cs
+                .and_then(|c| rec.get(c))
+                .and_then(|s| s.trim().parse::<f64>().ok())
+                .unwrap_or(1.0);
+            features.push(Feature {
+                mass: parse(&rec, c_mass, "massCalib", line)?,
+                mz: parse(&rec, c_mz, "mz", line)?,
+                charge: parse(&rec, c_charge, "charge", line)? as u8,
+                rt: parse(&rec, c_rt, "rtApex", line)?,
+                im,
+                combined_score,
+                n_contributing_runs: n_present.max(1),
+                n_isotopes: None,
+                n_scans: None,
+                isoerror: None,
+                isoerror2: None,
+                rt_width: None,
+                cosine_score: None,
+                isotope_score: None,
+                ppm_error: None,
+                neutron_offset: None,
+                intensities,
+            });
+        }
+        Ok(FeatureMatrix { run_names, features })
+    }
 }
 
 /// A parsed feature row.

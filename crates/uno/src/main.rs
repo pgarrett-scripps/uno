@@ -20,7 +20,7 @@ struct Cli {
     /// input ms1searchpy consumes. Aligned/consensus matrices are NOT accepted:
     /// alignment drops the per-feature quality columns that separate target from
     /// decoy. Mutually exclusive with `--raw`; exactly one is required.
-    #[arg(long, required_unless_present = "raw", conflicts_with = "raw")]
+    #[arg(long, required_unless_present_any = ["raw", "matrix"], conflicts_with_all = ["raw", "matrix"])]
     features: Option<PathBuf>,
 
     /// Raw run to find features from in-process, with no intermediate biosaur2
@@ -30,6 +30,20 @@ struct Cli {
     /// table. Mutually exclusive with `--features`.
     #[arg(long)]
     raw: Option<PathBuf>,
+
+    /// koth-aligned consensus matrix (`intensity_matrix.tsv`): one search over all
+    /// runs at once, with each consensus feature carrying its per-run intensity
+    /// vector for the multi-sample quant rollup. Mutually exclusive with
+    /// `--features`/`--raw`.
+    #[arg(long, conflicts_with_all = ["features", "raw"])]
+    matrix: Option<PathBuf>,
+
+    /// Drop consensus features detected in fewer than this many runs (only with
+    /// `--matrix`). Required floor: alignment drops the per-feature isotope quality
+    /// uno uses to reject junk, so without a reproducibility gate the random-match
+    /// background swamps the search. Default 2.
+    #[arg(long, default_value_t = 2)]
+    matrix_min_runs: u32,
 
     /// Protein FASTA database.
     #[arg(long)]
@@ -89,9 +103,9 @@ fn main() -> Result<()> {
     };
 
     let t = Instant::now();
-    let matrix = match (&cli.features, &cli.raw) {
-        (Some(features), None) => FeatureMatrix::load(features)?,
-        (None, Some(raw)) => {
+    let matrix = match (&cli.features, &cli.raw, &cli.matrix) {
+        (Some(features), None, None) => FeatureMatrix::load(features)?,
+        (None, Some(raw), None) => {
             let koth_cfg = match &config.koth {
                 Some(c) => c.clone(),
                 None => koth_ingest::default_config()?,
@@ -99,8 +113,19 @@ fn main() -> Result<()> {
             koth_ingest::features_from_raw(raw, &koth_cfg)
                 .with_context(|| format!("finding features in {}", raw.display()))?
         }
+        (None, None, Some(mp)) => {
+            let m = FeatureMatrix::load_matrix(mp, cli.matrix_min_runs)
+                .with_context(|| format!("reading aligned matrix {}", mp.display()))?;
+            log::info!(
+                "aligned matrix: {} runs, {} consensus features (min_runs={})",
+                m.n_samples(),
+                m.len(),
+                cli.matrix_min_runs
+            );
+            m
+        }
         // clap's required_unless_present/conflicts_with guarantees exactly one.
-        _ => bail!("provide exactly one of --features or --raw"),
+        _ => bail!("provide exactly one of --features, --raw, or --matrix"),
     };
     log::info!(
         "loaded {} features from single run ({:.1}s)",
