@@ -13,11 +13,47 @@
 //! unchanged" assumption). Abundance per condition is the linear sum of the
 //! protein's peptides' mean condition intensity.
 
+use anyhow::Context;
+
 use crate::database::PeptideDb;
 use crate::input::FeatureMatrix;
 use crate::protein::binom_sf_ge_k;
 use crate::score::PeptideHit;
 use std::collections::HashMap;
+
+/// Per-run log2 normalization offsets from the INVARIANT backbone: features
+/// detected in every run (complete cases). These are dominated by the unchanging
+/// background, so normalizing to them removes the systematic drift that a plain
+/// all-feature median suffers when a large fraction of the sample changes
+/// (e.g. a heavy spike-in): there, the all-feature median tracks the changing
+/// species and makes the constant background appear to drift. Returns
+/// `(offset_per_run, grand_mean)`; apply as `log2(v) - offset[r] + grand`.
+/// Falls back to all detected cells if too few complete cases.
+fn run_normalizers(matrix: &FeatureMatrix, peptides: &[PeptideHit], n_runs: usize) -> (Vec<f64>, f64) {
+    let mut complete: Vec<Vec<f64>> = vec![Vec::new(); n_runs];
+    let mut all: Vec<Vec<f64>> = vec![Vec::new(); n_runs];
+    for h in peptides {
+        let ints = &matrix.features[h.feature_idx as usize].intensities;
+        let full = ints.len() >= n_runs && ints[..n_runs].iter().all(|&v| v > 0.0);
+        for (r, &v) in ints.iter().enumerate().take(n_runs) {
+            if v > 0.0 {
+                all[r].push(v.log2());
+                if full {
+                    complete[r].push(v.log2());
+                }
+            }
+        }
+    }
+    let med = |v: &mut Vec<f64>| -> f64 {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        if v.is_empty() { 0.0 } else { v[v.len() / 2] }
+    };
+    let use_complete = complete.iter().map(|v| v.len()).min().unwrap_or(0) >= 200;
+    let src = if use_complete { &mut complete } else { &mut all };
+    let offs: Vec<f64> = src.iter_mut().map(|v| med(v)).collect();
+    let grand = offs.iter().sum::<f64>() / n_runs.max(1) as f64;
+    (offs, grand)
+}
 
 /// Per-protein differential-expression + abundance result.
 #[derive(Debug, Clone)]
@@ -49,8 +85,9 @@ pub fn differential(
     min_peptides: usize,
 ) -> Vec<ProteinQuant> {
     let n_runs = matrix.run_names.len();
-    // Per-run median of log2 intensities (detected cells) + a low floor (5th pct)
-    // for imputing missing cells so on/off peptides still yield a fold change.
+    // Normalize to the invariant backbone; a low per-run floor (5th pct of detected)
+    // imputes missing cells so on/off peptides still yield a fold change.
+    let (run_med, grand) = run_normalizers(matrix, peptides, n_runs);
     let mut per_run_logs: Vec<Vec<f64>> = vec![Vec::new(); n_runs];
     for h in peptides {
         let ints = &matrix.features[h.feature_idx as usize].intensities;
@@ -60,22 +97,13 @@ pub fn differential(
             }
         }
     }
-    let median = |v: &mut [f64]| -> f64 {
-        if v.is_empty() {
-            return 0.0;
-        }
-        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        v[v.len() / 2]
-    };
-    let pct5 = |v: &mut [f64]| -> f64 {
+    let pct5 = |v: &mut Vec<f64>| -> f64 {
         if v.is_empty() {
             return 0.0;
         }
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
         v[v.len() / 20]
     };
-    let run_med: Vec<f64> = per_run_logs.iter_mut().map(|v| median(v)).collect();
-    let grand: f64 = run_med.iter().sum::<f64>() / n_runs.max(1) as f64;
     let run_floor: Vec<f64> = per_run_logs.iter_mut().map(|v| pct5(v)).collect();
 
     // Normalized log2 for run r of a feature's intensity (impute missing to floor).
@@ -220,6 +248,180 @@ fn median_of(v: &mut [f64]) -> f64 {
     v[v.len() / 2]
 }
 
+/// Dilution / monotonic-trend quant across ordered `levels` (each a condition's
+/// run indices + its known level value, e.g. E. coli %). Stronger than a pairwise
+/// contrast: instead of one fold change, each peptide's stat is the Spearman
+/// correlation of its per-condition mean intensity with the level values, so a
+/// protein whose peptides consistently track the dilution is caught even when no
+/// single pair is extreme. Same co-direction binomial + BH rollup as
+/// [`differential`]; `log2_fc` carries the median correlation, and abundance_a/b
+/// are the lowest/highest level.
+pub fn monotonic(
+    matrix: &FeatureMatrix,
+    db: &PeptideDb,
+    peptides: &[PeptideHit],
+    id_confident: &std::collections::HashSet<String>,
+    levels: &[(Vec<usize>, f64)],
+    min_peptides: usize,
+) -> Vec<ProteinQuant> {
+    let n_runs = matrix.run_names.len();
+    let (run_med, grand) = run_normalizers(matrix, peptides, n_runs);
+    let level_vals: Vec<f64> = levels.iter().map(|(_, l)| *l).collect();
+
+    // Per-peptide: Spearman(level, per-condition mean normalized-log2 of DETECTED
+    // cells). Conditions with no detection are dropped; need >=3 points.
+    struct Pep {
+        rho: f64,
+        first: f64,
+        last: f64,
+    }
+    let cond_mean_det = |ints: &[f64], runs: &[usize]| -> Option<f64> {
+        let (mut s, mut n) = (0.0, 0u32);
+        for &r in runs {
+            let v = ints.get(r).copied().unwrap_or(0.0);
+            if v > 0.0 {
+                s += v.log2() - run_med[r] + grand;
+                n += 1;
+            }
+        }
+        if n == 0 { None } else { Some(s / n as f64) }
+    };
+    let cond_lin = |ints: &[f64], runs: &[usize]| -> f64 {
+        let (mut s, mut n) = (0.0, 0u32);
+        for &r in runs {
+            let v = ints.get(r).copied().unwrap_or(0.0);
+            if v > 0.0 { s += v; n += 1; }
+        }
+        if n == 0 { 0.0 } else { s / n as f64 }
+    };
+
+    let mut pep_of: Vec<(usize, bool, Pep)> = Vec::with_capacity(peptides.len());
+    for h in peptides {
+        let ints = &matrix.features[h.feature_idx as usize].intensities;
+        let mut lv = Vec::new();
+        let mut mv = Vec::new();
+        for (i, (runs, _)) in levels.iter().enumerate() {
+            if let Some(m) = cond_mean_det(ints, runs) {
+                lv.push(level_vals[i]);
+                mv.push(m);
+            }
+        }
+        if lv.len() < 3 {
+            continue;
+        }
+        let rho = spearman(&lv, &mv);
+        pep_of.push((
+            h.peptide_idx as usize,
+            h.decoy,
+            Pep {
+                rho,
+                first: cond_lin(ints, &levels[0].0),
+                last: cond_lin(ints, &levels[levels.len() - 1].0),
+            },
+        ));
+    }
+
+    let dec: Vec<f64> = pep_of.iter().filter(|(_, d, _)| *d).map(|(_, _, p)| p.rho).collect();
+    // Significance = |rho| past the decoy-null spread, but CLAMPED to [0.4, 0.7]:
+    // correlations are bounded [-1, 1], so a raw 2*SD threshold can exceed 1 and
+    // flag nothing. A trending peptide needs a real monotonic correlation.
+    let thr = (2.0 * std_dev(&dec)).clamp(0.4, 0.7);
+
+    let mut by_prot: HashMap<(bool, &str), Vec<&Pep>> = HashMap::new();
+    for (pi, decoy, pep) in &pep_of {
+        for prot in &db.peptides[*pi].proteins {
+            let acc = prot.as_ref();
+            if !*decoy && !id_confident.contains(acc) {
+                continue;
+            }
+            by_prot.entry((*decoy, acc)).or_default().push(pep);
+        }
+    }
+
+    let mut out: Vec<ProteinQuant> = Vec::new();
+    for ((decoy, acc), peps) in &by_prot {
+        if peps.len() < min_peptides {
+            continue;
+        }
+        let mut sig: Vec<f64> = Vec::new();
+        let (mut a, mut b) = (0.0, 0.0);
+        for p in peps {
+            a += p.first;
+            b += p.last;
+            if p.rho.abs() >= thr {
+                sig.push(p.rho);
+            }
+        }
+        let kpos = sig.iter().filter(|&&x| x > 0.0).count() as u32;
+        let kneg = sig.iter().filter(|&&x| x < 0.0).count() as u32;
+        let k = kpos.max(kneg);
+        let n_sig = sig.len() as u32;
+        let p_value = if n_sig == 0 { 1.0 } else { (2.0 * binom_sf_ge_k(k, n_sig, 0.5)).min(1.0) };
+        out.push(ProteinQuant {
+            accession: (*acc).to_string(),
+            decoy: *decoy,
+            n_peptides: peps.len(),
+            n_significant: n_sig as usize,
+            k,
+            log2_fc: median_of(&mut sig.clone()),
+            abundance_a: a,
+            abundance_b: b,
+            p_value,
+            q_value: 1.0,
+        });
+    }
+    benjamini_hochberg(&mut out);
+    out.sort_by(|a, b| a.q_value.partial_cmp(&b.q_value).unwrap().then(a.p_value.partial_cmp(&b.p_value).unwrap()));
+    out
+}
+
+/// Spearman rank correlation of two equal-length samples.
+fn spearman(x: &[f64], y: &[f64]) -> f64 {
+    let rank = |v: &[f64]| -> Vec<f64> {
+        let mut idx: Vec<usize> = (0..v.len()).collect();
+        idx.sort_by(|&a, &b| v[a].partial_cmp(&v[b]).unwrap());
+        let mut r = vec![0.0; v.len()];
+        let mut i = 0;
+        while i < idx.len() {
+            let mut j = i;
+            while j + 1 < idx.len() && v[idx[j + 1]] == v[idx[i]] {
+                j += 1;
+            }
+            let avg = (i + j) as f64 / 2.0 + 1.0; // average rank (1-based) for ties
+            for &k in &idx[i..=j] {
+                r[k] = avg;
+            }
+            i = j + 1;
+        }
+        r
+    };
+    pearson(&rank(x), &rank(y))
+}
+
+fn pearson(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len() as f64;
+    if n < 2.0 {
+        return 0.0;
+    }
+    let mx = x.iter().sum::<f64>() / n;
+    let my = y.iter().sum::<f64>() / n;
+    let mut sxy = 0.0;
+    let mut sxx = 0.0;
+    let mut syy = 0.0;
+    for i in 0..x.len() {
+        let dx = x[i] - mx;
+        let dy = y[i] - my;
+        sxy += dx * dy;
+        sxx += dx * dx;
+        syy += dy * dy;
+    }
+    if sxx <= 0.0 || syy <= 0.0 {
+        0.0
+    } else {
+        sxy / (sxx * syy).sqrt()
+    }
+}
+
 /// Parse a design file mapping runs to conditions and resolve a two-condition
 /// contrast against `run_names`. Each line: `<run substring>\t<condition>`. A
 /// matrix run column belongs to a condition if a design row's run field is a
@@ -258,4 +460,52 @@ pub fn resolve_contrast(
         anyhow::bail!("contrast {cond_a} vs {cond_b}: matched {} / {} runs", a.len(), b.len());
     }
     Ok((a, b))
+}
+
+/// Run indices belonging to a single condition, per the design file (matched by
+/// exact name or substring, same rule as [`resolve_contrast`]).
+pub fn runs_for_condition(run_names: &[String], design_tsv: &str, cond: &str) -> Vec<usize> {
+    let mut map: Vec<(String, String)> = Vec::new();
+    for line in design_tsv.lines() {
+        let line = line.trim();
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let mut it = line.split('\t');
+        if let (Some(run), Some(c)) = (it.next(), it.next()) {
+            map.push((run.trim().to_string(), c.trim().to_string()));
+        }
+    }
+    run_names
+        .iter()
+        .enumerate()
+        .filter(|(_, rn)| {
+            map.iter()
+                .any(|(run, c)| c == cond && (rn.as_str() == run || rn.contains(run.as_str())))
+        })
+        .map(|(i, _)| i)
+        .collect()
+}
+
+/// Resolve an ordered dilution spec `cond:level,cond:level,...` (e.g.
+/// `A:3.3,B:10,C:33,D:67,E:90`) against the design, returning ordered
+/// (run-indices, level) pairs. Conditions with no matched runs are an error.
+pub fn resolve_levels(
+    run_names: &[String],
+    design_tsv: &str,
+    spec: &str,
+) -> anyhow::Result<Vec<(Vec<usize>, f64)>> {
+    let mut out = Vec::new();
+    for part in spec.split(',') {
+        let (cond, level) = part
+            .split_once(':')
+            .with_context(|| format!("dilution spec part `{part}` must be cond:level"))?;
+        let lv: f64 = level.trim().parse().with_context(|| format!("bad level `{level}`"))?;
+        let runs = runs_for_condition(run_names, design_tsv, cond.trim());
+        if runs.is_empty() {
+            anyhow::bail!("dilution: no runs matched condition {}", cond.trim());
+        }
+        out.push((runs, lv));
+    }
+    Ok(out)
 }
