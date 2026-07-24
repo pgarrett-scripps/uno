@@ -17,7 +17,6 @@ use anyhow::Context;
 
 use crate::database::PeptideDb;
 use crate::input::FeatureMatrix;
-use crate::protein::binom_sf_ge_k;
 use crate::score::PeptideHit;
 use std::collections::HashMap;
 
@@ -178,11 +177,13 @@ pub fn differential(
         if peps.len() < min_peptides {
             continue;
         }
+        let mut fcs: Vec<f64> = Vec::new();
         let mut sig: Vec<f64> = Vec::new();
         let (mut ab_a, mut ab_b) = (0.0, 0.0);
         for p in peps {
             ab_a += p.ab_a;
             ab_b += p.ab_b;
+            fcs.push(p.fc);
             if p.fc.abs() >= thr {
                 sig.push(p.fc);
             }
@@ -191,13 +192,11 @@ pub fn differential(
         let kneg = sig.iter().filter(|&&x| x < 0.0).count() as u32;
         let k = kpos.max(kneg);
         let n_sig = sig.len() as u32;
-        // co-direction binomial: P(>= k of n_sig share a sign | p=0.5), two-sided.
-        let p_value = if n_sig == 0 {
-            1.0
-        } else {
-            (2.0 * binom_sf_ge_k(k, n_sig, 0.5)).min(1.0)
-        };
-        let log2_fc = median_of(&mut sig.clone());
+        // t-test on ALL peptide fold changes (effect size + consistency), not the
+        // co-direction count (which floors at 2·0.5^n and misses small strong
+        // proteins). k/n_significant stay as informative columns.
+        let p_value = ttest_p(&fcs);
+        let log2_fc = median_of(&mut fcs.clone());
         out.push(ProteinQuant {
             accession: (*acc).to_string(),
             decoy: *decoy,
@@ -230,6 +229,29 @@ fn benjamini_hochberg(v: &mut [ProteinQuant]) {
         running = running.min(q);
         v[i].q_value = running;
     }
+}
+
+/// Two-sided one-sample t-test p-value for H0: mean(v) = 0. Unlike a pure
+/// co-direction count (which floors at 2·0.5^n and ignores effect size — so a
+/// 7-peptide protein all shifted +2 log2 can't beat p=0.016), this uses the
+/// magnitude AND consistency of the shift, so a small protein with a large,
+/// tight fold change is correctly called. Returns 1.0 for n<2 or zero variance
+/// with zero mean.
+fn ttest_p(v: &[f64]) -> f64 {
+    let n = v.len();
+    if n < 2 {
+        return 1.0;
+    }
+    let mean = v.iter().sum::<f64>() / n as f64;
+    let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n as f64 - 1.0);
+    let se = (var / n as f64).sqrt();
+    if se <= 0.0 {
+        return if mean.abs() > 0.0 { 1e-300 } else { 1.0 };
+    }
+    let t = mean / se;
+    let df = n as f64 - 1.0;
+    // two-sided: p = I_{df/(df+t^2)}(df/2, 1/2)
+    crate::protein::betai(df / 2.0, 0.5, df / (df + t * t)).clamp(1e-300, 1.0)
 }
 
 fn std_dev(v: &[f64]) -> f64 {
@@ -343,11 +365,13 @@ pub fn monotonic(
         if peps.len() < min_peptides {
             continue;
         }
+        let mut rhos: Vec<f64> = Vec::new();
         let mut sig: Vec<f64> = Vec::new();
         let (mut a, mut b) = (0.0, 0.0);
         for p in peps {
             a += p.first;
             b += p.last;
+            rhos.push(p.rho);
             if p.rho.abs() >= thr {
                 sig.push(p.rho);
             }
@@ -356,14 +380,16 @@ pub fn monotonic(
         let kneg = sig.iter().filter(|&&x| x < 0.0).count() as u32;
         let k = kpos.max(kneg);
         let n_sig = sig.len() as u32;
-        let p_value = if n_sig == 0 { 1.0 } else { (2.0 * binom_sf_ge_k(k, n_sig, 0.5)).min(1.0) };
+        // t-test on all peptide correlations (H0: mean rho = 0) — magnitude-aware,
+        // unlike the co-direction count.
+        let p_value = ttest_p(&rhos);
         out.push(ProteinQuant {
             accession: (*acc).to_string(),
             decoy: *decoy,
             n_peptides: peps.len(),
             n_significant: n_sig as usize,
             k,
-            log2_fc: median_of(&mut sig.clone()),
+            log2_fc: median_of(&mut rhos.clone()),
             abundance_a: a,
             abundance_b: b,
             p_value,
