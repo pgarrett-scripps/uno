@@ -100,6 +100,13 @@ struct Cli {
     /// vs first, so a positive log2FC means higher in the second).
     #[arg(long)]
     contrast: Option<String>,
+
+    /// Dilution-series mode for `--out-quant`: ordered `cond:level,...`
+    /// (e.g. `A:3.3,B:10,C:33,D:67,E:90`). Scores each protein by how consistently
+    /// its peptides track the level (Spearman), stronger than a single contrast.
+    /// Takes precedence over `--contrast`.
+    #[arg(long)]
+    dilution: Option<String>,
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
@@ -355,33 +362,32 @@ fn main() -> Result<()> {
             .design
             .as_ref()
             .context("--out-quant requires --design")?;
-        let contrast = cli.contrast.as_ref().context("--out-quant requires --contrast")?;
-        let (ca, cb) = contrast
-            .split_once(',')
-            .context("--contrast must be `condA,condB`")?;
         let design = std::fs::read_to_string(design_path)
             .with_context(|| format!("reading {}", design_path.display()))?;
-        let (runs_a, runs_b) = uno_core::quant::resolve_contrast(&matrix.run_names, &design, ca, cb)?;
-        log::info!("quant contrast {ca}(n={}) vs {cb}(n={})", runs_a.len(), runs_b.len());
         // ID-confident target proteins (q <= 1%) define the tested universe.
         let id_confident: std::collections::HashSet<String> = proteins
             .iter()
             .filter(|p| !p.decoy && p.q_value <= 0.01)
             .map(|p| p.accession.clone())
             .collect();
-        let quant = uno_core::quant::differential(
-            &matrix,
-            &db,
-            &result.peptides,
-            &id_confident,
-            &runs_a,
-            &runs_b,
-            2,
-        );
+        let (quant, col_a, col_b) = if let Some(spec) = &cli.dilution {
+            let levels = uno_core::quant::resolve_levels(&matrix.run_names, &design, spec)?;
+            log::info!("quant dilution: {} levels, {} runs", levels.len(), levels.iter().map(|(r, _)| r.len()).sum::<usize>());
+            let q = uno_core::quant::monotonic(&matrix, &db, &result.peptides, &id_confident, &levels, 2);
+            (q, "low".to_string(), "high".to_string())
+        } else {
+            let contrast = cli.contrast.as_ref().context("--out-quant requires --contrast or --dilution")?;
+            let (ca, cb) = contrast.split_once(',').context("--contrast must be `condA,condB`")?;
+            let (runs_a, runs_b) = uno_core::quant::resolve_contrast(&matrix.run_names, &design, ca, cb)?;
+            log::info!("quant contrast {ca}(n={}) vs {cb}(n={})", runs_a.len(), runs_b.len());
+            let q = uno_core::quant::differential(&matrix, &db, &result.peptides, &id_confident, &runs_a, &runs_b, 2);
+            (q, ca.to_string(), cb.to_string())
+        };
+        let stat_col = if cli.dilution.is_some() { "median_rho" } else { "log2fc" };
         let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
         writeln!(
             w,
-            "accession\tdecoy\tn_peptides\tn_significant\tk\tlog2fc\tabundance_{ca}\tabundance_{cb}\tp_value\tq_value"
+            "accession\tdecoy\tn_peptides\tn_significant\tk\t{stat_col}\tabundance_{col_a}\tabundance_{col_b}\tp_value\tq_value"
         )?;
         for q in &quant {
             writeln!(
