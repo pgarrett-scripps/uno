@@ -20,6 +20,49 @@ use crate::input::FeatureMatrix;
 use crate::score::PeptideHit;
 use std::collections::HashMap;
 
+/// Feature-level competition for quant: each consensus feature may quantify for
+/// only ONE protein — the best-scoring one whose peptide claims it. uno's ID stage
+/// already does this (parsimony: one peak → one protein), but the per-peptide
+/// quant feature-pick discards it and lets any peptide grab any mass+RT match. On
+/// a mixed proteome that means a minority-species peptide (e.g. E. coli) quantifies
+/// on a mass-coincident feature owned by an abundant background protein, reading
+/// its flat profile instead of the real signal. Replaying the claim here — a
+/// feature goes to the peptide whose protein scores highest — drops those stolen
+/// features, so the minority peptide falls back to its real feature or drops out.
+/// `prot_score` maps (decoy, accession) → the protein's binomial score (higher =
+/// more confident).
+pub fn resolve_feature_competition(
+    peptides: &[PeptideHit],
+    db: &PeptideDb,
+    prot_score: &std::collections::HashMap<(bool, &str), f64>,
+) -> Vec<PeptideHit> {
+    // Best backing-protein score per hit (shared peptides take their strongest
+    // protein). Non-scored proteins → -inf, so they lose every contested feature.
+    let scores: Vec<f64> = peptides
+        .iter()
+        .map(|h| {
+            db.peptides[h.peptide_idx as usize]
+                .proteins
+                .iter()
+                .filter_map(|p| prot_score.get(&(h.decoy, p.as_ref())).copied())
+                .fold(f64::NEG_INFINITY, f64::max)
+        })
+        .collect();
+    let mut winner: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
+    for (i, h) in peptides.iter().enumerate() {
+        if !scores[i].is_finite() {
+            continue;
+        }
+        match winner.get(&h.feature_idx) {
+            Some(&j) if scores[j] >= scores[i] => {}
+            _ => {
+                winner.insert(h.feature_idx, i);
+            }
+        }
+    }
+    winner.values().map(|&i| peptides[i]).collect()
+}
+
 /// Per-run log2 normalization offsets from the INVARIANT backbone: features
 /// detected in every run (complete cases). These are dominated by the unchanging
 /// background, so normalizing to them removes the systematic drift that a plain
