@@ -370,17 +370,31 @@ fn main() -> Result<()> {
             .filter(|p| !p.decoy && p.q_value <= 0.01)
             .map(|p| p.accession.clone())
             .collect();
+        // Feature-level competition (parsimony) for quant: one feature quantifies
+        // for only its best-scoring protein, so a minority peptide can't measure a
+        // mass-coincident feature owned by an abundant background protein.
+        let prot_score: std::collections::HashMap<(bool, &str), f64> = proteins
+            .iter()
+            .map(|p| ((p.decoy, p.accession.as_str()), p.binomial_score))
+            .collect();
+        let quant_peptides =
+            uno_core::quant::resolve_feature_competition(&result.peptides, &db, &prot_score);
+        log::info!(
+            "quant feature competition: {} -> {} peptide-features after 1-feature-1-protein claim",
+            result.peptides.len(),
+            quant_peptides.len()
+        );
         let (quant, col_a, col_b) = if let Some(spec) = &cli.dilution {
             let levels = uno_core::quant::resolve_levels(&matrix.run_names, &design, spec)?;
             log::info!("quant dilution: {} levels, {} runs", levels.len(), levels.iter().map(|(r, _)| r.len()).sum::<usize>());
-            let q = uno_core::quant::monotonic(&matrix, &db, &result.peptides, &id_confident, &levels, 2);
+            let q = uno_core::quant::monotonic(&matrix, &db, &quant_peptides, &id_confident, &levels, 2);
             (q, "low".to_string(), "high".to_string())
         } else {
             let contrast = cli.contrast.as_ref().context("--out-quant requires --contrast or --dilution")?;
             let (ca, cb) = contrast.split_once(',').context("--contrast must be `condA,condB`")?;
             let (runs_a, runs_b) = uno_core::quant::resolve_contrast(&matrix.run_names, &design, ca, cb)?;
             log::info!("quant contrast {ca}(n={}) vs {cb}(n={})", runs_a.len(), runs_b.len());
-            let q = uno_core::quant::differential(&matrix, &db, &result.peptides, &id_confident, &runs_a, &runs_b, 2);
+            let q = uno_core::quant::differential(&matrix, &db, &quant_peptides, &id_confident, &runs_a, &runs_b, 2);
             (q, ca.to_string(), cb.to_string())
         };
         let stat_col = if cli.dilution.is_some() { "median_rho" } else { "log2fc" };
