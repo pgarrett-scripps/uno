@@ -8,6 +8,7 @@
 pub mod calibrate;
 pub mod database;
 pub mod decoy;
+pub mod group;
 pub mod im;
 pub mod input;
 pub mod mass;
