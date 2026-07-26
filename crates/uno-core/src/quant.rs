@@ -226,9 +226,9 @@ pub struct ProteinQuant {
 /// null). `min_peptides` drops proteins with too few quantified peptides.
 pub fn differential(
     matrix: &FeatureMatrix,
-    db: &PeptideDb,
+    _db: &PeptideDb,
     peptides: &[PeptideHit],
-    id_confident: &std::collections::HashSet<String>,
+    pep_group: &std::collections::HashMap<u32, (bool, String)>,
     cond_a: &[usize],
     cond_b: &[usize],
     min_peptides: usize,
@@ -310,15 +310,13 @@ pub fn differential(
     let sd = std_dev(&dec_fc);
     let thr = 2.0 * sd;
 
-    // Group peptides by protein accession (targets restricted to ID-confident).
+    // Group peptides by PROTEIN GROUP, using only group-unique peptides (map
+    // within a single group). Cross-group-shared peptides are absent from
+    // `pep_group` and excluded — their intensity is a blend across groups.
     let mut by_prot: HashMap<(bool, &str), Vec<&Pep>> = HashMap::new();
-    for (pi, decoy, pep) in &pep_of {
-        for prot in &db.peptides[*pi].proteins {
-            let acc = prot.as_ref();
-            if !*decoy && !id_confident.contains(acc) {
-                continue;
-            }
-            by_prot.entry((*decoy, acc)).or_default().push(pep);
+    for (pi, _decoy, pep) in &pep_of {
+        if let Some((d, leading)) = pep_group.get(&(*pi as u32)) {
+            by_prot.entry((*d, leading.as_str())).or_default().push(pep);
         }
     }
 
@@ -345,7 +343,7 @@ pub fn differential(
         // t-test on ALL peptide fold changes (effect size + consistency), not the
         // co-direction count (which floors at 2·0.5^n and misses small strong
         // proteins). k/n_significant stay as informative columns.
-        let p_value = ttest_p(&fcs);
+        let p_value = ttest_p(&fcs, sd * sd);
         let log2_fc = median_of(&mut fcs.clone());
         out.push(ProteinQuant {
             accession: (*acc).to_string(),
@@ -387,16 +385,21 @@ fn benjamini_hochberg(v: &mut [ProteinQuant]) {
 /// magnitude AND consistency of the shift, so a small protein with a large,
 /// tight fold change is correctly called. Returns 1.0 for n<2 or zero variance
 /// with zero mean.
-fn ttest_p(v: &[f64]) -> f64 {
+fn ttest_p(v: &[f64], var_floor: f64) -> f64 {
     let n = v.len();
     if n < 2 {
         return 1.0;
     }
     let mean = v.iter().sum::<f64>() / n as f64;
     let var = v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n as f64 - 1.0);
+    // Floor the variance at the population per-peptide noise level. Without this a
+    // protein with 2 near-identical peptides has se~0 -> spurious p~0. The floor is
+    // an empirical-Bayes prior: a protein can't be measured more precisely than the
+    // baseline peptide scatter.
+    let var = var.max(var_floor);
     let se = (var / n as f64).sqrt();
     if se <= 0.0 {
-        return if mean.abs() > 0.0 { 1e-300 } else { 1.0 };
+        return 1.0;
     }
     let t = mean / se;
     let df = n as f64 - 1.0;
@@ -430,9 +433,9 @@ fn median_of(v: &mut [f64]) -> f64 {
 /// are the lowest/highest level.
 pub fn monotonic(
     matrix: &FeatureMatrix,
-    db: &PeptideDb,
+    _db: &PeptideDb,
     peptides: &[PeptideHit],
-    id_confident: &std::collections::HashSet<String>,
+    pep_group: &std::collections::HashMap<u32, (bool, String)>,
     levels: &[(Vec<usize>, f64)],
     min_peptides: usize,
 ) -> Vec<ProteinQuant> {
@@ -497,16 +500,12 @@ pub fn monotonic(
     // Significance = |rho| past the decoy-null spread, but CLAMPED to [0.4, 0.7]:
     // correlations are bounded [-1, 1], so a raw 2*SD threshold can exceed 1 and
     // flag nothing. A trending peptide needs a real monotonic correlation.
-    let thr = (2.0 * std_dev(&dec)).clamp(0.4, 0.7);
+    let rho_sd = std_dev(&dec); let thr = (2.0 * rho_sd).clamp(0.4, 0.7);
 
     let mut by_prot: HashMap<(bool, &str), Vec<&Pep>> = HashMap::new();
-    for (pi, decoy, pep) in &pep_of {
-        for prot in &db.peptides[*pi].proteins {
-            let acc = prot.as_ref();
-            if !*decoy && !id_confident.contains(acc) {
-                continue;
-            }
-            by_prot.entry((*decoy, acc)).or_default().push(pep);
+    for (pi, _decoy, pep) in &pep_of {
+        if let Some((d, leading)) = pep_group.get(&(*pi as u32)) {
+            by_prot.entry((*d, leading.as_str())).or_default().push(pep);
         }
     }
 
@@ -532,7 +531,7 @@ pub fn monotonic(
         let n_sig = sig.len() as u32;
         // t-test on all peptide correlations (H0: mean rho = 0) — magnitude-aware,
         // unlike the co-direction count.
-        let p_value = ttest_p(&rhos);
+        let p_value = ttest_p(&rhos, rho_sd * rho_sd);
         out.push(ProteinQuant {
             accession: (*acc).to_string(),
             decoy: *decoy,

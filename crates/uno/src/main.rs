@@ -297,17 +297,28 @@ fn main() -> Result<()> {
 
     if let Some(path) = &cli.out_proteins {
         use std::io::Write;
+        // Group indistinguishable proteins so the output shows the leading protein
+        // AND its indistinguishable twins, instead of silently reporting one.
+        let confident_all: std::collections::HashSet<String> =
+            proteins.iter().filter(|p| !p.decoy).map(|p| p.accession.clone()).collect();
+        let (groups, _) = uno_core::group::build_groups(&db, &result.peptides, &confident_all);
+        let members = uno_core::group::members_by_leading(&groups);
         let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
         writeln!(
             w,
-            "accession\tdecoy\tobserved_peptides\ttheoretical_peptides\tcoverage\tbinomial_score\tmean_rt_diff\tq_value"
+            "accession\tdecoy\tn_group_members\tgroup_members\tobserved_peptides\ttheoretical_peptides\tcoverage\tbinomial_score\tmean_rt_diff\tq_value"
         )?;
         for p in &proteins {
+            let mem = members.get(&p.accession);
+            let n_mem = mem.map(|m| m.len()).unwrap_or(1);
+            let mem_str = mem.map(|m| m.join(";")).unwrap_or_else(|| p.accession.clone());
             writeln!(
                 w,
-                "{}\t{}\t{}\t{}\t{:.4}\t{:.3}\t{:.3}\t{:.5}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{:.4}\t{:.3}\t{:.3}\t{:.5}",
                 p.accession,
                 p.decoy as u8,
+                n_mem,
+                mem_str,
                 p.observed_peptides,
                 p.theoretical_peptides,
                 p.coverage,
@@ -418,31 +429,46 @@ fn main() -> Result<()> {
                 quant_peptides.len()
             );
         }
+        // Group-aware quant: indistinguishable proteins -> one group, quantified on
+        // group-unique peptides only (cross-group-shared peptides excluded).
+        let (groups, pep_group) =
+            uno_core::group::build_groups(&db, &quant_peptides, &id_confident);
+        let members = uno_core::group::members_by_leading(&groups);
+        log::info!(
+            "protein groups: {} groups from quant peptides; {} group-unique peptides",
+            groups.len(),
+            pep_group.len()
+        );
         let (quant, col_a, col_b) = if let Some(spec) = &cli.dilution {
             let levels = uno_core::quant::resolve_levels(&matrix.run_names, &design, spec)?;
             log::info!("quant dilution: {} levels, {} runs", levels.len(), levels.iter().map(|(r, _)| r.len()).sum::<usize>());
-            let q = uno_core::quant::monotonic(&matrix, &db, &quant_peptides, &id_confident, &levels, 2);
+            let q = uno_core::quant::monotonic(&matrix, &db, &quant_peptides, &pep_group, &levels, 2);
             (q, "low".to_string(), "high".to_string())
         } else {
             let contrast = cli.contrast.as_ref().context("--out-quant requires --contrast or --dilution")?;
             let (ca, cb) = contrast.split_once(',').context("--contrast must be `condA,condB`")?;
             let (runs_a, runs_b) = uno_core::quant::resolve_contrast(&matrix.run_names, &design, ca, cb)?;
             log::info!("quant contrast {ca}(n={}) vs {cb}(n={})", runs_a.len(), runs_b.len());
-            let q = uno_core::quant::differential(&matrix, &db, &quant_peptides, &id_confident, &runs_a, &runs_b, 2);
+            let q = uno_core::quant::differential(&matrix, &db, &quant_peptides, &pep_group, &runs_a, &runs_b, 2);
             (q, ca.to_string(), cb.to_string())
         };
         let stat_col = if cli.dilution.is_some() { "median_rho" } else { "log2fc" };
         let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
         writeln!(
             w,
-            "accession\tdecoy\tn_peptides\tn_significant\tk\t{stat_col}\tabundance_{col_a}\tabundance_{col_b}\tp_value\tq_value"
+            "accession\tdecoy\tn_group_members\tgroup_members\tn_peptides\tn_significant\tk\t{stat_col}\tabundance_{col_a}\tabundance_{col_b}\tp_value\tq_value"
         )?;
         for q in &quant {
+            let mem = members.get(&q.accession);
+            let n_mem = mem.map(|m| m.len()).unwrap_or(1);
+            let mem_str = mem.map(|m| m.join(";")).unwrap_or_else(|| q.accession.clone());
             writeln!(
                 w,
-                "{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.4e}\t{:.4e}\t{:.3e}\t{:.4e}",
+                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.4e}\t{:.4e}\t{:.3e}\t{:.4e}",
                 q.accession,
                 q.decoy as u8,
+                n_mem,
+                mem_str,
                 q.n_peptides,
                 q.n_significant,
                 q.k,
