@@ -63,6 +63,113 @@ pub fn resolve_feature_competition(
     winner.values().map(|&i| peptides[i]).collect()
 }
 
+/// Single-pass profile-guided reassignment (combines ID and quant).
+///
+/// The feature competition settles mass ties by *ID confidence*; this settles the
+/// ones it can't by the *quant pattern*. Starting from `base` (the competition
+/// result), it builds each protein's across-sample profile, then for every
+/// candidate `(feature, peptide)` pair whose feature actually VARIES, re-routes the
+/// feature to the mass-legitimate protein whose profile it best CORRELATES with.
+/// A rising E. coli feature that mass-matching first handed to a flat background
+/// protein moves to the E. coli protein it tracks — recovering signal instead of
+/// discarding it.
+///
+/// Guardrails against circularity: (1) only mass-candidate proteins are considered
+/// (`candidates` comes from the search's PFMs — a feature can't join a protein with
+/// no peptide at its mass); (2) only VARYING features/proteins are re-routed
+/// (`min_var`) — a flat feature carries no profile information, so it keeps the
+/// competition's assignment; (3) decoys go through the identical pass. `candidates`
+/// = `(feature_idx, peptide_idx, decoy)` for confident-protein peptides.
+pub fn profile_reassign(
+    matrix: &FeatureMatrix,
+    db: &PeptideDb,
+    base: &[PeptideHit],
+    candidates: &[(u32, u32, bool)],
+    min_corr: f64,
+    min_var: f64,
+) -> Vec<PeptideHit> {
+    let n_runs = matrix.run_names.len();
+    let (run_med, grand) = run_normalizers(matrix, base, n_runs);
+    // per-run low floor for imputing missing cells (5th pct of detected)
+    let mut per_run: Vec<Vec<f64>> = vec![Vec::new(); n_runs];
+    for h in base {
+        for (r, &v) in matrix.features[h.feature_idx as usize].intensities.iter().enumerate().take(n_runs) {
+            if v > 0.0 { per_run[r].push(v.log2()); }
+        }
+    }
+    let run_floor: Vec<f64> = per_run.iter_mut().map(|v| {
+        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        if v.is_empty() { 0.0 } else { v[v.len() / 20] }
+    }).collect();
+    let profile = |fi: usize| -> Vec<f64> {
+        let ints = &matrix.features[fi].intensities;
+        (0..n_runs).map(|r| {
+            let v = ints.get(r).copied().unwrap_or(0.0);
+            let l = if v > 0.0 { v.log2() } else { run_floor[r] };
+            l - run_med[r] + grand
+        }).collect()
+    };
+    let variance = |p: &[f64]| -> f64 {
+        let m = p.iter().sum::<f64>() / p.len() as f64;
+        p.iter().map(|x| (x - m).powi(2)).sum::<f64>() / p.len() as f64
+    };
+
+    // Protein profiles (per-run median over the protein's base features).
+    let mut prot_feats: HashMap<(bool, &str), Vec<usize>> = HashMap::new();
+    for h in base {
+        for prot in &db.peptides[h.peptide_idx as usize].proteins {
+            prot_feats.entry((h.decoy, prot.as_ref())).or_default().push(h.feature_idx as usize);
+        }
+    }
+    let prot_profile: HashMap<(bool, &str), Vec<f64>> = prot_feats
+        .iter()
+        .map(|(k, feats)| {
+            let mut cols = vec![Vec::new(); n_runs];
+            for &fi in feats {
+                let p = profile(fi);
+                for r in 0..n_runs { cols[r].push(p[r]); }
+            }
+            let prof: Vec<f64> = cols.iter_mut().map(|c| { c.sort_by(|a,b| a.partial_cmp(b).unwrap()); c[c.len()/2] }).collect();
+            (*k, prof)
+        })
+        .collect();
+
+    // Start from the competition assignment (one peptide/protein per feature).
+    let mut by_feat: HashMap<u32, PeptideHit> = base.iter().map(|h| (h.feature_idx, *h)).collect();
+
+    // For each VARYING candidate feature, find the best-correlating candidate protein.
+    let mut best: HashMap<u32, (f64, u32, bool)> = HashMap::new(); // feat -> (corr, peptide, decoy)
+    let mut fp_cache: HashMap<u32, (Vec<f64>, bool)> = HashMap::new(); // feat -> (profile, varies)
+    for &(fi, pi, decoy) in candidates {
+        let (fp, varies) = fp_cache.entry(fi).or_insert_with(|| {
+            let p = profile(fi as usize);
+            let v = variance(&p) >= min_var;
+            (p, v)
+        });
+        if !*varies { continue; }
+        let fp = fp.clone();
+        for prot in &db.peptides[pi as usize].proteins {
+            if let Some(pp) = prot_profile.get(&(decoy, prot.as_ref())) {
+                if variance(pp) < min_var { continue; }
+                let c = pearson(&fp, pp);
+                let e = best.entry(fi).or_insert((f64::NEG_INFINITY, pi, decoy));
+                if c > e.0 { *e = (c, pi, decoy); }
+            }
+        }
+    }
+    // Apply reassignments that clear the correlation bar.
+    let mut moved = 0usize;
+    for (fi, (c, pi, decoy)) in best {
+        if c >= min_corr {
+            let prev = by_feat.get(&fi).map(|h| h.peptide_idx);
+            if prev != Some(pi) { moved += 1; }
+            by_feat.insert(fi, PeptideHit { peptide_idx: pi, feature_idx: fi, decoy });
+        }
+    }
+    log::info!("profile reassignment: {} features re-routed by quant profile", moved);
+    by_feat.into_values().collect()
+}
+
 /// Per-run log2 normalization offsets from the INVARIANT backbone: features
 /// detected in every run (complete cases). These are dominated by the unchanging
 /// background, so normalizing to them removes the systematic drift that a plain

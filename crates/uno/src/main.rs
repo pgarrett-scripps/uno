@@ -107,6 +107,14 @@ struct Cli {
     /// Takes precedence over `--contrast`.
     #[arg(long)]
     dilution: Option<String>,
+
+    /// After the feature competition, re-route VARYING features to the protein
+    /// whose across-sample profile they best correlate with (profile-guided
+    /// reassignment). Uses the quant pattern to fix mass+RT ties the ID stage
+    /// couldn't — recovers minority-species features mis-assigned to abundant
+    /// backgrounds. `--out-quant` only.
+    #[arg(long)]
+    profile_reassign: bool,
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
@@ -377,13 +385,39 @@ fn main() -> Result<()> {
             .iter()
             .map(|p| ((p.decoy, p.accession.as_str()), p.binomial_score))
             .collect();
-        let quant_peptides =
+        let mut quant_peptides =
             uno_core::quant::resolve_feature_competition(&result.peptides, &db, &prot_score);
         log::info!(
             "quant feature competition: {} -> {} peptide-features after 1-feature-1-protein claim",
             result.peptides.len(),
             quant_peptides.len()
         );
+        // Optional profile-guided reassignment: re-route varying features to the
+        // protein whose across-sample profile they best track (mass-constrained,
+        // decoy-calibrated). Candidates = mono PFMs of scored proteins.
+        if cli.profile_reassign {
+            let pfms = match_features(&matrix, &db, &config.matching);
+            let candidates: Vec<(u32, u32, bool)> = pfms
+                .iter()
+                .filter(|p| p.isotope_offset == 0)
+                .filter(|p| {
+                    db.peptides[p.peptide_idx as usize]
+                        .proteins
+                        .iter()
+                        .any(|pr| prot_score.contains_key(&(p.decoy, pr.as_ref())))
+                })
+                .map(|p| (p.feature_idx, p.peptide_idx, p.decoy))
+                .collect();
+            let before = quant_peptides.len();
+            quant_peptides =
+                uno_core::quant::profile_reassign(&matrix, &db, &quant_peptides, &candidates, 0.5, 0.25);
+            log::info!(
+                "profile-reassign: {} candidates, {} -> {} peptide-features",
+                candidates.len(),
+                before,
+                quant_peptides.len()
+            );
+        }
         let (quant, col_a, col_b) = if let Some(spec) = &cli.dilution {
             let levels = uno_core::quant::resolve_levels(&matrix.run_names, &design, spec)?;
             log::info!("quant dilution: {} levels, {} runs", levels.len(), levels.iter().map(|(r, _)| r.len()).sum::<usize>());
