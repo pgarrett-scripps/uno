@@ -343,7 +343,7 @@ pub fn differential(
         // t-test on ALL peptide fold changes (effect size + consistency), not the
         // co-direction count (which floors at 2·0.5^n and misses small strong
         // proteins). k/n_significant stay as informative columns.
-        let p_value = ttest_p(&fcs, sd * sd);
+        let p_value = ttest_p(&fcs, sd * sd * var_floor_mult());
         let log2_fc = median_of(&mut fcs.clone());
         out.push(ProteinQuant {
             accession: (*acc).to_string(),
@@ -385,6 +385,17 @@ fn benjamini_hochberg(v: &mut [ProteinQuant]) {
 /// magnitude AND consistency of the shift, so a small protein with a large,
 /// tight fold change is correctly called. Returns 1.0 for n<2 or zero variance
 /// with zero mean.
+/// Multiplier on the population-noise variance floor (empirical-Bayes strength).
+/// 1.0 = a protein can't look tighter than the baseline peptide scatter (safe,
+/// conservative); lower = let genuinely-tight proteins keep more of their
+/// confidence (more recall, more risk). Tunable via `UNO_VAR_FLOOR`.
+fn var_floor_mult() -> f64 {
+    // 0.25 chosen by ground-truth sweep (IonStar): the knee where recall is
+    // recovered (10%->25% @5% FDR) at no precision cost, with margin against the
+    // few-peptide degeneracy that a zero floor readmits.
+    std::env::var("UNO_VAR_FLOOR").ok().and_then(|s| s.parse().ok()).unwrap_or(0.25)
+}
+
 fn ttest_p(v: &[f64], var_floor: f64) -> f64 {
     let n = v.len();
     if n < 2 {
@@ -531,7 +542,7 @@ pub fn monotonic(
         let n_sig = sig.len() as u32;
         // t-test on all peptide correlations (H0: mean rho = 0) — magnitude-aware,
         // unlike the co-direction count.
-        let p_value = ttest_p(&rhos, rho_sd * rho_sd);
+        let p_value = ttest_p(&rhos, rho_sd * rho_sd * var_floor_mult());
         out.push(ProteinQuant {
             accession: (*acc).to_string(),
             decoy: *decoy,
