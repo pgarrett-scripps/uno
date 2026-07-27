@@ -70,6 +70,12 @@ pub struct ScoreConfig {
     /// many-sample designs (e.g. dose-response) where a peptide need not be in
     /// every run; the RANSAC seed tolerates the extra contamination.
     pub seed_min_runs_frac: f64,
+    /// Mass tolerance (ppm) the mass-anchor bootstrap starts at, and the ceiling it
+    /// tightens toward as it recalibrates the per-run mass shift + sigma. Default 10
+    /// (Orbitrap). For lower-accuracy instruments (e.g. timsTOF) set this wider —
+    /// e.g. 20 — plus `[matching] ppm_tolerance = 20`; the anchor then seeds wide and
+    /// tightens to single-digit ppm once the mass error is recalibrated on-data.
+    pub mass_anchor_ppm: f64,
     /// Discriminant: "deviation" (robust orthogonal RT+IM consistency, ms1searchpy
     /// style — default) or "gbdt" (semi-supervised boosted trees). On the
     /// MS1-only/saturated-mass regime the gbdt washes out the weak RT+IM signal,
@@ -127,6 +133,7 @@ impl Default for ScoreConfig {
             shrinkage: 0.1,
             max_train_rows: 200_000,
             seed_min_runs_frac: 0.5,
+            mass_anchor_ppm: 10.0,
             discriminant: "deviation".to_string(),
             // On by default IN FINE-TUNE MODE: refit only the MLP readout over its
             // frozen embedding on this run's confident hits. This keeps the
@@ -410,7 +417,7 @@ fn mass_anchor_calibration(
     #[allow(clippy::type_complexity)]
     let mut best_round: Option<(usize, f64, f64, Vec<usize>, f64, HashSet<(bool, &str)>)> = None;
     for round in 0..5 {
-        let tol = if round == 0 { 10.0 } else { (3.0 * sigma).min(10.0) };
+        let tol = if round == 0 { cfg.mass_anchor_ppm } else { (3.0 * sigma).min(cfg.mass_anchor_ppm) };
         // Matched peptides -> per-protein positions.
         let mut prot_peps: HashMap<(bool, &str), Vec<usize>> = HashMap::new();
         for (&pi, &(err, pos)) in &best {
@@ -533,7 +540,7 @@ fn mass_anchor_calibration(
     let rt_diff_at = |cal: &Calibration, pos: usize| -> Option<f64> {
         abstract_rt[pos].map(|a| matrix.features[pfms[reduced[pos]].feature_idx as usize].rt - cal.apply(a))
     };
-    let mass_gate = (3.0_f64 * sigma).min(10.0);
+    let mass_gate = (3.0_f64 * sigma).min(cfg.mass_anchor_ppm);
 
     // RT accuracy from confident-protein peptides' best-RT (real-feature) residuals,
     // Gaussian core, clamped to weight RT ~its true accuracy in the deviation.
