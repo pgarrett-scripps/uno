@@ -85,12 +85,19 @@ struct Cli {
     #[arg(long)]
     out_peptides: Option<PathBuf>,
 
+    /// Write the precursor × sample LFQ matrix to TSV (`--matrix` only), Sage-lfq
+    /// style: one row per precursor (peptide + charge) with its intensity in each
+    /// run, and the protein(s) it maps to — NO rollup. Uses the corrected
+    /// peptide→feature assignment (competition + optional profile reassignment).
+    /// Downstream tools roll up to protein and do the stats.
+    #[arg(long)]
+    out_lfq: Option<PathBuf>,
+
     /// Write the protein-group × sample abundance matrix to TSV (`--matrix` only):
     /// one row per confident protein group, its indistinguishable members, and its
-    /// summed intensity in each run. This is uno's quant deliverable — a raw
-    /// intensity table. Normalization, differential testing, and interpretation are
-    /// the job of downstream stats tools (uno is ID + quant, not a stats framework),
-    /// so there is deliberately no design/contrast/FDR here.
+    /// summed intensity in each run. Optional protein-level rollup on top of the
+    /// precursor `--out-lfq`. Normalization, differential testing, and
+    /// interpretation are the job of downstream stats tools.
     #[arg(long)]
     out_abundance: Option<PathBuf>,
 
@@ -360,18 +367,12 @@ fn main() -> Result<()> {
         );
     }
 
-    // Protein-group × sample abundance matrix — uno's quant deliverable. Correct
-    // peptide->protein assignment (feature competition + optional profile
-    // reassignment) and protein grouping, then sum each group's peptides per run.
-    // No design, no differential testing — that's downstream stats' job.
-    if let Some(path) = &cli.out_abundance {
+    // Multi-sample quant. Correct the peptide→feature assignment (feature
+    // competition + optional profile reassignment), then emit the precursor LFQ
+    // matrix and/or the protein-group rollup. Both are raw intensities: no design,
+    // no differential testing — that's downstream stats' job.
+    if cli.out_lfq.is_some() || cli.out_abundance.is_some() {
         use std::io::Write;
-        // ID-confident target proteins (q <= 1%) define the reported set.
-        let id_confident: std::collections::HashSet<String> = proteins
-            .iter()
-            .filter(|p| !p.decoy && p.q_value <= 0.01)
-            .map(|p| p.accession.clone())
-            .collect();
         // Feature-level competition (parsimony): one feature quantifies for only
         // its best-scoring protein, so a minority peptide can't measure a
         // mass-coincident feature owned by an abundant background protein.
@@ -406,34 +407,65 @@ fn main() -> Result<()> {
                 uno_core::quant::profile_reassign(&matrix, &db, &quant_peptides, &candidates, 0.5, 0.25);
             log::info!("profile-reassign: {} candidates, {} -> {} peptide-features", candidates.len(), before, quant_peptides.len());
         }
-        // Group indistinguishable proteins; assign each peptide to one group
-        // (unique + razor). Abundance = per-run sum of a group's peptide-features.
-        let (groups, pep_group) =
-            uno_core::group::build_groups(&db, &quant_peptides, &id_confident);
-        let members = uno_core::group::members_by_leading(&groups);
-        let n_runs = matrix.run_names.len();
-        let ab = uno_core::quant::group_abundance(&matrix, &quant_peptides, &pep_group, n_runs);
-        log::info!("protein groups: {} groups, {} quantified", groups.len(), ab.len());
 
-        let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
-        write!(w, "accession\tn_group_members\tgroup_members\tn_peptides")?;
-        for rn in &matrix.run_names {
-            write!(w, "\t{rn}")?;
-        }
-        writeln!(w)?;
-        let mut rows: Vec<(&String, &(Vec<f64>, std::collections::HashSet<u32>))> = ab.iter().collect();
-        rows.sort_by(|a, b| a.0.cmp(b.0));
-        for (leading, (ints, peps)) in rows {
-            let mem = members.get(leading);
-            let n_mem = mem.map(|m| m.len()).unwrap_or(1);
-            let mem_str = mem.map(|m| m.join(";")).unwrap_or_else(|| leading.clone());
-            write!(w, "{}\t{}\t{}\t{}", leading, n_mem, mem_str, peps.len())?;
-            for v in ints {
-                write!(w, "\t{:.5e}", v)?;
+        // Precursor × sample LFQ matrix (Sage-lfq style): one row per assigned
+        // precursor (peptide + charge), no rollup.
+        if let Some(path) = &cli.out_lfq {
+            let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
+            write!(w, "peptide\tcharge\tdecoy\tproteins\tmass\trt")?;
+            for rn in &matrix.run_names {
+                write!(w, "\t{rn}")?;
             }
             writeln!(w)?;
+            for h in &quant_peptides {
+                let pep = &db.peptides[h.peptide_idx as usize];
+                let f = &matrix.features[h.feature_idx as usize];
+                let prots = pep.proteins.iter().map(|p| p.as_ref()).collect::<Vec<_>>().join(";");
+                write!(
+                    w,
+                    "{}\t{}\t{}\t{}\t{:.5}\t{:.4}",
+                    pep.sequence.as_ref(), f.charge, h.decoy as u8, prots, f.mass, f.rt
+                )?;
+                for v in &f.intensities {
+                    write!(w, "\t{:.5e}", v)?;
+                }
+                writeln!(w)?;
+            }
+            log::info!("wrote {} precursor LFQ rows to {}", quant_peptides.len(), path.display());
         }
-        log::info!("wrote {} protein groups to {}", ab.len(), path.display());
+
+        // Optional protein-group rollup.
+        if let Some(path) = &cli.out_abundance {
+            let id_confident: std::collections::HashSet<String> = proteins
+                .iter()
+                .filter(|p| !p.decoy && p.q_value <= 0.01)
+                .map(|p| p.accession.clone())
+                .collect();
+            let (groups, pep_group) =
+                uno_core::group::build_groups(&db, &quant_peptides, &id_confident);
+            let members = uno_core::group::members_by_leading(&groups);
+            let n_runs = matrix.run_names.len();
+            let ab = uno_core::quant::group_abundance(&matrix, &quant_peptides, &pep_group, n_runs);
+            let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
+            write!(w, "accession\tn_group_members\tgroup_members\tn_peptides")?;
+            for rn in &matrix.run_names {
+                write!(w, "\t{rn}")?;
+            }
+            writeln!(w)?;
+            let mut rows: Vec<(&String, &(Vec<f64>, std::collections::HashSet<u32>))> = ab.iter().collect();
+            rows.sort_by(|a, b| a.0.cmp(b.0));
+            for (leading, (ints, peps)) in rows {
+                let mem = members.get(leading);
+                let n_mem = mem.map(|m| m.len()).unwrap_or(1);
+                let mem_str = mem.map(|m| m.join(";")).unwrap_or_else(|| leading.clone());
+                write!(w, "{}\t{}\t{}\t{}", leading, n_mem, mem_str, peps.len())?;
+                for v in ints {
+                    write!(w, "\t{:.5e}", v)?;
+                }
+                writeln!(w)?;
+            }
+            log::info!("wrote {} protein groups to {}", ab.len(), path.display());
+        }
     }
 
     Ok(())
