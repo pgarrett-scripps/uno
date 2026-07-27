@@ -85,34 +85,20 @@ struct Cli {
     #[arg(long)]
     out_peptides: Option<PathBuf>,
 
-    /// Write protein-level differential-expression + abundance to TSV (needs
-    /// `--matrix`, `--design`, `--contrast`). Co-direction binomial + BH FDR over
-    /// the ID-confident proteins; peptide FDR is not used.
+    /// Write the protein-group × sample abundance matrix to TSV (`--matrix` only):
+    /// one row per confident protein group, its indistinguishable members, and its
+    /// summed intensity in each run. This is uno's quant deliverable — a raw
+    /// intensity table. Normalization, differential testing, and interpretation are
+    /// the job of downstream stats tools (uno is ID + quant, not a stats framework),
+    /// so there is deliberately no design/contrast/FDR here.
     #[arg(long)]
-    out_quant: Option<PathBuf>,
+    out_abundance: Option<PathBuf>,
 
-    /// Design file for quant: lines `<run-name-substring>\t<condition>`. A matrix
-    /// run column joins a condition when the run field is a substring of its name.
-    #[arg(long)]
-    design: Option<PathBuf>,
-
-    /// Two conditions to contrast for `--out-quant`, e.g. `A,E` (B vs A = second
-    /// vs first, so a positive log2FC means higher in the second).
-    #[arg(long)]
-    contrast: Option<String>,
-
-    /// Dilution-series mode for `--out-quant`: ordered `cond:level,...`
-    /// (e.g. `A:3.3,B:10,C:33,D:67,E:90`). Scores each protein by how consistently
-    /// its peptides track the level (Spearman), stronger than a single contrast.
-    /// Takes precedence over `--contrast`.
-    #[arg(long)]
-    dilution: Option<String>,
-
-    /// After the feature competition, re-route VARYING features to the protein
-    /// whose across-sample profile they best correlate with (profile-guided
+    /// Before building the abundance matrix, re-route VARYING features to the
+    /// protein whose across-sample profile they best correlate with (profile-guided
     /// reassignment). Uses the quant pattern to fix mass+RT ties the ID stage
     /// couldn't — recovers minority-species features mis-assigned to abundant
-    /// backgrounds. `--out-quant` only.
+    /// backgrounds. Design-free (uses across-sample variation, not labels).
     #[arg(long)]
     profile_reassign: bool,
 }
@@ -374,23 +360,20 @@ fn main() -> Result<()> {
         );
     }
 
-    // Protein-level differential expression + abundance (multi-sample quant).
-    if let Some(path) = &cli.out_quant {
+    // Protein-group × sample abundance matrix — uno's quant deliverable. Correct
+    // peptide->protein assignment (feature competition + optional profile
+    // reassignment) and protein grouping, then sum each group's peptides per run.
+    // No design, no differential testing — that's downstream stats' job.
+    if let Some(path) = &cli.out_abundance {
         use std::io::Write;
-        let design_path = cli
-            .design
-            .as_ref()
-            .context("--out-quant requires --design")?;
-        let design = std::fs::read_to_string(design_path)
-            .with_context(|| format!("reading {}", design_path.display()))?;
-        // ID-confident target proteins (q <= 1%) define the tested universe.
+        // ID-confident target proteins (q <= 1%) define the reported set.
         let id_confident: std::collections::HashSet<String> = proteins
             .iter()
             .filter(|p| !p.decoy && p.q_value <= 0.01)
             .map(|p| p.accession.clone())
             .collect();
-        // Feature-level competition (parsimony) for quant: one feature quantifies
-        // for only its best-scoring protein, so a minority peptide can't measure a
+        // Feature-level competition (parsimony): one feature quantifies for only
+        // its best-scoring protein, so a minority peptide can't measure a
         // mass-coincident feature owned by an abundant background protein.
         let prot_score: std::collections::HashMap<(bool, &str), f64> = proteins
             .iter()
@@ -399,13 +382,12 @@ fn main() -> Result<()> {
         let mut quant_peptides =
             uno_core::quant::resolve_feature_competition(&result.peptides, &db, &prot_score);
         log::info!(
-            "quant feature competition: {} -> {} peptide-features after 1-feature-1-protein claim",
+            "feature competition: {} -> {} peptide-features after 1-feature-1-protein claim",
             result.peptides.len(),
             quant_peptides.len()
         );
-        // Optional profile-guided reassignment: re-route varying features to the
-        // protein whose across-sample profile they best track (mass-constrained,
-        // decoy-calibrated). Candidates = mono PFMs of scored proteins.
+        // Optional profile-guided reassignment (design-free: uses across-sample
+        // variation, not labels). Candidates = mono PFMs of scored proteins.
         if cli.profile_reassign {
             let pfms = match_features(&matrix, &db, &config.matching);
             let candidates: Vec<(u32, u32, bool)> = pfms
@@ -422,70 +404,36 @@ fn main() -> Result<()> {
             let before = quant_peptides.len();
             quant_peptides =
                 uno_core::quant::profile_reassign(&matrix, &db, &quant_peptides, &candidates, 0.5, 0.25);
-            log::info!(
-                "profile-reassign: {} candidates, {} -> {} peptide-features",
-                candidates.len(),
-                before,
-                quant_peptides.len()
-            );
+            log::info!("profile-reassign: {} candidates, {} -> {} peptide-features", candidates.len(), before, quant_peptides.len());
         }
-        // Group-aware quant: indistinguishable proteins -> one group, quantified on
-        // group-unique peptides only (cross-group-shared peptides excluded).
+        // Group indistinguishable proteins; assign each peptide to one group
+        // (unique + razor). Abundance = per-run sum of a group's peptide-features.
         let (groups, pep_group) =
             uno_core::group::build_groups(&db, &quant_peptides, &id_confident);
         let members = uno_core::group::members_by_leading(&groups);
-        log::info!(
-            "protein groups: {} groups from quant peptides; {} group-unique peptides",
-            groups.len(),
-            pep_group.len()
-        );
-        let (quant, col_a, col_b) = if let Some(spec) = &cli.dilution {
-            let levels = uno_core::quant::resolve_levels(&matrix.run_names, &design, spec)?;
-            log::info!("quant dilution: {} levels, {} runs", levels.len(), levels.iter().map(|(r, _)| r.len()).sum::<usize>());
-            let q = uno_core::quant::monotonic(&matrix, &db, &quant_peptides, &pep_group, &levels, 2);
-            (q, "low".to_string(), "high".to_string())
-        } else {
-            let contrast = cli.contrast.as_ref().context("--out-quant requires --contrast or --dilution")?;
-            let (ca, cb) = contrast.split_once(',').context("--contrast must be `condA,condB`")?;
-            let (runs_a, runs_b) = uno_core::quant::resolve_contrast(&matrix.run_names, &design, ca, cb)?;
-            log::info!("quant contrast {ca}(n={}) vs {cb}(n={})", runs_a.len(), runs_b.len());
-            let q = uno_core::quant::differential(&matrix, &db, &quant_peptides, &pep_group, &runs_a, &runs_b, 2);
-            (q, ca.to_string(), cb.to_string())
-        };
-        let stat_col = if cli.dilution.is_some() { "median_rho" } else { "log2fc" };
+        let n_runs = matrix.run_names.len();
+        let ab = uno_core::quant::group_abundance(&matrix, &quant_peptides, &pep_group, n_runs);
+        log::info!("protein groups: {} groups, {} quantified", groups.len(), ab.len());
+
         let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
-        writeln!(
-            w,
-            "accession\tdecoy\tn_group_members\tgroup_members\tn_peptides\tn_significant\tk\t{stat_col}\tabundance_{col_a}\tabundance_{col_b}\tp_value\tq_value"
-        )?;
-        for q in &quant {
-            let mem = members.get(&q.accession);
-            let n_mem = mem.map(|m| m.len()).unwrap_or(1);
-            let mem_str = mem.map(|m| m.join(";")).unwrap_or_else(|| q.accession.clone());
-            writeln!(
-                w,
-                "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{:.3}\t{:.4e}\t{:.4e}\t{:.3e}\t{:.4e}",
-                q.accession,
-                q.decoy as u8,
-                n_mem,
-                mem_str,
-                q.n_peptides,
-                q.n_significant,
-                q.k,
-                q.log2_fc,
-                q.abundance_a,
-                q.abundance_b,
-                q.p_value,
-                q.q_value
-            )?;
+        write!(w, "accession\tn_group_members\tgroup_members\tn_peptides")?;
+        for rn in &matrix.run_names {
+            write!(w, "\t{rn}")?;
         }
-        let de = quant.iter().filter(|q| !q.decoy && q.q_value <= 0.05).count();
-        log::info!(
-            "wrote {} proteins to {} ({} differentially expressed at 5% FDR)",
-            quant.len(),
-            path.display(),
-            de
-        );
+        writeln!(w)?;
+        let mut rows: Vec<(&String, &(Vec<f64>, std::collections::HashSet<u32>))> = ab.iter().collect();
+        rows.sort_by(|a, b| a.0.cmp(b.0));
+        for (leading, (ints, peps)) in rows {
+            let mem = members.get(leading);
+            let n_mem = mem.map(|m| m.len()).unwrap_or(1);
+            let mem_str = mem.map(|m| m.join(";")).unwrap_or_else(|| leading.clone());
+            write!(w, "{}\t{}\t{}\t{}", leading, n_mem, mem_str, peps.len())?;
+            for v in ints {
+                write!(w, "\t{:.5e}", v)?;
+            }
+            writeln!(w)?;
+        }
+        log::info!("wrote {} protein groups to {}", ab.len(), path.display());
     }
 
     Ok(())

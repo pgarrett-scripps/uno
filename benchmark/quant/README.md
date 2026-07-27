@@ -1,25 +1,31 @@
-# MS1 quant prototype (Steps 1-4)
+# MS1 quant: uno output + downstream stats
 
-Dev/validation tools for uno's multi-sample quant, validated on the IonStar
-benchmark (PXD003881: human constant, E. coli spiked A=3.3% .. E=90%).
+uno is an ID + quant tool. For a multi-sample (koth-aligned) matrix it emits a
+protein-group x sample ABUNDANCE matrix and stops there:
 
-- `make_consensus.py` — STAND-IN for koth_align: builds a koth-schema
-  `intensity_matrix.tsv` from per-run koth `features.parquet` by mass+RT+charge
-  clustering. Detected-only (NO MBR) because the raw mzML/hills were deleted.
-  Replace with real `koth_align` output (same schema) once raw data is available.
-- `de_proto.py` — DirectMS1Quant-style protein DE test (co-direction k +
-  decoy-calibrated FDR). Prototype for the eventual Rust `--out-quant`.
+    uno --matrix intensity_matrix.tsv --matrix-min-runs N --fasta db.fasta \
+        --rt-model <model> --profile-reassign --out-abundance abundance.tsv
 
-## Validation status (A vs E, 3 reps each)
-- Step 1 (`--matrix` search): WORKS. min_runs>=3 -> 1011 proteins @1%
-  (860 human + 151 ecoli), decoy FDR 0.9%.
-- Step 3 (DE): APPROACH VALIDATED IN PRINCIPLE — confident ecoli proteins get
-  mean co-direction k=3.77 vs human 1.72 (frac k>=3: 0.67 vs 0.19).
-- KNOWN GAPS before production:
-  1. `--out-peptides` emits the best-MASS feature (no RT gate) -> mass-coincident
-     human contamination flattens many ecoli peptides. Needs the RT-gated feature
-     uno actually used (thread `pep_best` out of score.rs).
-  2. No MBR (stand-in consensus) -> on/off DE peptides (present in E, absent in A)
-     are missing-value-dominated. Real koth_align MBR fixes this.
-  3. Normalize to the constant species / median-of-non-changing, not equal total
-     (IonStar: equal-total normalization makes human appear to drift).
+That path does the quant-correctness work internally (design-free):
+feature competition (1 peak -> 1 protein), profile-guided reassignment (route a
+feature to the protein whose across-sample profile it tracks), and protein grouping
+(indistinguishable proteins -> one group; unique + razor peptides). No design,
+no differential testing, no FDR — those belong downstream.
+
+## Downstream stats (this is NOT uno)
+`de_validate.py` is an example downstream analysis (MSstats/limma-style) that takes
+uno's abundance matrix + an experimental design and calls what changed. It also
+scores against the IonStar species ground truth, so it doubles as our validation
+harness. Design is inferred from run-name substrings; no design file needed here.
+
+    python de_validate.py abundance.tsv --dilution A:1,B:2,C:3,D:4,E:5   # order only
+    python de_validate.py abundance.tsv --contrast A,E
+
+## Validation status (IonStar PXD003881, full real-MBR matrix, all 5 levels)
+Downstream dilution DE on uno's abundance matrix: ecoli 54/100 @5% FDR (92%
+precision), 58% @10%, 64% @20%. Human (true-negative) stays the false-positive
+class. Recall is higher than the old in-uno peptide-level test because the
+protein-level trend over 20 runs has more power, on uno's clean abundances.
+
+`make_consensus.py` is a stand-in for koth_align (builds a matrix from per-run
+features) kept for when raw data isn't available.
