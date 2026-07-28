@@ -1,276 +1,204 @@
-//! Input contract: read the aligned LFQ matrix produced by `koth_align`.
+//! Input contract: read a SINGLE-RUN biosaur2 feature file (`*.features.tsv`).
 //!
-//! `uno` does not read raw data or find features. Its input is koth's
-//! consensus/aligned output. Three sibling files share the same row order and
-//! the same leading metadata columns:
-//!   - `intensity_matrix.tsv` — metadata + one integrated-intensity column per sample
-//!   - `qvalue_matrix.tsv`    — metadata + one target-decoy q-value column per sample
-//!   - `consensus_features.tsv` — metadata only (+ `n_runs_detected`)
+//! This module reads a pre-computed feature table; it does not touch raw data.
+//! (uno can also find features from raw data itself via the built-in koth
+//! finder — see `uno::koth_ingest` / `--raw` — which produces the same
+//! `FeatureMatrix` this loader does.) Its input is one run's biosaur2 feature
+//! table (optionally normalized by koth's per-run pass) — the SAME single-run
+//! input ms1searchpy consumes. This is deliberate: a single-run
+//! feature file carries the per-feature quality columns (`cosine_score`,
+//! `isotope_score`, `ppm_error`, `neutron_offset`, `isoerror`, `nScans`, ...)
+//! that separate real peptides from random mass coincidences (and shuffled
+//! decoys) in the PFM ML step. Those columns are the whole point of MS1 search;
+//! uno must be fed a single run, never a cross-run summary that drops them.
 //!
-//! Metadata columns (koth): massCalib, mz, charge, rtApex, im, combined_score,
-//! seed_run, n_contributing_runs[, n_runs_detected]. `im` is empty for data
-//! without ion mobility (e.g. Orbitrap).
+//! Columns are located BY NAME (order-independent). Required: `massCalib`, `mz`,
+//! `charge`, `rtApex`. Everything else is optional and read if present, with
+//! biosaur2 name aliases (`nIsotopes`↔`n_isotopes`, `nScans`↔`n_scans`).
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use std::path::Path;
 
-/// Columns koth writes as feature metadata. Everything else in a matrix file is
-/// treated as a per-sample value column, in file order.
-const META_COLUMNS: &[&str] = &[
-    "massCalib",
-    "mz",
-    "charge",
-    "rtApex",
-    "im",
-    "combined_score",
-    "seed_run",
-    "n_contributing_runs",
-    "n_runs_detected",
-    // Optional per-feature shape descriptors (e.g. from biosaur2). Present for
-    // single-run searches; absent on koth aligned matrices. Used by the learned
-    // discriminant to downweight junk features (which contribute random
-    // target+decoy matches) relative to well-formed ones.
-    "n_isotopes",
-    "n_scans",
-    // Optional biosaur2 discriminators (single-run): isotope-pattern fit error and
-    // RT peak width. These separate real peptides from random mass-coincidence
-    // (incl. shuffled decoys) where n_isotopes/n_scans cannot — the signal the PFM
-    // ML rescorer needs. Absent on koth aligned matrices.
-    "isoerror",
-    "isoerror2",
-    "rt_width",
-];
-
-/// One consensus LC-MS feature: a deisotoped, charge-resolved, RT-aligned
-/// precursor mass shared across runs. This is what we try to assign a peptide to.
+/// One LC-MS feature from a single run: a deisotoped, charge-resolved precursor
+/// mass at an apex RT, that we try to assign a peptide to.
 #[derive(Debug, Clone)]
 pub struct Feature {
-    /// Monoisotopic neutral mass (Da), in koth reference-run space.
+    /// Monoisotopic neutral mass (Da).
     pub mass: f64,
     /// Monoisotopic m/z.
     pub mz: f64,
     pub charge: u8,
-    /// Apex retention time (minutes), reference-run space.
+    /// Apex retention time (minutes).
     pub rt: f64,
     /// Ion mobility (1/K0); `None` when the data has no IM dimension.
     pub im: Option<f64>,
-    /// koth feature-quality score (isotope x coelution), in [0, 1].
+    /// Feature-quality score (isotope x coelution), in [0, 1]. Defaults to 1.0
+    /// when the input has no `combined_score` column.
     pub combined_score: f64,
-    /// Number of runs contributing a detection to this consensus feature.
+    /// Retained inert (always 1 for single-run input) so the ML featurizer that
+    /// reads it stays stable; carries no cross-run meaning.
     pub n_contributing_runs: u32,
-    /// Optional per-feature shape descriptors (number of isotopic peaks and
-    /// number of scans the feature spans). `None` when the matrix lacks them.
+    /// Per-feature shape descriptors: number of isotopic peaks and number of
+    /// scans the feature spans (biosaur2 `nIsotopes`/`nScans`). `None` if absent.
     pub n_isotopes: Option<f64>,
     pub n_scans: Option<f64>,
-    /// Optional biosaur2 isotope-pattern fit error (deviation of the observed
-    /// isotope envelope from theory) and RT peak width (minutes). Real peptides
-    /// fit theory tightly; random mass coincidences (and shuffled decoys) do not.
+    /// biosaur2 isotope-pattern fit error (deviation of the observed isotope
+    /// envelope from theory) and RT peak width (minutes). Real peptides fit
+    /// theory tightly; random mass coincidences (and shuffled decoys) do not.
     pub isoerror: Option<f64>,
     pub isoerror2: Option<f64>,
     pub rt_width: Option<f64>,
-    /// Per-sample integrated intensities (aligned to [`FeatureMatrix::run_names`]).
-    /// `0.0` means not detected in that run.
+    /// Per-feature PFM-quality columns. These are the target/decoy discriminators
+    /// the PFM ML rescorer relies on (the same signal ms1searchpy's LightGBM PFM
+    /// filter uses to drop the random-match rate). `None` if the column is absent.
+    pub cosine_score: Option<f64>,
+    pub isotope_score: Option<f64>,
+    pub ppm_error: Option<f64>,
+    pub neutron_offset: Option<f64>,
+    /// Integrated feature intensity (single value). Kept as a 1-element vector so
+    /// the intensity-derived ML features are computed identically.
     pub intensities: Vec<f64>,
-    /// Per-sample koth q-values, if a qvalue matrix was joined. Same order as
-    /// `intensities`. `None` when no qvalue file was supplied.
-    pub q_values: Option<Vec<f64>>,
 }
 
-/// The full aligned feature set: features plus the sample (run) names that index
-/// every per-sample vector.
+/// The single-run feature set.
 #[derive(Debug, Clone)]
 pub struct FeatureMatrix {
+    /// Name of the one intensity column (for logging only).
     pub run_names: Vec<String>,
     pub features: Vec<Feature>,
-}
-
-/// Tolerances for collapsing near-duplicate consensus features (the same
-/// analyte split across the cross-run alignment).
-#[derive(Debug, Clone, serde::Deserialize)]
-#[serde(default)]
-pub struct DedupConfig {
-    pub enabled: bool,
-    pub ppm: f64,
-    pub rt_window: f64,
-    pub im_tol: f64,
-}
-
-impl Default for DedupConfig {
-    fn default() -> Self {
-        DedupConfig {
-            enabled: false,
-            ppm: 10.0,
-            rt_window: 0.15,
-            im_tol: 0.01,
-        }
-    }
 }
 
 impl FeatureMatrix {
     pub fn len(&self) -> usize {
         self.features.len()
     }
-
-    /// Merge near-duplicate consensus features (same charge; mass/RT/IM within
-    /// tolerance). Keeps the highest-`combined_score` member as representative,
-    /// taking the per-sample MAX intensity (and MIN q-value) across the cluster
-    /// so a split analyte's evidence is consolidated, not double-counted.
-    /// Returns the number of features removed.
-    pub fn dedup(&mut self, cfg: &DedupConfig) -> usize {
-        let n = self.features.len();
-        // index sorted by (charge, mass)
-        let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by(|&a, &b| {
-            let fa = &self.features[a];
-            let fb = &self.features[b];
-            fa.charge
-                .cmp(&fb.charge)
-                .then(fa.mass.partial_cmp(&fb.mass).unwrap())
-        });
-
-        let mut removed = vec![false; n];
-        let mut i = 0;
-        while i < n {
-            let a = order[i];
-            if removed[a] {
-                i += 1;
-                continue;
-            }
-            // gather a cluster of following features within tolerance of `a`
-            let (ma, za, rta, ima) = (
-                self.features[a].mass,
-                self.features[a].charge,
-                self.features[a].rt,
-                self.features[a].im,
-            );
-            let mut members = vec![a];
-            let mut j = i + 1;
-            while j < n {
-                let b = order[j];
-                if self.features[b].charge != za {
-                    break;
-                }
-                if (self.features[b].mass - ma) / ma * 1e6 > cfg.ppm {
-                    break;
-                }
-                if !removed[b]
-                    && (self.features[b].rt - rta).abs() <= cfg.rt_window
-                    && match (ima, self.features[b].im) {
-                        (Some(x), Some(y)) => (x - y).abs() <= cfg.im_tol,
-                        _ => true,
-                    }
-                {
-                    members.push(b);
-                    removed[b] = true;
-                }
-                j += 1;
-            }
-            if members.len() > 1 {
-                // representative = highest combined_score
-                let rep = *members
-                    .iter()
-                    .max_by(|&&x, &&y| {
-                        self.features[x]
-                            .combined_score
-                            .partial_cmp(&self.features[y].combined_score)
-                            .unwrap()
-                    })
-                    .unwrap();
-                let n_samples = self.features[rep].intensities.len();
-                let mut merged_int = vec![0.0f64; n_samples];
-                let mut merged_q = self.features[rep].q_values.clone();
-                let mut max_contrib = 0u32;
-                for &m in &members {
-                    max_contrib = max_contrib.max(self.features[m].n_contributing_runs);
-                    for s in 0..n_samples {
-                        merged_int[s] = merged_int[s].max(self.features[m].intensities[s]);
-                    }
-                    if let (Some(mq), Some(q)) = (merged_q.as_mut(), self.features[m].q_values.as_ref()) {
-                        for s in 0..n_samples {
-                            mq[s] = mq[s].min(q[s]);
-                        }
-                    }
-                }
-                self.features[rep].intensities = merged_int;
-                self.features[rep].q_values = merged_q;
-                self.features[rep].n_contributing_runs = max_contrib;
-                removed[rep] = false; // keep the representative
-                for &m in &members {
-                    if m != rep {
-                        removed[m] = true;
-                    }
-                }
-            }
-            i += 1;
-        }
-
-        let kept: Vec<Feature> = self
-            .features
-            .drain(..)
-            .enumerate()
-            .filter_map(|(idx, f)| if removed[idx] { None } else { Some(f) })
-            .collect();
-        let n_removed = n - kept.len();
-        self.features = kept;
-        n_removed
-    }
     pub fn is_empty(&self) -> bool {
         self.features.is_empty()
     }
+    /// Number of runs — always 1 (single-run input).
     pub fn n_samples(&self) -> usize {
         self.run_names.len()
     }
 
-    /// Load the aligned matrix from koth's `intensity_matrix.tsv`. If
-    /// `qvalue_path` is given, per-sample q-values are joined by row index
-    /// (the files must share row order and sample columns, which koth guarantees).
-    pub fn load(
-        intensity_path: impl AsRef<Path>,
-        qvalue_path: Option<impl AsRef<Path>>,
-    ) -> Result<Self> {
-        let (run_names, rows) = read_matrix(intensity_path.as_ref())
-            .with_context(|| "reading intensity matrix")?;
-
-        let q_rows = match qvalue_path {
-            Some(p) => {
-                let (q_runs, q_rows) =
-                    read_matrix(p.as_ref()).with_context(|| "reading qvalue matrix")?;
-                if q_runs != run_names {
-                    bail!(
-                        "qvalue matrix sample columns ({}) do not match intensity matrix ({})",
-                        q_runs.len(),
-                        run_names.len()
-                    );
-                }
-                if q_rows.len() != rows.len() {
-                    bail!(
-                        "qvalue matrix has {} rows but intensity matrix has {}",
-                        q_rows.len(),
-                        rows.len()
-                    );
-                }
-                Some(q_rows)
-            }
-            None => None,
-        };
-
+    /// Load a single-run biosaur2 feature file (`*.features.tsv`).
+    pub fn load(features_path: impl AsRef<Path>) -> Result<Self> {
+        let (intensity_name, rows) =
+            read_features(features_path.as_ref()).with_context(|| "reading feature file")?;
         let features = rows
             .into_iter()
-            .enumerate()
-            .map(|(i, row)| {
-                let q = q_rows.as_ref().map(|qr| qr[i].values.clone());
-                row.into_feature(q)
-            })
-            .collect::<Result<Vec<_>>>()?;
-
+            .map(MatrixRow::into_feature)
+            .collect::<Vec<_>>();
         Ok(FeatureMatrix {
-            run_names,
+            run_names: vec![intensity_name],
             features,
         })
     }
+
+    /// Load a koth-aligned consensus matrix (`intensity_matrix.tsv`): one row per
+    /// consensus feature, with the leading columns `massCalib, mz, charge, rtApex,
+    /// im, combined_score, seed_run, n_contributing_runs` followed by one
+    /// intensity column per run. Unlike single-run input, each feature carries the
+    /// FULL per-run intensity vector (`intensities`) — that's what the multi-sample
+    /// quant rollup consumes, and the ID featurizer already reads `n_detected`
+    /// (runs with signal) and `sum_int` from it. The per-feature single-run quality
+    /// columns (cosine/isotope/ppm/nScans) are absent here and read as `None`
+    /// (inert in the featurizer); `combined_score` and `n_contributing_runs`
+    /// survive alignment and are used.
+    ///
+    /// `min_runs` drops consensus features detected in fewer than that many runs.
+    /// This filter is REQUIRED for aligned-matrix search, not cosmetic: alignment
+    /// discards the per-feature `nIsotopes` column that uno's single-run path uses
+    /// to reject junk, so without a reproducibility floor the random-match
+    /// background `p` climbs to ~0.83 and the binomial finds nothing. A real
+    /// peptide is detected across replicates; single-run features are dominated by
+    /// noise. `min_runs = 2` is a safe floor (won't drop a condition-specific
+    /// peptide that has ≥2 replicates).
+    pub fn load_matrix(path: impl AsRef<Path>, min_runs: u32) -> Result<Self> {
+        let path = path.as_ref();
+        let mut rdr = csv::ReaderBuilder::new()
+            .delimiter(b'\t')
+            .flexible(false)
+            .from_path(path)
+            .with_context(|| format!("opening {}", path.display()))?;
+        let header = rdr.headers()?.clone();
+        let col = |name: &str| -> Result<usize> {
+            header
+                .iter()
+                .position(|h| h == name)
+                .ok_or_else(|| anyhow!("aligned matrix missing column `{name}`"))
+        };
+        let (c_mass, c_mz, c_charge, c_rt) =
+            (col("massCalib")?, col("mz")?, col("charge")?, col("rtApex")?);
+        let c_im = header.iter().position(|h| h == "im");
+        let c_cs = header.iter().position(|h| h == "combined_score");
+        let c_ncr = col("n_contributing_runs")?;
+        // Run intensity columns are everything after `n_contributing_runs`.
+        let first_run = c_ncr + 1;
+        if first_run >= header.len() {
+            return Err(anyhow!("aligned matrix has no run intensity columns"));
+        }
+        let run_names: Vec<String> = header.iter().skip(first_run).map(|s| s.to_string()).collect();
+
+        let parse = |rec: &csv::StringRecord, c: usize, what: &str, line: usize| -> Result<f64> {
+            rec.get(c)
+                .unwrap_or("")
+                .parse::<f64>()
+                .map_err(|_| anyhow!("line {line}: cannot parse {what}"))
+        };
+        let mut features = Vec::new();
+        for (n, rec) in rdr.records().enumerate() {
+            let line = n + 2;
+            let rec = rec.with_context(|| format!("reading record at line {line}"))?;
+            let intensities: Vec<f64> = (first_run..header.len())
+                .map(|c| rec.get(c).unwrap_or("0").trim().parse::<f64>().unwrap_or(0.0))
+                .collect();
+            // Reproducibility floor uses koth's `n_contributing_runs` — the number
+            // of runs that DETECTED the feature, NOT the count of non-zero cells.
+            // With MBR, nearly every cell is filled, so counting non-zero cells
+            // would pass ~all junk (defeating the floor); the detected count still
+            // discriminates. Falls back to the non-zero count if the column is
+            // absent (e.g. an older matrix without it).
+            let n_detected = rec
+                .get(c_ncr)
+                .and_then(|s| s.trim().parse::<u32>().ok())
+                .unwrap_or_else(|| intensities.iter().filter(|&&x| x > 0.0).count() as u32);
+            if n_detected < min_runs {
+                continue;
+            }
+            let im = c_im
+                .and_then(|c| rec.get(c))
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .and_then(|s| s.parse::<f64>().ok());
+            let combined_score = c_cs
+                .and_then(|c| rec.get(c))
+                .and_then(|s| s.trim().parse::<f64>().ok())
+                .unwrap_or(1.0);
+            features.push(Feature {
+                mass: parse(&rec, c_mass, "massCalib", line)?,
+                mz: parse(&rec, c_mz, "mz", line)?,
+                charge: parse(&rec, c_charge, "charge", line)? as u8,
+                rt: parse(&rec, c_rt, "rtApex", line)?,
+                im,
+                combined_score,
+                n_contributing_runs: n_detected.max(1),
+                n_isotopes: None,
+                n_scans: None,
+                isoerror: None,
+                isoerror2: None,
+                rt_width: None,
+                cosine_score: None,
+                isotope_score: None,
+                ppm_error: None,
+                neutron_offset: None,
+                intensities,
+            });
+        }
+        Ok(FeatureMatrix { run_names, features })
+    }
 }
 
-/// A parsed matrix row: metadata fields plus the per-sample value vector.
+/// A parsed feature row.
 struct MatrixRow {
     mass: f64,
     mz: f64,
@@ -278,53 +206,61 @@ struct MatrixRow {
     rt: f64,
     im: Option<f64>,
     combined_score: f64,
-    n_contributing_runs: u32,
     n_isotopes: Option<f64>,
     n_scans: Option<f64>,
     isoerror: Option<f64>,
     isoerror2: Option<f64>,
     rt_width: Option<f64>,
-    values: Vec<f64>,
+    cosine_score: Option<f64>,
+    isotope_score: Option<f64>,
+    ppm_error: Option<f64>,
+    neutron_offset: Option<f64>,
+    intensity: f64,
 }
 
 impl MatrixRow {
-    fn into_feature(self, q_values: Option<Vec<f64>>) -> Result<Feature> {
-        Ok(Feature {
+    fn into_feature(self) -> Feature {
+        Feature {
             mass: self.mass,
             mz: self.mz,
             charge: self.charge,
             rt: self.rt,
             im: self.im,
             combined_score: self.combined_score,
-            n_contributing_runs: self.n_contributing_runs,
+            n_contributing_runs: 1,
             n_isotopes: self.n_isotopes,
             n_scans: self.n_scans,
             isoerror: self.isoerror,
             isoerror2: self.isoerror2,
             rt_width: self.rt_width,
-            intensities: self.values,
-            q_values,
-        })
+            cosine_score: self.cosine_score,
+            isotope_score: self.isotope_score,
+            ppm_error: self.ppm_error,
+            neutron_offset: self.neutron_offset,
+            intensities: vec![self.intensity],
+        }
     }
 }
 
-/// Index of each metadata column within a matrix header, plus the list of
-/// sample-column indices (everything that is not metadata).
+/// Column indices within a single-run feature-file header, located by name.
 struct Layout {
     mass: usize,
     mz: usize,
     charge: usize,
     rt: usize,
-    im: usize,
-    combined_score: usize,
-    n_contributing_runs: usize,
+    im: Option<usize>,
+    combined_score: Option<usize>,
     n_isotopes: Option<usize>,
     n_scans: Option<usize>,
     isoerror: Option<usize>,
     isoerror2: Option<usize>,
     rt_width: Option<usize>,
-    sample_cols: Vec<usize>,
-    sample_names: Vec<String>,
+    cosine_score: Option<usize>,
+    isotope_score: Option<usize>,
+    ppm_error: Option<usize>,
+    neutron_offset: Option<usize>,
+    intensity: Option<usize>,
+    intensity_name: String,
 }
 
 impl Layout {
@@ -333,43 +269,43 @@ impl Layout {
             header
                 .iter()
                 .position(|h| h == name)
-                .ok_or_else(|| anyhow!("missing required column `{name}` in koth matrix header"))
+                .ok_or_else(|| anyhow!("missing required column `{name}` in feature-file header"))
         };
-        let find_opt = |name: &str| -> Option<usize> { header.iter().position(|h| h == name) };
+        // Find the first present of a set of alias names.
+        let find_any = |names: &[&str]| -> Option<usize> {
+            names.iter().find_map(|&n| header.iter().position(|h| h == n))
+        };
 
-        let mut sample_cols = Vec::new();
-        let mut sample_names = Vec::new();
-        for (i, h) in header.iter().enumerate() {
-            if !META_COLUMNS.contains(&h) {
-                sample_cols.push(i);
-                sample_names.push(h.to_string());
-            }
-        }
-        if sample_names.is_empty() {
-            bail!("koth matrix has no per-sample value columns");
-        }
+        // Intensity: prefer apex, fall back to sum.
+        let (intensity, intensity_name) = match find_any(&["intensityApex", "intensitySum", "intensity"]) {
+            Some(i) => (Some(i), header.get(i).unwrap_or("intensity").to_string()),
+            None => (None, "intensity".to_string()),
+        };
 
         Ok(Layout {
             mass: find("massCalib")?,
             mz: find("mz")?,
             charge: find("charge")?,
             rt: find("rtApex")?,
-            im: find("im")?,
-            combined_score: find("combined_score")?,
-            n_contributing_runs: find("n_contributing_runs")?,
-            n_isotopes: find_opt("n_isotopes"),
-            n_scans: find_opt("n_scans"),
-            isoerror: find_opt("isoerror"),
-            isoerror2: find_opt("isoerror2"),
-            rt_width: find_opt("rt_width"),
-            sample_cols,
-            sample_names,
+            im: find_any(&["im", "ion_mobility", "FAIMS"]),
+            combined_score: find_any(&["combined_score"]),
+            n_isotopes: find_any(&["n_isotopes", "nIsotopes"]),
+            n_scans: find_any(&["n_scans", "nScans"]),
+            isoerror: find_any(&["isoerror"]),
+            isoerror2: find_any(&["isoerror2"]),
+            rt_width: find_any(&["rt_width"]),
+            cosine_score: find_any(&["cosine_score"]),
+            isotope_score: find_any(&["isotope_score"]),
+            ppm_error: find_any(&["ppm_error"]),
+            neutron_offset: find_any(&["neutron_offset"]),
+            intensity,
+            intensity_name,
         })
     }
 }
 
-/// Read a koth matrix TSV. Returns (sample_names, rows).
-fn read_matrix(path: &Path) -> Result<(Vec<String>, Vec<MatrixRow>)> {
+/// Read a single-run feature TSV. Returns (intensity_column_name, rows).
+fn read_features(path: &Path) -> Result<(String, Vec<MatrixRow>)> {
     let mut rdr = csv::ReaderBuilder::new()
         .delimiter(b'\t')
         .flexible(false)
@@ -390,15 +326,11 @@ fn read_matrix(path: &Path) -> Result<(Vec<String>, Vec<MatrixRow>)> {
         let line = n + 2; // 1-based, +1 for header
         let rec = rec.with_context(|| format!("reading record at line {line}"))?;
 
-        let im_raw = rec.get(layout.im).unwrap_or("").trim();
-        let im = if im_raw.is_empty() {
-            None
-        } else {
-            Some(
-                im_raw
-                    .parse::<f64>()
-                    .map_err(|_| anyhow!("line {line}: cannot parse im `{im_raw}`"))?,
-            )
+        let opt_f64 = |col: Option<usize>| -> Option<f64> {
+            col.and_then(|c| rec.get(c))
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .and_then(|s| s.parse::<f64>().ok())
         };
 
         let charge = rec
@@ -406,56 +338,29 @@ fn read_matrix(path: &Path) -> Result<(Vec<String>, Vec<MatrixRow>)> {
             .unwrap_or("")
             .parse::<u8>()
             .map_err(|_| anyhow!("line {line}: cannot parse charge"))?;
-        let n_contributing_runs = rec
-            .get(layout.n_contributing_runs)
-            .unwrap_or("")
-            .parse::<u32>()
-            .map_err(|_| anyhow!("line {line}: cannot parse n_contributing_runs"))?;
-        // Optional shape descriptors: parse if the column exists and is non-empty.
-        let opt_f64 = |col: Option<usize>| -> Option<f64> {
-            col.and_then(|c| rec.get(c))
-                .map(str::trim)
-                .filter(|s| !s.is_empty())
-                .and_then(|s| s.parse::<f64>().ok())
-        };
-        let n_isotopes = opt_f64(layout.n_isotopes);
-        let n_scans = opt_f64(layout.n_scans);
-        let isoerror = opt_f64(layout.isoerror);
-        let isoerror2 = opt_f64(layout.isoerror2);
-        let rt_width = opt_f64(layout.rt_width);
-
-        let values = layout
-            .sample_cols
-            .iter()
-            .map(|&c| {
-                let s = rec.get(c).unwrap_or("").trim();
-                if s.is_empty() {
-                    Ok(0.0)
-                } else {
-                    s.parse::<f64>()
-                        .map_err(|_| anyhow!("line {line}: cannot parse sample value `{s}`"))
-                }
-            })
-            .collect::<Result<Vec<_>>>()?;
 
         rows.push(MatrixRow {
             mass: parse_f64(&rec, layout.mass, "massCalib", line)?,
             mz: parse_f64(&rec, layout.mz, "mz", line)?,
             charge,
             rt: parse_f64(&rec, layout.rt, "rtApex", line)?,
-            im,
-            combined_score: parse_f64(&rec, layout.combined_score, "combined_score", line)?,
-            n_contributing_runs,
-            n_isotopes,
-            n_scans,
-            isoerror,
-            isoerror2,
-            rt_width,
-            values,
+            im: opt_f64(layout.im),
+            // No combined_score column → treat as 1.0 (neutral quality).
+            combined_score: opt_f64(layout.combined_score).unwrap_or(1.0),
+            n_isotopes: opt_f64(layout.n_isotopes),
+            n_scans: opt_f64(layout.n_scans),
+            isoerror: opt_f64(layout.isoerror),
+            isoerror2: opt_f64(layout.isoerror2),
+            rt_width: opt_f64(layout.rt_width),
+            cosine_score: opt_f64(layout.cosine_score),
+            isotope_score: opt_f64(layout.isotope_score),
+            ppm_error: opt_f64(layout.ppm_error),
+            neutron_offset: opt_f64(layout.neutron_offset),
+            intensity: opt_f64(layout.intensity).unwrap_or(0.0),
         });
     }
 
-    Ok((layout.sample_names, rows))
+    Ok((layout.intensity_name, rows))
 }
 
 #[cfg(test)]
@@ -463,42 +368,32 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
-    fn benchmark_dir() -> PathBuf {
-        PathBuf::from("/home/patrick-garrett/Repos/koth_rust/benchmark/data/koth/align_output")
+    fn features_file() -> PathBuf {
+        PathBuf::from(
+            "/home/patrick-garrett/Repos/uno/benchmark/data/run10.features.tsv",
+        )
     }
 
     #[test]
-    fn loads_real_koth_matrix() {
-        let dir = benchmark_dir();
-        let intensity = dir.join("intensity_matrix.tsv");
-        if !intensity.exists() {
-            eprintln!("skipping: benchmark matrix not present at {}", intensity.display());
+    fn loads_single_run_features() {
+        let path = features_file();
+        if !path.exists() {
+            eprintln!("skipping: feature file not present at {}", path.display());
             return;
         }
-        let qvalue = dir.join("qvalue_matrix.tsv");
-        let m = FeatureMatrix::load(&intensity, Some(&qvalue)).expect("load matrix");
-
-        assert_eq!(m.n_samples(), 20, "20 sample columns expected");
-        assert_eq!(m.len(), 55431, "row count");
+        let m = FeatureMatrix::load(&path).expect("load features");
+        assert_eq!(m.n_samples(), 1, "single-run input");
+        assert!(m.len() > 1000, "expected many features, got {}", m.len());
 
         let f = &m.features[0];
-        assert_eq!(f.charge, 2);
-        assert!((f.mass - 798.373104).abs() < 1e-4);
-        assert!((f.rt - 31.237699).abs() < 1e-4);
-        assert!(f.im.is_none(), "Orbitrap data has no ion mobility");
-        assert_eq!(f.intensities.len(), 20);
-        assert!(f.intensities[0] > 0.0);
-        let q = f.q_values.as_ref().expect("q-values joined");
-        assert_eq!(q.len(), 20);
-    }
-
-    #[test]
-    fn loads_without_qvalues() {
-        let intensity = benchmark_dir().join("intensity_matrix.tsv");
-        if !intensity.exists() {
-            return;
-        }
-        let m = FeatureMatrix::load(&intensity, None::<&str>).expect("load");
-        assert!(m.features[0].q_values.is_none());
+        assert!(f.charge >= 1);
+        assert!(f.mass > 0.0);
+        assert_eq!(f.intensities.len(), 1);
+        // The quality columns that separate target from decoy must be present on
+        // single-run input (the reason we do not use aligned matrices).
+        assert!(
+            f.cosine_score.is_some() || f.isotope_score.is_some(),
+            "single-run features must carry PFM-quality columns"
+        );
     }
 }

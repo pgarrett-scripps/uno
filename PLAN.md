@@ -1,10 +1,11 @@
 # uno — MS1-only search engine (Rust)
 
-A Rust MS1-only protein identification + quantitation engine, in the spirit of
-DirectMS1 / ms1searchpy. `uno` does **not** read raw data or find features — it
-consumes the aligned LFQ matrix produced by [koth_rust](../koth_rust), assigns
-peptide/protein identities, controls FDR, and rolls koth's intensities up into
-peptide/protein quant matrices.
+A Rust MS1-only protein identification engine, in the spirit of DirectMS1 /
+ms1searchpy. `uno` does **not** read raw data or find features — it consumes a
+**single-run biosaur2 feature file** (`*.features.tsv`), the same input
+ms1searchpy uses, assigns peptide/protein identities, and controls FDR.
+Single-run input is required: it carries the per-feature quality columns that
+separate target from decoy, which cross-run alignment strips out.
 
 It is, in effect, a Rust port of the [blitzms1](../blitzms1) (Python) search
 backend, with digestion from [sage-core](../sage) and RT prediction distilled
@@ -23,9 +24,9 @@ from DeepLC (per [sherlock](../sherlock)).
 ```
 FASTA ─► sage-core digest ─► mass-sorted peptide DB (+reversed decoys)
                                      │  binary search ±ppm, ±isotope-err
-koth aligned matrix ──► Feature ─────┘─► Peptide-Feature Matches (PFMs)
+single-run features ──► Feature ─────┘─► Peptide-Feature Matches (PFMs)
  (massCalib, charge, rtApex, im,                 │
-  combined_score, q, per-sample intens.)         ▼
+  combined_score, cosine/isotope_score, ...)     ▼
                               per-PFM features ─► distilled RT model
                                                  ─► bootstrap calibration
                                                  ─► GBDT discriminant (CV'd)
@@ -46,12 +47,12 @@ Dependencies: `sage-core` (path), `gbdt` (RT model + scorer), `rayon`, `serde`,
 
 ## Input contract (the seam — lock first)
 
-Read koth `consensus_features.tsv` + `intensity_matrix.tsv` + `qvalue_matrix.tsv`:
+Read a single-run biosaur2 `*.features.tsv` (columns located by name):
 
 ```
-Feature { mass: f64, charge: u8, rt: f64, im: f64,
-          combined_score: f64, koth_q: f64,
-          intensities: Vec<f64> }   // per sample, aligned to run_names
+Feature { mass: f64, charge: u8, rt: f64, im: Option<f64>,
+          combined_score: f64, cosine_score/isotope_score/ppm_error/... : Option<f64>,
+          intensities: Vec<f64> }   // single-run intensity (1 element)
 ```
 
 RT is already in koth's reference-run space → single calibration, not per-file.
@@ -71,8 +72,8 @@ RT is already in koth's reference-run space → single calibration, not per-file
    rescore. **3-fold CV by peptide to prevent decoy overfit (see below).** Target/decoy FDR.
 6. **Protein inference + protein FDR.** Greedy peptide→protein assignment; protein-level
    aggregate score; protein-level target/decoy FDR.
-7. **Quant rollup.** Map identified peptides/proteins onto koth per-sample intensities →
-   peptide & protein quant matrices. (No requant — koth already did XIC/LFQ.)
+   (Quant rollup was removed — uno is identification-only. Single-run input,
+   protein output.)
 
 ## Critical notes
 
@@ -120,8 +121,8 @@ Built and verified phases 1–4 end-to-end. Phase 5 surfaced the real science of
 
 ### Current dev invocation
 ```
-uno --intensity-matrix .../intensity_matrix.tsv --qvalue-matrix .../qvalue_matrix.tsv \
-    --fasta .../human_ecoli.fasta --rt-model models/rt_*.gbdt --config <toml> --out-peptides out.tsv
+uno --features .../run.features.tsv \
+    --fasta .../human_ecoli.fasta --rt-model models/rt_*.urtc --config <toml> --out-proteins out.tsv
 ```
 RT model: `uno-rt-train --labels rt_deeplc.tsv --out model.gbdt` (distill from DeepLC labels).
 `uno-rt-train --predict-seqs <file>` validates a model against known peptides.

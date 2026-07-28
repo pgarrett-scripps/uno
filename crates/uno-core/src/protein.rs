@@ -7,9 +7,6 @@
 //! by a binomial surprise (how unlikely its peptide count is by chance)
 //! concentrates the signal. This is how DirectMS1/ms1searchpy reach depth.
 
-use crate::database::PeptideDb;
-use crate::score::{Identification, PeptideMatch};
-use rayon::prelude::*;
 use std::cmp::Ordering;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BinaryHeap;
@@ -182,7 +179,7 @@ fn betacf(a: f64, b: f64, x: f64) -> f64 {
 }
 
 /// Regularized incomplete beta function I_x(a, b).
-fn betai(a: f64, b: f64, x: f64) -> f64 {
+pub(crate) fn betai(a: f64, b: f64, x: f64) -> f64 {
     if x <= 0.0 {
         return 0.0;
     }
@@ -836,33 +833,50 @@ pub(crate) fn score_proteins_feature_compete(
     }
     let mut obs: FxHashMap<(bool, &str), usize> =
         prot_peps.iter().map(|(&k, v)| (k, v.len())).collect();
-    let mut by_n: FxHashMap<usize, Vec<(bool, &str)>> = FxHashMap::default();
-    for &k in prot_peps.keys() {
-        let n = theo_of(&k);
-        if n > 0 {
-            by_n.entry(n).or_default().push(k);
-        }
-    }
     let decoy_theo_f = decoy_theo.max(1) as f64;
     let mut decoy_obs_sum: f64 =
         obs.iter().filter(|((d, _), _)| *d).map(|(_, &c)| c as f64).sum();
 
-    fn best_for_n<'a>(
-        n: usize,
-        by_n: &FxHashMap<usize, Vec<(bool, &'a str)>>,
+    // Per-theoretical-count (bucket) selection of the max-observed protein.
+    //
+    // `obs[k]` only ever DECREASES over the greedy (peptides get removed as their
+    // peaks are claimed; the winner is zeroed). Exploit that monotonicity: keep,
+    // per bucket `n`, a lazy max-heap of `(obs_snapshot, Reverse(key))`. The head
+    // is the current best UNLESS its snapshot is stale (obs decremented since it
+    // was pushed); on read we pop stale/zeroed heads, re-pushing decremented ones
+    // at their current count, until the head's snapshot matches its live `obs`.
+    // Because `obs` is non-increasing and every live key holds exactly one heap
+    // entry with `snapshot >= live obs`, the first head with `snapshot == live`
+    // is the exact `max_by_key(obs, Reverse(key))` the old full-bucket rescan
+    // returned — byte-identical selection, but amortized O(log) per read instead
+    // of O(bucket_size). (The old rescan cost O(iters * bucket_size) ~ billions of
+    // scans; this bounds re-pushes by the total peptide-removal count.)
+    type BucketHeap<'a> = std::collections::BinaryHeap<(usize, std::cmp::Reverse<(bool, &'a str)>)>;
+    #[inline]
+    fn peek_best<'a>(
+        heap: &mut BucketHeap<'a>,
         obs: &FxHashMap<(bool, &'a str), usize>,
-    ) -> Option<(bool, &'a str)> {
-        by_n.get(&n).and_then(|ks| {
-            ks.iter()
-                .filter(|k| obs.get(*k).copied().unwrap_or(0) > 0)
-                .max_by_key(|k| (obs[*k], std::cmp::Reverse(**k)))
-                .copied()
-        })
+    ) -> Option<(usize, (bool, &'a str))> {
+        while let Some(&(snap, std::cmp::Reverse(key))) = heap.peek() {
+            let cur = obs.get(&key).copied().unwrap_or(0);
+            if cur == 0 {
+                heap.pop();
+                continue;
+            }
+            if cur < snap {
+                heap.pop();
+                heap.push((cur, std::cmp::Reverse(key)));
+                continue;
+            }
+            return Some((cur, key));
+        }
+        None
     }
-    let mut best_per_n: FxHashMap<usize, (bool, &str)> = FxHashMap::default();
-    for &n in by_n.keys() {
-        if let Some(k) = best_for_n(n, &by_n, &obs) {
-            best_per_n.insert(n, k);
+    let mut heaps: FxHashMap<usize, BucketHeap> = FxHashMap::default();
+    for (&k, &c) in &obs {
+        let n = theo_of(&k);
+        if n > 0 && c > 0 {
+            heaps.entry(n).or_default().push((c, std::cmp::Reverse(k)));
         }
     }
 
@@ -870,14 +884,19 @@ pub(crate) fn score_proteins_feature_compete(
     let (mut t, mut d) = (0usize, 0usize);
     let mut dead: FxHashSet<usize> = FxHashSet::default();
     let mut banned_feat: FxHashSet<usize> = FxHashSet::default();
+    let mut empty_buckets: Vec<usize> = Vec::new();
     loop {
         let p = (decoy_obs_sum / decoy_theo_f).clamp(1e-9, 0.999);
         let mut best: Option<((bool, &str), f64, usize, usize)> = None;
-        for (&n, &k) in &best_per_n {
-            let kobs = obs.get(&k).copied().unwrap_or(0);
-            if kobs == 0 {
-                continue;
-            }
+        empty_buckets.clear();
+        for (&n, heap) in heaps.iter_mut() {
+            let (kobs, k) = match peek_best(heap, &obs) {
+                Some(x) => x,
+                None => {
+                    empty_buckets.push(n);
+                    continue;
+                }
+            };
             let s = -binom_sf_ge_k(kobs as u32, n as u32, p).log10();
             let better = match best {
                 None => true,
@@ -886,6 +905,9 @@ pub(crate) fn score_proteins_feature_compete(
             if better {
                 best = Some((k, s, kobs, n));
             }
+        }
+        for n in empty_buckets.drain(..) {
+            heaps.remove(&n);
         }
         let (key, score, kobs, n) = match best {
             Some(x) => x,
@@ -945,7 +967,8 @@ pub(crate) fn score_proteins_feature_compete(
                 _ => to_kill.push(*pi),
             }
         }
-        let mut dirty_n: FxHashSet<usize> = FxHashSet::default();
+        // Removing peptides only DECREMENTS `obs`; the per-bucket lazy heaps pick up
+        // the new counts on their next read (no eager bucket recompute needed).
         for pj in to_kill {
             if !dead.insert(pj) {
                 continue;
@@ -960,7 +983,6 @@ pub(crate) fn score_proteins_feature_compete(
                             if k2.0 {
                                 decoy_obs_sum -= 1.0;
                             }
-                            dirty_n.insert(theo_of(&k2));
                         }
                     }
                 }
@@ -970,17 +992,6 @@ pub(crate) fn score_proteins_feature_compete(
         obs.insert(key, 0);
         if let Some(s) = prot_peps.get_mut(&key) {
             s.clear();
-        }
-        dirty_n.insert(n);
-        for dn in dirty_n {
-            match best_for_n(dn, &by_n, &obs) {
-                Some(k) => {
-                    best_per_n.insert(dn, k);
-                }
-                None => {
-                    best_per_n.remove(&dn);
-                }
-            }
         }
     }
     proteins.sort_by(|a, b| {
@@ -1024,563 +1035,4 @@ pub(crate) fn score_proteins_feature_compete(
         proteins[i].q_value = run.min(1.0);
     }
     proteins
-}
-
-/// Solve `A x = b` for a 6x6 system by Gauss-Jordan with partial pivoting.
-/// Returns None if singular. Deterministic.
-fn solve6(a: &[[f64; 6]; 6], b: &[f64; 6]) -> Option<[f64; 6]> {
-    let mut m = *a;
-    let mut r = *b;
-    for col in 0..6 {
-        let mut piv = col;
-        for k in (col + 1)..6 {
-            if m[k][col].abs() > m[piv][col].abs() {
-                piv = k;
-            }
-        }
-        if m[piv][col].abs() < 1e-12 {
-            return None;
-        }
-        m.swap(col, piv);
-        r.swap(col, piv);
-        let dv = m[col][col];
-        for j in 0..6 {
-            m[col][j] /= dv;
-        }
-        r[col] /= dv;
-        for k in 0..6 {
-            if k != col {
-                let f = m[k][col];
-                for j in 0..6 {
-                    m[k][j] -= f * m[col][j];
-                }
-                r[k] -= f * r[col];
-            }
-        }
-    }
-    Some(r)
-}
-
-/// Deterministic, cross-validated, iterated Fisher LDA protein rescoring
-/// (Percolator/mokapot-style, closed-form). Combines protein-level features into
-/// one linear discriminant, learned semi-supervised: confident targets
-/// (q<=0.01) vs decoys, refreshed each iteration. Key anti-overfit safeguards:
-///   - TIGHT positives (q<=0.01, not a loose set) so training labels are clean;
-///   - target/decoy PAIRS share a CV fold (fold keyed on the DECOY-stripped
-///     accession) so a protein is never scored by a model trained on its pair;
-///   - strong diagonal-loading shrinkage on the covariance.
-/// No RNG anywhere -> byte-identical across runs. Re-walks target/decoy FDR on
-/// the final score. If anything is degenerate it leaves the binomial result.
-fn lda_rescore(proteins: &mut [ProteinId]) {
-    const D: usize = 6;
-    let n = proteins.len();
-    if n < 60 {
-        return;
-    }
-    let g = |x: f64| if x.is_finite() { x } else { 0.0 };
-    // owned copies so the math never borrows `proteins` (allows the final write).
-    let decoy: Vec<bool> = proteins.iter().map(|p| p.decoy).collect();
-    let accs: Vec<String> = proteins.iter().map(|p| p.accession.clone()).collect();
-    let q0: Vec<f64> = proteins.iter().map(|p| p.q_value).collect();
-    let feats: Vec<[f64; D]> = proteins
-        .iter()
-        .map(|p| {
-            [
-                g(p.binomial_score),
-                (1.0 + p.observed_peptides as f64).ln(),
-                g(p.coverage),
-                g(p.mean_rt_diff),
-                g(p.mean_mass_z),
-                g(p.mean_pep_score),
-            ]
-        })
-        .collect();
-    // standardize columns
-    let mut mean = [0.0; D];
-    let mut sd = [0.0; D];
-    for f in &feats {
-        for j in 0..D {
-            mean[j] += f[j];
-        }
-    }
-    for v in mean.iter_mut() {
-        *v /= n as f64;
-    }
-    for f in &feats {
-        for j in 0..D {
-            let dx = f[j] - mean[j];
-            sd[j] += dx * dx;
-        }
-    }
-    for v in sd.iter_mut() {
-        *v = (*v / n as f64).sqrt().max(1e-9);
-    }
-    let z: Vec<[f64; D]> = feats
-        .iter()
-        .map(|f| {
-            let mut o = [0.0; D];
-            for j in 0..D {
-                o[j] = (f[j] - mean[j]) / sd[j];
-            }
-            o
-        })
-        .collect();
-    if decoy.iter().filter(|&&b| b).count() < 20 {
-        return;
-    }
-    // PAIRED CV: hash the DECOY-stripped accession so X and DECOY_X co-fold.
-    let folds: Vec<usize> = accs
-        .iter()
-        .map(|a| {
-            let base = a.strip_prefix("DECOY_").unwrap_or(a);
-            let mut h: u64 = 1469598103934665603;
-            for b in base.bytes() {
-                h ^= b as u64;
-                h = h.wrapping_mul(1099511628211);
-            }
-            (h % 3) as usize
-        })
-        .collect();
-
-    // Fit an LDA weight vector on training points (keep[i]==true) with pos/neg.
-    let fit = |pos: &[bool], keep: &[bool]| -> Option<[f64; D]> {
-        let class_mean = |sel: &dyn Fn(usize) -> bool| -> Option<[f64; D]> {
-            let mut m = [0.0; D];
-            let mut c = 0usize;
-            for i in 0..n {
-                if keep[i] && sel(i) {
-                    for j in 0..D {
-                        m[j] += z[i][j];
-                    }
-                    c += 1;
-                }
-            }
-            if c < 5 {
-                return None;
-            }
-            for v in m.iter_mut() {
-                *v /= c as f64;
-            }
-            Some(m)
-        };
-        let mp = class_mean(&|i| pos[i])?;
-        let mn = class_mean(&|i| decoy[i])?;
-        let mut cov = [[0.0; D]; D];
-        let mut c = 0usize;
-        for i in 0..n {
-            if !keep[i] {
-                continue;
-            }
-            let cls = if pos[i] {
-                &mp
-            } else if decoy[i] {
-                &mn
-            } else {
-                continue;
-            };
-            let mut dv = [0.0; D];
-            for j in 0..D {
-                dv[j] = z[i][j] - cls[j];
-            }
-            for a in 0..D {
-                for b in 0..D {
-                    cov[a][b] += dv[a] * dv[b];
-                }
-            }
-            c += 1;
-        }
-        if c < D + 2 {
-            return None;
-        }
-        for a in 0..D {
-            for b in 0..D {
-                cov[a][b] /= c as f64;
-            }
-            cov[a][a] += 0.3; // strong shrinkage -> robust to overfit
-        }
-        let mut rhs = [0.0; D];
-        for j in 0..D {
-            rhs[j] = mp[j] - mn[j];
-        }
-        solve6(&cov, &rhs)
-    };
-    // FDR walk over a score vector -> per-protein q (deterministic accession tiebreak).
-    let fdr_walk = |score: &[f64]| -> Vec<f64> {
-        let mut order: Vec<usize> = (0..n).collect();
-        order.sort_by(|&a, &b| {
-            score[b].partial_cmp(&score[a]).unwrap().then_with(|| accs[a].cmp(&accs[b]))
-        });
-        let (mut t, mut d) = (0usize, 0usize);
-        let mut qv = vec![1.0; n];
-        for (rank, &i) in order.iter().enumerate() {
-            if decoy[i] {
-                d += 1;
-            } else {
-                t += 1;
-            }
-            qv[rank] = if t == 0 { 1.0 } else { d as f64 / t as f64 };
-        }
-        let mut run = f64::INFINITY;
-        for rank in (0..n).rev() {
-            run = run.min(qv[rank]);
-            qv[rank] = run.min(1.0);
-        }
-        let mut q = vec![1.0; n];
-        for (rank, &i) in order.iter().enumerate() {
-            q[i] = qv[rank];
-        }
-        q
-    };
-
-    // Semi-supervised iteration: tight confident-target positives, refreshed.
-    let mut pos: Vec<bool> = (0..n).map(|i| !decoy[i] && q0[i] <= 0.01).collect();
-    if pos.iter().filter(|&&b| b).count() < 15 {
-        return; // too few confident targets to train safely
-    }
-    let mut qcur = q0.clone();
-    for _iter in 0..5 {
-        let mut score = vec![f64::NAN; n];
-        let mut ok = true;
-        for testf in 0..3 {
-            let keep: Vec<bool> = (0..n).map(|i| folds[i] != testf).collect();
-            let w = match fit(&pos, &keep) {
-                Some(w) => w,
-                None => {
-                    ok = false;
-                    break;
-                }
-            };
-            for i in 0..n {
-                if folds[i] == testf {
-                    let mut s = 0.0;
-                    for j in 0..D {
-                        s += w[j] * z[i][j];
-                    }
-                    score[i] = s;
-                }
-            }
-        }
-        if !ok || score.iter().any(|s| s.is_nan()) {
-            break; // keep previous (binomial on first iter) result
-        }
-        qcur = fdr_walk(&score);
-        let newpos: Vec<bool> = (0..n).map(|i| !decoy[i] && qcur[i] <= 0.01).collect();
-        let changed = newpos.iter().zip(&pos).filter(|(a, b)| a != b).count();
-        let npos = newpos.iter().filter(|&&b| b).count();
-        pos = newpos;
-        if npos < 15 || changed == 0 {
-            break; // converged or degenerate
-        }
-    }
-    for i in 0..n {
-        proteins[i].q_value = qcur[i];
-    }
-}
-
-/// Aggregate per-feature identifications into protein-level identifications with
-/// binomial scores and target/decoy FDR. Proteins are keyed by (decoy, accession);
-/// decoy peptides carry the same accessions as their targets but form a separate
-/// decoy-protein space for the competition.
-pub fn infer_proteins(
-    db: &PeptideDb,
-    ids: &[Identification],
-    peptide_matches: &[PeptideMatch],
-    cfg: &ProteinConfig,
-) -> Vec<ProteinId> {
-    // Theoretical peptide count per protein = ALL tryptic peptides of the protein
-    // in the DB (ms1searchpy's `protsN`), NOT just the searchable subset. This is
-    // essential: the binomial null is P(observe >= v of n | random rate p), and
-    // ms1searchpy uses the full n (e.g. TITIN n=1749). Restricting n to searchable
-    // peptides collapses the dynamic range and kills large abundant proteins.
-    let mut theoretical: FxHashMap<(bool, &str), u32> = FxHashMap::default();
-    for pep in &db.peptides {
-        for prot in &pep.proteins {
-            *theoretical.entry((pep.decoy, prot.as_ref())).or_insert(0) += 1;
-        }
-    }
-
-    // observed: a peptide is "seen" if it WON a feature competition with
-    // |rt_diff| within the window. Winning (vs merely matching) is a stricter,
-    // lower-false-rate criterion that sharpens the protein binomial.
-    // A peptide is "observed" if it WON a feature competition and is consistent
-    // in BOTH RT and (when available) ion mobility. The two are orthogonal, so
-    // requiring both multiplies away random coincidences — the source of IM's
-    // power. Winning (vs merely matching) keeps the false rate low.
-    // Use the per-peptide best matches (one per unique peptide, across ALL
-    // features it matched — NOT the per-feature competition winners). This is the
-    // DirectMS1/ms1searchpy aggregation: a protein accumulates every one of its
-    // peptides that is RT+IM consistent, so real multi-peptide proteins cluster
-    // while random decoy peptides stay singletons. Counting only competition
-    // winners starves proteins to ~1 peptide each and the binomial can't fire.
-    let _ = ids; // competition winners no longer drive protein evidence
-    let decoy_theo: u32 = theoretical.iter().filter(|((d, _), _)| *d).map(|(_, &c)| c).sum();
-
-    // Greedy parsimony (ms1searchpy `final_iteration`) for a given mass/RT cutoff:
-    // collect seen peptides, estimate the decoy background, then repeatedly take
-    // the highest-binomial protein and EXCLUDE its peptides so each supports only
-    // one protein. q-value = running decoys/targets. Returns scored proteins.
-    let infer_at = |rt_thresh: f64, mz_thresh: f64, iso_thresh: f64| -> Vec<ProteinId> {
-        let mut observed: FxHashMap<(bool, &str), FxHashSet<usize>> = FxHashMap::default();
-        // per-protein accumulators: (sum|rt_diff|, sum|mass_z|, sum pep_score, count)
-        let mut rt_acc: FxHashMap<(bool, &str), (f64, f64, f64, u32)> = FxHashMap::default();
-        let mut seen: FxHashSet<usize> = FxHashSet::default();
-        for m in peptide_matches {
-            let im_ok = !m.abs_im_diff.is_finite() || m.abs_im_diff <= cfg.im_window;
-            let mass_ok = !m.abs_mass_z.is_finite() || m.abs_mass_z <= mz_thresh;
-            // Shape gate: require the backing feature to have >= iso_thresh isotopic
-            // peaks. iso_thresh 0 (or no shape descriptors) leaves this inert.
-            let shape_ok = m.feat_quality >= iso_thresh;
-            if shape_ok && m.abs_rt_diff.is_finite() && m.abs_rt_diff <= rt_thresh && im_ok && mass_ok {
-                if seen.insert(m.peptide_idx) {
-                    let pep = &db.peptides[m.peptide_idx];
-                    let mz = if m.abs_mass_z.is_finite() { m.abs_mass_z } else { 0.0 };
-                    let sc = if m.score.is_finite() { m.score } else { 0.0 };
-                    for prot in &pep.proteins {
-                        observed.entry((pep.decoy, prot.as_ref())).or_default().insert(m.peptide_idx);
-                        let e = rt_acc.entry((pep.decoy, prot.as_ref())).or_insert((0.0, 0.0, 0.0, 0));
-                        e.0 += m.abs_rt_diff;
-                        e.1 += mz;
-                        e.2 += sc;
-                        e.3 += 1;
-                    }
-                }
-            }
-        }
-        let decoy_seen = seen.iter().filter(|&&pi| db.peptides[pi].decoy).count();
-        let hit_rate = if decoy_theo == 0 {
-            1e-9
-        } else {
-            (decoy_seen as f64 / decoy_theo as f64).max(1e-9)
-        };
-        // The binomial tail depends only on (theoretical_count, observed_count)
-        // within a cell (hit_rate is fixed), and observed_count is a small integer,
-        // so memoize it. This collapses the ~tens-of-millions of identical beta
-        // evaluations the greedy loop would otherwise repeat down to a few thousand.
-        let mut score_cache: FxHashMap<(u32, usize), f64> = FxHashMap::default();
-        let mut score_of = |key: &(bool, &str), n_obs: usize| -> f64 {
-            if n_obs == 0 {
-                return 0.0;
-            }
-            let theo = theoretical.get(key).copied().unwrap_or(0);
-            *score_cache
-                .entry((theo, n_obs))
-                .or_insert_with(|| -binom_sf_ge_k(n_obs as u32, theo, hit_rate).log10())
-        };
-        // Greedy parsimony assigns each peptide to one protein dynamically (the
-        // highest-scoring claimer). A stable basic-score razor was tried and
-        // performed worse here, so the dynamic greedy is kept.
-        let mut prot_peps = observed;
-        let mut pep_prots: FxHashMap<usize, Vec<(bool, &str)>> = FxHashMap::default();
-        for (&key, peps) in &prot_peps {
-            for &pi in peps {
-                pep_prots.entry(pi).or_default().push(key);
-            }
-        }
-        // Best-first heap instead of rescanning every protein each round. Selecting
-        // a protein only changes the score of the (few) proteins that share its
-        // peptides; we recompute and re-push just those. Stale entries (an old
-        // `n_obs` for a protein that has since shrunk) are skipped on pop. The
-        // popped winner is therefore the same one the old full `max_by` would pick.
-        let mut heap: BinaryHeap<GreedyEntry> = prot_peps
-            .iter()
-            .filter(|(_, peps)| !peps.is_empty())
-            .map(|(&key, peps)| GreedyEntry { score: score_of(&key, peps.len()), key, n_obs: peps.len() })
-            .collect();
-        let mut proteins: Vec<ProteinId> = Vec::new();
-        let (mut t, mut d) = (0usize, 0usize);
-        loop {
-            // Pop the best still-current candidate, discarding stale entries.
-            let (key, obs, score) = loop {
-                let top = match heap.pop() {
-                    Some(e) => e,
-                    None => break (None, 0usize, 0.0f64),
-                };
-                match prot_peps.get(&top.key) {
-                    // Outdated stamp or emptied protein -> a fresher entry exists
-                    // (or the protein is gone); skip it.
-                    Some(peps) if !peps.is_empty() && peps.len() == top.n_obs => {
-                        break (Some(top.key), top.n_obs, top.score);
-                    }
-                    _ => continue,
-                }
-            };
-            let key = match key {
-                Some(k) => k,
-                None => break,
-            };
-            let (decoy, acc) = key;
-            let theo = theoretical.get(&key).copied().unwrap_or(0) as usize;
-            if decoy {
-                d += 1;
-            } else {
-                t += 1;
-            }
-            let q = if t == 0 { 1.0 } else { d as f64 / t as f64 };
-            let (mean_rt_diff, mean_mass_z, mean_pep_score) = rt_acc
-                .get(&key)
-                .map(|&(sr, sm, ss, n)| {
-                    if n > 0 {
-                        let nf = n as f64;
-                        (sr / nf, sm / nf, ss / nf)
-                    } else {
-                        (f64::NAN, f64::NAN, f64::NAN)
-                    }
-                })
-                .unwrap_or((f64::NAN, f64::NAN, f64::NAN));
-            proteins.push(ProteinId {
-                accession: acc.to_string(),
-                decoy,
-                observed_peptides: obs,
-                theoretical_peptides: theo,
-                coverage: if theo > 0 { obs as f64 / theo as f64 } else { 0.0 },
-                binomial_score: score,
-                mean_rt_diff,
-                mean_mass_z,
-                mean_pep_score,
-                q_value: q,
-            });
-            // Past the FDR region the rest is noise; stop (keeps the scan fast).
-            if t > 20 && q > (cfg.fdr * 25.0).max(0.5) {
-                break;
-            }
-            let won: Vec<usize> = prot_peps.get(&key).map(|s| s.iter().copied().collect()).unwrap_or_default();
-            // Remove the winner's peptides from every protein that shares them, and
-            // collect those affected proteins so we can refresh just their heap
-            // entries (everyone else's score is unchanged, so we leave them alone).
-            let mut affected: FxHashSet<(bool, &str)> = FxHashSet::default();
-            for pi in won {
-                if let Some(keys) = pep_prots.get(&pi) {
-                    for k in keys.clone() {
-                        if let Some(s) = prot_peps.get_mut(&k) {
-                            s.remove(&pi);
-                            affected.insert(k);
-                        }
-                    }
-                }
-            }
-            for k in affected {
-                if let Some(peps) = prot_peps.get(&k) {
-                    if !peps.is_empty() {
-                        heap.push(GreedyEntry { score: score_of(&k, peps.len()), key: k, n_obs: peps.len() });
-                    }
-                }
-            }
-        }
-        // Target-decoy pair deletion (ms1searchpy calc_protein_scores): for each
-        // protein and its target/decoy counterpart (X vs DECOY_X), keep only the
-        // higher-scoring one. The losing member no longer dilutes the FDR walk,
-        // which is what lets the marginal real proteins clear 1% FDR.
-        let score_by: FxHashMap<(bool, String), f64> = proteins
-            .iter()
-            .map(|p| ((p.decoy, p.accession.clone()), p.binomial_score))
-            .collect();
-        proteins.retain(|p| {
-            let cp: (bool, String) = if p.decoy {
-                (false, p.accession.strip_prefix("DECOY_").unwrap_or(&p.accession).to_string())
-            } else {
-                (true, format!("DECOY_{}", p.accession))
-            };
-            match score_by.get(&cp) {
-                // keep the winner; ties go to the target
-                Some(&cs) => p.binomial_score > cs || (p.binomial_score == cs && !p.decoy),
-                None => true,
-            }
-        });
-
-        // Target-decoy FDR walk over the deduplicated, score-sorted proteins.
-        // Tiebreak on (accession, decoy) so equal-score proteins order
-        // deterministically (the FDR walk is order-sensitive at ties).
-        proteins.sort_by(|a, b| {
-            b.binomial_score
-                .partial_cmp(&a.binomial_score)
-                .unwrap()
-                .then_with(|| a.accession.cmp(&b.accession))
-                .then(a.decoy.cmp(&b.decoy))
-        });
-        let (mut t, mut d) = (0usize, 0usize);
-        for p in proteins.iter_mut() {
-            if p.decoy {
-                d += 1;
-            } else {
-                t += 1;
-            }
-            p.q_value = if t == 0 { 1.0 } else { d as f64 / t as f64 };
-        }
-        let mut run = f64::INFINITY;
-        for i in (0..proteins.len()).rev() {
-            run = run.min(proteins[i].q_value);
-            proteins[i].q_value = run.min(1.0);
-        }
-        if cfg.ml_rescore {
-            lda_rescore(&mut proteins);
-        }
-        proteins
-    };
-
-    if !cfg.optimize_thresholds {
-        return infer_at(cfg.rt_window, cfg.mass_z_window, 0.0);
-    }
-
-    // ms1searchpy's `worker` grid: scan mass/RT cutoffs, keep the one that
-    // maximizes target proteins at `fdr`. Tighter cutoffs drop the decoy
-    // background so marginal real proteins clear FDR.
-    let rt_grid: Vec<f64> = [0.1, 0.15, 0.2, 0.3, 0.4, 0.5, 0.7, 1.0, 1.3, 1.6, 2.0, 3.0, 5.0, 8.0, 12.0, 16.0, 20.0, 30.0]
-        .into_iter()
-        .filter(|&r| r <= cfg.rt_window + 1e-9)
-        .collect();
-    let mz_grid: Vec<f64> = [0.5, 0.75, 1.0, 1.25, 1.5, 2.0, 2.5, 3.0, 4.0]
-        .into_iter()
-        .filter(|&m| m <= cfg.mass_z_window + 1e-9)
-        .collect();
-    // Shape-gate grid: only when enabled (>0) and the data carries shape. 0 is
-    // always included (gate off), so this can never reduce depth below the
-    // no-gate result.
-    let iso_grid: Vec<f64> = if cfg.max_feature_isotopes_gate > 0.0 {
-        [0.0, 2.0, 3.0, 4.0, 5.0, 6.0]
-            .into_iter()
-            .filter(|&v| v <= cfg.max_feature_isotopes_gate + 1e-9)
-            .collect()
-    } else {
-        vec![0.0]
-    };
-    let count_at = |ps: &[ProteinId]| ps.iter().filter(|p| !p.decoy && p.q_value <= cfg.fdr).count();
-    // The (rt, mz) cells are independent, so run them in parallel. Each `infer_at`
-    // is the dominant cost of the whole pipeline (greedy parsimony per cell), and
-    // there are ~100 cells, so this is the single biggest speedup. Results are
-    // collected in deterministic grid order; the winner is then chosen by the same
-    // sequential "first max wins" rule as before, so the output is byte-identical.
-    let cells: Vec<(f64, f64, f64)> = rt_grid
-        .iter()
-        .flat_map(|&rt| {
-            let iso_grid = &iso_grid;
-            mz_grid
-                .iter()
-                .flat_map(move |&mz| iso_grid.iter().map(move |&iso| (rt, mz, iso)))
-        })
-        .collect();
-    let scored: Vec<(f64, f64, f64, usize, Vec<ProteinId>)> = cells
-        .par_iter()
-        .map(|&(rt, mz, iso)| {
-            let ps = infer_at(rt, mz, iso);
-            let n = count_at(&ps);
-            (rt, mz, iso, n, ps)
-        })
-        .collect();
-    let mut best: Option<(f64, f64, f64, usize, Vec<ProteinId>)> = None;
-    for cell in scored {
-        if best.as_ref().map_or(true, |b| cell.3 > b.3) {
-            best = Some(cell);
-        }
-    }
-    let (rt, mz, iso, n, ps) =
-        best.unwrap_or((cfg.rt_window, cfg.mass_z_window, 0.0, 0, Vec::new()));
-    log::info!(
-        "threshold optimization: best rt_window={:.2} min, mass_z={:.1}, iso_gate={:.0} -> {} target proteins at {:.0}% FDR",
-        rt,
-        mz,
-        iso,
-        n,
-        cfg.fdr * 100.0
-    );
-    ps
 }

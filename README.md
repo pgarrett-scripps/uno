@@ -1,20 +1,21 @@
 # uno — MS1-only search engine (Rust)
 
-A Rust MS1-only protein identification + quantitation engine, in the spirit of
-DirectMS1 / ms1searchpy. `uno` does **not** read raw data or find features — it
-consumes an aligned LFQ matrix (from [koth](../koth_rust)), assigns
-peptide/protein identities, controls FDR with target/decoy competition, and
-rolls the intensities up into peptide/protein quant matrices.
+A Rust MS1-only protein identification engine, in the spirit of DirectMS1 /
+ms1searchpy. `uno` does **not** read raw data or find features — it consumes a
+**single-run biosaur2 feature file** (`*.features.tsv`), the same input
+ms1searchpy uses, assigns peptide/protein identities, and controls FDR with
+target/decoy competition. Single-run input is required: it carries the
+per-feature quality columns that separate target from decoy, which cross-run
+alignment strips out.
 
-Digestion is reused from [sage-core](../sage); retention-time prediction is
-distilled from DeepLC into a pure-Rust model, with an on-data calibration/
-fine-tuning step per run.
+Digestion is reused from [sage-core](../sage); retention-time prediction is a
+pure-Rust learned model, with an on-data calibration step per run.
 
 ## Workspace layout
 
 | crate | purpose |
 | --- | --- |
-| `uno-core` | search, scoring, FDR, and quant-rollup library |
+| `uno-core` | search, scoring, and FDR library |
 | `uno` | command-line binary |
 | `uno-rt-train` | trains/distills the RT (and IM/CCS) models |
 | `uno-lightgbm-sys` | FFI bindings to a vendored LightGBM |
@@ -42,19 +43,16 @@ cargo build --release
 
 ```sh
 cargo run --release -p uno -- \
-  --intensity-matrix path/to/intensity_matrix.tsv \
+  --features path/to/run.features.tsv \
   --fasta path/to/proteins.fasta \
-  --rt-model models/rt_cnn_chrono_ch32.urtc \
+  --rt-model models/rt_cnn_chrono_global_v3_ch32.urtc \
   --config example_config.toml \
-  --out-proteins proteins.tsv \
-  --out-peptides peptides.tsv
+  --out-proteins proteins.tsv
 ```
 
-See `example_config.toml` for all tunables (digest, mass tolerance, `top_k`,
-on-data RT fine-tuning) and their documented defaults. `uno --help` lists every
-flag, including quant outputs (`--out-protein-quant`, `--out-peptide-quant`),
-the peptide-centric hill second pass (`--hills`), and DeepLC RT-library
-workflow (`--dump-candidate-peptides` → `--rt-library`).
+See `example_config.toml` for all tunables (digest, mass tolerance, `top_k`) and
+their documented defaults. `uno --help` lists every flag, including the DeepLC
+RT-library workflow (`--dump-candidate-peptides` → `--rt-library`).
 
 ## Repository contents
 

@@ -19,3 +19,4 @@ __pycache__/
 # OS / editor cruft
 .DS_Store
 *.swp
+experiments_archive/

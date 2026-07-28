@@ -184,9 +184,18 @@ by default*, because entrapment validation shows it inflates the empirical FDR
 
 == Quantitation
 
-Identified peptides/proteins are mapped onto koth's per-sample intensities to emit
-peptide- and protein-level quant matrices; uno does not re-quantify (koth owns
-alignment/XIC/LFQ).
+Identified peptides/proteins are mapped onto koth's per-sample aligned intensities
+to emit peptide- and protein-level quant matrices; uno does not perform its own
+feature extraction (koth owns alignment, XIC integration, and match-between-runs).
+Two per-cell intensity estimators are available at the alignment stage: the default
+box-sum (all signal in the ($m/z$, RT) extraction window), and an optional
+#emph[averagine projection] in which the reported intensity is the observed
+isotopologue vector projected onto the mass-derived averagine isotope pattern — a
+matched filter that retains on-pattern signal and rejects co-eluting off-pattern
+interference. uno emits the protein-group × sample abundance matrix and stops there;
+downstream differential testing (peptide fold-change, $t$-test, Benjamini–Hochberg
+FDR, following the DirectMS1Quant approach) is left to standard tools, keeping uno an
+identification-and-quantitation engine rather than a statistics framework.
 
 == Benchmark data and comparison
 
@@ -198,6 +207,14 @@ searched against a human + #emph[E. coli] database (24,819 proteins) with the
 distilled MLP RT model; the entrapment experiments add a #emph[S. cerevisiae]
 proteome (6,068 proteins) as a known-absent probe. ms1searchpy and uno were run
 on the identical koth feature set where compared.
+
+Quantitation is evaluated on the DirectMS1Quant UPS1-into-#emph[E. coli]
+dilution series (PXD033350: eight spike levels, 0.1–50 fmol, × 3 replicates, 24 runs;
+Q Exactive HF), searched against the 48 UPS1 spike proteins, the #emph[E. coli]
+proteome (constant background), and the human proteome as a known-absent entrapment
+probe. Runs were converted, feature-found and cross-run-aligned by koth; uno searched
+the aligned matrix, and peptide fold-change differential testing was scored against
+the published DirectMS1Quant results and Spectronaut ground truth.
 
 = Results and Discussion
 
@@ -398,6 +415,40 @@ gain alone, $approx 40 times$), and the full search from *43 s to 3.4 s*
 ($approx 13 times$). Output is *byte-identical* to the original across the whole
 pipeline (identical protein lists and FDR), and remains deterministic across runs.
 
+== Quantitation tracks a spike-in dilution; low-abundance differential sensitivity trails DirectMS1Quant
+
+On the DirectMS1Quant UPS1-into-#emph[E. coli] dilution series, uno identifies *361
+proteins* at 1% FDR (honest entrapment FDP $approx 1.8%$) and recovers the designed
+structure of the experiment: spike-in (UPS1) protein abundance *tracks the dilution*
+(median Spearman $rho = +0.71$ against log spike amount; 78% of UPS1 proteins with
+$rho > 0.5$), while the constant #emph[E. coli] background and the absent human probe
+stay flat (median $rho = +0.04$ and $+0.05$). Peptide-fold-change differential testing
+recovers spike-in proteins with *high specificity* — zero #emph[E. coli] false
+positives at the extreme (50 vs 0.1 fmol) contrast.
+
+Differential *sensitivity* at the dilute end, however, trails the reference: uno flags
+$approx 12$ changed UPS1 proteins at the extreme contrast versus 42 for DirectMS1Quant.
+The gap is not in the differential test — the per-protein measurement count and
+statistic match — but in the quantitative values feeding it, and it decomposes into two
+separable causes. (i) #emph[Fill specificity]: koth's default box-sum integrates every
+co-eluting hill in the extraction window, inflating dilute cells with off-pattern
+interference; the averagine-projection estimator (Methods, #emph[Quantitation]) retains only the on-pattern
+component and roughly *halves the false-positive differential calls* (e.g. 15 true / 17
+false $arrow.r$ 12 true / 8 false under a common imputation; precision $47% arrow.r
+60%$). (ii) #emph[Detection sensitivity]: tracing spike-in peptides confident at 50 fmol
+down to 0.1 fmol, *63% remain detected*; of those lost, the signal is physically present
+but sub-threshold — dilute peptides elute in only 1–2 scans, and koth's hill-builder
+(`min_scans = 2`) discards their traces. Lowering the threshold (`min_scans = 1`)
+recovers $approx 50%$ of them but multiplies the feature count $approx 6 times$ with
+noise, and an end-to-end test confirms this is a net loss (differential precision
+$27% arrow.r 9%$). Untargeted detection cannot separate a one-scan peptide from
+one-scan noise; the resolved path is a *targeted, identification-seeded re-extraction* —
+a matched-filter requant at the ($m/z$, RT) of peptides already identified in the
+abundant samples, which confirms known targets rather than discovering new ones — scoped
+in the validation roadmap. uno's quantitation is thus validated for identification-linked
+abundance and dilution tracking, with trace-level differential-sensitivity parity
+remaining open.
+
 = Limitations
 
 We report these candidly, as they delimit where MS1-only search and uno apply.
@@ -420,6 +471,13 @@ We report these candidly, as they delimit where MS1-only search and uno apply.
 - *Entrapment resolution.* The single-probe entrapment bounds the empirical FDR only
   coarsely (§3.7); a size-matched probe and a multi-dataset panel are required to
   tighten absolute estimates.
+- *Low-abundance differential sensitivity.* On a spike-in dilution series uno tracks
+  abundance and calls changed proteins with high specificity, but at the most dilute
+  contrasts it recovers fewer changed proteins than DirectMS1Quant. The cause is
+  upstream feature detection — trace peptides yield 1–2 scan hills the feature finder
+  discards — not the differential test; the scoped remedy is a targeted,
+  identification-seeded matched-filter re-extraction rather than a global detection
+  threshold, which trades specificity for recall.
 
 = Validation roadmap
 
@@ -429,8 +487,10 @@ We report these candidly, as they delimit where MS1-only search and uno apply.
   organisms; per dataset: uno vs ms1searchpy protein counts, FDR validity, variance
   ($n >= 10$ runs), and speed, including the fine-tune depth gain.
 + *Formal reproducibility experiment* ($n >= 10$ runs × both engines × each dataset).
-+ *Quantitation validation* (known-ratio sample, CV/accuracy) or explicit ID-only
-  scope.
++ *Quantitation.* Dilution tracking and differential specificity are validated here;
+  the open items are trace-level differential #emph[sensitivity] via an
+  identification-seeded matched-filter re-extraction, and CV/accuracy on a
+  known-ratio benchmark.
 + Software-release hygiene for open-source expectations: a build that does not
   require a local sage checkout, README, example data, tests/CI, and an archived
   release with DOI.

@@ -30,27 +30,86 @@ const AA: &[u8; 20] = b"ACDEFGHIKLMNPQRSTVWY";
 /// accuracy gap). Must match `N_GLOBAL` / `global_feats` in
 /// `crates/uno-rt-train/python/train_rt.py` EXACTLY (feature order + formulas).
 /// URTC v1 models have none (n_global = 0); v2 models store the count in the header.
-const N_GLOBAL: usize = 5;
+const N_GLOBAL: usize = 11;
+
+/// Kyte-Doolittle hydropathy, the dominant RP-LC retention driver. Unknown
+/// residues -> 0. Keep identical to `_KD` in train_rt.py.
+fn kd(b: u8) -> f32 {
+    match b {
+        b'A' => 1.8,
+        b'R' => -4.5,
+        b'N' => -3.5,
+        b'D' => -3.5,
+        b'C' => 2.5,
+        b'Q' => -3.5,
+        b'E' => -3.5,
+        b'G' => -0.4,
+        b'H' => -3.2,
+        b'I' => 4.5,
+        b'L' => 3.8,
+        b'K' => -3.9,
+        b'M' => 1.9,
+        b'F' => 2.8,
+        b'P' => -1.6,
+        b'S' => -0.8,
+        b'T' => -0.7,
+        b'W' => -0.9,
+        b'Y' => -1.3,
+        b'V' => 4.2,
+        _ => 0.0,
+    }
+}
 
 /// Global sequence features, computed identically in Rust (inference) and Python
-/// (training). Order: [len/50, acidic(D+E)/len, basic(K+R)/len, His/len,
-/// hydrophobic(FWYLIVM)/len]. Reversed-phase RT is driven by net hydrophobicity,
-/// length, and charged-residue content -- exactly these descriptors.
+/// (training). Order (v3, N_GLOBAL=11):
+///   0 len/50            1 acidic(D+E)/len    2 basic(K+R)/len   3 His/len
+///   4 hydrophobic(FWYLIVM)/len               5 KD hydropathy SUM /50
+///   6 GRAVY (mean KD)   7 aromatic(F+W+Y)/len 8 Pro/len
+///   9 N-term residue KD /4.5                 10 C-term residue KD /4.5
+/// The SUM (5) and terminal descriptors (9,10) are what mean+max pooling destroys:
+/// pooling yields the mean but not the total, and weights all positions equally so
+/// terminal effects vanish. All are domain-invariant physics.
+///
+/// NOTE: with the OLD deviation-only scorer this v3 set scored lower than the
+/// 5-feature set (248 vs 401 @1% on run10). That reversed once `ml_rescore` became
+/// the default: deterministic run10 honest @1% is v3=610 > 5-feat=435 > DeepLC=561,
+/// so v3 is the correct shipped default and RT accuracy is NOT the ceiling anymore.
+/// See models/rt_cnn_README.md for the full A/B before changing this.
 fn global_feats(bytes: &[u8]) -> [f32; N_GLOBAL] {
     let len = bytes.len().max(1) as f32;
     let (mut de, mut kr, mut h, mut phob) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+    let (mut kd_sum, mut arom, mut pro) = (0.0f32, 0.0f32, 0.0f32);
     for &b in bytes {
         match b {
             b'D' | b'E' => de += 1.0,
             b'K' | b'R' => kr += 1.0,
             b'H' => h += 1.0,
+            b'P' => pro += 1.0,
             _ => {}
         }
         if matches!(b, b'F' | b'W' | b'Y' | b'L' | b'I' | b'V' | b'M') {
             phob += 1.0;
         }
+        if matches!(b, b'F' | b'W' | b'Y') {
+            arom += 1.0;
+        }
+        kd_sum += kd(b);
     }
-    [len / 50.0, de / len, kr / len, h / len, phob / len]
+    let nterm = bytes.first().map_or(0.0, |&b| kd(b));
+    let cterm = bytes.last().map_or(0.0, |&b| kd(b));
+    [
+        bytes.len() as f32 / 50.0,
+        de / len,
+        kr / len,
+        h / len,
+        phob / len,
+        kd_sum / 50.0,
+        kd_sum / len,
+        arom / len,
+        pro / len,
+        nterm / 4.5,
+        cterm / 4.5,
+    ]
 }
 
 /// 1-D convolution (cross-correlation), same-padding, dilation. Weights are
@@ -190,8 +249,12 @@ impl RtCnn {
         let head = c.u32()?;
         // v2 stores the count of appended global features right after `head`.
         let n_global = if version >= 2 { c.u32()? } else { 0 };
-        if n_global != 0 && n_global != N_GLOBAL {
-            bail!("URTC v2 declares {n_global} global features, this build expects {N_GLOBAL}");
+        // `global_feats` computes the full N_GLOBAL-length vector; the 5-feature
+        // (v2) set is a strict PREFIX of the 11-feature (v3) set (same order/
+        // formulas), so any model with n_global <= N_GLOBAL loads by slicing the
+        // computed features to the header's declared count (see `pool`).
+        if n_global > N_GLOBAL {
+            bail!("URTC declares {n_global} global features, this build computes at most {N_GLOBAL}");
         }
         let head_in = 2 * ch + n_global;
 
@@ -270,7 +333,9 @@ impl RtCnn {
         // token view) to match training.
         if self.n_global > 0 {
             let g = global_feats(seq.as_bytes());
-            out.extend_from_slice(&g);
+            // n_global is <= N_GLOBAL (checked at load); the 5-feature set is the
+            // first 5 of the computed 11, so slice to the model's declared count.
+            out.extend_from_slice(&g[..self.n_global]);
         }
     }
 
@@ -315,6 +380,38 @@ impl RtCnn {
             .collect()
     }
 
+    /// Predict AND embed in one pass: the on-data RT fine-tune re-embeds exactly
+    /// the same unique peptides that abstract-RT prediction already pooled, so a
+    /// separate `embed_many` pass repeats ~1.1M full CNN forwards. Fusing them
+    /// runs `pool` once per peptide and derives both the head prediction and the
+    /// pooled embedding from it. Byte-identical to calling `predict_many` and
+    /// `embed_many` separately (same `pool`, same `head`, same pooled+1.0).
+    pub fn predict_embed_many<S: AsRef<str> + Sync>(&self, seqs: &[S]) -> (Vec<f64>, Vec<Vec<f64>>) {
+        let both: Vec<(f64, Vec<f64>)> = seqs
+            .par_chunks(2048)
+            .flat_map(|chunk| {
+                let mut buf = Buffers::default();
+                chunk
+                    .iter()
+                    .map(|s| {
+                        self.pool(s.as_ref(), &mut buf);
+                        let pred = self.head(&buf.pooled, &mut buf.hid);
+                        let mut emb: Vec<f64> = buf.pooled.iter().map(|&v| v as f64).collect();
+                        emb.push(1.0);
+                        (pred, emb)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let mut preds = Vec::with_capacity(both.len());
+        let mut embs = Vec::with_capacity(both.len());
+        for (p, e) in both {
+            preds.push(p);
+            embs.push(e);
+        }
+        (preds, embs)
+    }
+
     /// Pooled embedding (+intercept) for on-data readout fine-tuning, mirroring
     /// `RtMlp::embed`: refit a linear map over these frozen pooled features.
     pub fn embed(&self, seq: &str) -> Vec<f64> {
@@ -326,7 +423,25 @@ impl RtCnn {
     }
 
     pub fn embed_many<S: AsRef<str> + Sync>(&self, seqs: &[S]) -> Vec<Vec<f64>> {
-        seqs.par_iter().map(|s| self.embed(s.as_ref())).collect()
+        // Reuse one scratch `Buffers` per chunk (like `predict_many`) instead of
+        // allocating a fresh one per sequence via `embed`. `pool` fully overwrites
+        // every buffer it uses, so the pooled output per sequence is bit-identical
+        // to the per-call-allocated version -- this only drops ~1.1M redundant
+        // buffer allocations (the dominant cost of the old per-element path).
+        seqs.par_chunks(2048)
+            .flat_map(|chunk| {
+                let mut buf = Buffers::default();
+                chunk
+                    .iter()
+                    .map(|s| {
+                        self.pool(s.as_ref(), &mut buf);
+                        let mut out: Vec<f64> = buf.pooled.iter().map(|&v| v as f64).collect();
+                        out.push(1.0);
+                        out
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 }
 
