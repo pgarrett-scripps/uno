@@ -40,27 +40,25 @@ pub fn default_config() -> Result<KothConfig> {
 pub fn features_from_raw(path: &Path, config: &KothConfig) -> Result<FeatureMatrix> {
     // uno generates its own decoys downstream; koth's spectrum-shuffle decoy
     // mode must stay off here or we'd be searching shuffled spectra.
-    let mut file = config.file.clone();
-    file.decoy_mode = false;
+    let mut cfg = config.clone();
+    cfg.file.decoy_mode = false;
 
+    // One call into koth's library seam: `run_pipeline` runs the exact staged
+    // functions the `koth_ff` binary uses (hills -> features -> scoring), so
+    // `--raw` stays byte-identical to a `--features` file that `koth_ff` produced
+    // on the same run. Scoring on: uno's search reads the cosine/isotope/combined
+    // scores. Going through this single entry point keeps uno off koth's internal
+    // stage functions, which change shape more often than the pipeline seam.
     let t = Instant::now();
-    let hills = koth_ff::run_hills_streaming(path, &config.hills, &file)
-        .with_context(|| format!("koth hill detection on {}", path.display()))?;
+    let out = koth_ff::run_pipeline(path, &cfg, &koth_ff::PipelineOptions { scoring: true })
+        .with_context(|| format!("koth feature finding on {}", path.display()))?;
     log::info!(
-        "koth: {} hills ({:.1}s)",
-        hills.len(),
+        "koth: {} hills, {} scored features ({:.1}s)",
+        out.hills.len(),
+        out.features.len(),
         t.elapsed().as_secs_f64()
     );
-
-    let t = Instant::now();
-    let features = koth_ff::run_features(&hills, &config.features, &file)
-        .context("koth feature finding")?;
-    let scored = koth_ff::run_scoring(&features, &config.scoring, &config.features);
-    log::info!(
-        "koth: {} scored features ({:.1}s)",
-        scored.len(),
-        t.elapsed().as_secs_f64()
-    );
+    let scored = out.features;
 
     let run_name = path
         .file_stem()
