@@ -77,13 +77,18 @@ did NOT help — the robust calibration already captures the run-level RT shift 
 ## Unreleased
 
 ### Added
-- **On-data RT fine-tuning** (`scoring.ondata_rt_finetune`, on by default). Freezes
+- ~~**On-data RT fine-tuning** (`scoring.ondata_rt_finetune`, on by default). Freezes
   the distilled MLP's penultimate embedding and refits only its linear readout on
   the run's confident hits (ridge, closed-form, deterministic). Keeps the pretrained
   representation — unlike the from-scratch composition ridge, which degrades depth —
   and is FDR-honest under two-proteome entrapment (0 entrapment false positives).
   +51% protein depth on the koth human+E. coli benchmark (39 → 59). Falls back to
-  the frozen RT path automatically when the RT model exposes no embedding (gbdt).
+  the frozen RT path automatically when the RT model exposes no embedding (gbdt).~~
+  **REMOVED in `a91c6a9` (discriminant-path purge).** The implementation no longer
+  exists; `scoring.ondata_rt*` are inert config keys pending removal from the
+  struct. See `crates/uno-core/src/score.rs` ("was tried here … not a validated win
+  anywhere"). The +51% figure was measured on the earlier development configuration
+  and is retired to the manuscript's Supporting Information.
 
 ### Performance
 - Protein inference reworked: parallel threshold-optimization grid (rayon),
@@ -135,6 +140,7 @@ consuming a single-run biosaur2 feature file (the same input ms1searchpy uses).
 
 ### Known limitation
 PSM- and protein-level depth is constrained by MS1's inherent random mass+RT coincidence
-floor on this no-ion-mobility, two-proteome benchmark — the hardest case. Documented in
-`PLAN.md`. The largest expected gains are ion mobility / CCS (timsTOF), FAIMS, and a leaner
+floor on this no-ion-mobility, two-proteome benchmark — the hardest case. (Was documented in
+`PLAN.md`, deleted 2026-07-31 as superseded; the manuscript's Limitations section carries
+this now.) The largest expected gains are ion mobility / CCS (timsTOF), FAIMS, and a leaner
 search space; the user's `rapidms1` timsTOF dataset (with IM) is the natural next target.

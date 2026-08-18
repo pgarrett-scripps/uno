@@ -1,7 +1,12 @@
 # uno configuration. All fields optional; shown values are the defaults.
+# Verified against DigestConfig/MatchingConfig/ScoreConfig/ProteinConfig::default().
 
 [digest]
-missed_cleavages = 2
+# DirectMS1/ms1searchpy convention: fully-tryptic (mc = 0) and NO variable mods.
+# MS1-only cannot localize a modification, and oxidized or missed-cleavage variants
+# inflate the search space and the random-match background faster than the observed
+# count, so they reduce identifications. Opt in below if you need them.
+missed_cleavages = 0
 min_len = 7
 max_len = 50
 cleave_at = "KR"
@@ -13,22 +18,50 @@ max_variable_mods = 2
 decoy_tag = "rev_"
 generate_decoys = true
 static_mods = { C = 57.02146 }
-variable_mods = { M = [15.994915] }
+# Empty by default. Example of opting in: variable_mods = { M = [15.994915] }
+variable_mods = { }
+
+# Decoy generation: interior-residue shuffle against a per-protein residue pool,
+# plus a mass shift so a decoy is not a mass twin of its target.
+decoy_mass_shift = 11.0
+decoy_shuffle = true
+decoy_method = "shuffle"
+decoy_order = 2
 
 [matching]
 ppm_tolerance = 10.0
 isotope_offsets = [-1, 0, 1]
+min_charge = 1
 
 [scoring]
-# Candidate peptides kept per feature (targets and decoys each) before the
-# discriminant. Too low silently drops real peptides before RT can rescue them:
-# entrapment (human+yeast, single-run HeLa) gives 25→105 IDs, 50→208, 100→275,
-# all at ~1% entrapment FDP. Default 50; raise toward 100 for max depth.
+# Candidate peptides kept per feature (targets and decoys each, so up to 2*top_k
+# candidates per feature) before the discriminant. Too low silently drops real
+# peptides before RT can rescue them: entrapment (human+yeast, single-run HeLa)
+# gives 25→105 IDs, 50→208, 100→275, all at ~1% entrapment FDP.
+# NOTE: this default was SELECTED on that entrapment sweep, i.e. on development
+# data drawn from the same benchmark family. See the manuscript's disclosure of
+# tuned defaults.
 top_k = 50
 
-# On-data RT fine-tuning: refit only the distilled MLP's linear readout over its
-# frozen embedding on this run's confident hits. On by default (deterministic,
-# entrapment-validated). Set both false to use the frozen model + PWL calibration.
-ondata_rt = true
-ondata_rt_finetune = true
-ondata_rt_lambda = 1.0
+# Combined mass+RT deviation threshold sweep and mass-anchor stage.
+mass_anchor = true
+mass_anchor_ppm = 10.0
+discriminant = "deviation"
+calibration_fdr = 0.01
+bootstrap_rounds = 2
+seed_min_runs_frac = 0.5
+rt_calibrated = false
+
+# Learned per-PFM rescorer: a cross-validated gradient-boosted-tree classifier over
+# the per-match features, followed by a cumulative-inclusion protein ensemble. This
+# is ON by default and ran in every benchmark reported in the manuscript. The
+# backend is pure-Rust sequoia-boost; set UNO_ML_LIGHTGBM=1 for LightGBM instead.
+# It is guarded by a strict better-than-baseline check, so it can only deepen the
+# deviation result. NOTE: the ensemble band and min_child_weight defaults were also
+# selected on development entrapment depth; see the manuscript's disclosure.
+ml_rescore = true
+n_folds = 3
+iterations = 100
+max_depth = 6
+shrinkage = 0.1
+max_train_rows = 200000

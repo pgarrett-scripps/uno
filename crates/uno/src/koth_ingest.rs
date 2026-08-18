@@ -50,7 +50,15 @@ pub fn features_from_raw(path: &Path, config: &KothConfig) -> Result<FeatureMatr
     // scores. Going through this single entry point keeps uno off koth's internal
     // stage functions, which change shape more often than the pipeline seam.
     let t = Instant::now();
-    let out = koth_ff::run_pipeline(path, &cfg, &koth_ff::PipelineOptions { scoring: true })
+    // `emit_ms2: false` keeps the MS1 feature path byte-for-byte unchanged (koth
+    // documents it as exactly reproducing the historic MS1-only `run_pipeline`);
+    // uno is an MS1-only engine and never reads MS2 hills. The field was added
+    // upstream after `7f2cece` and broke this build until it was named here.
+    let out = koth_ff::run_pipeline(
+        path,
+        &cfg,
+        &koth_ff::PipelineOptions { scoring: true, emit_ms2: false },
+    )
         .with_context(|| format!("koth feature finding on {}", path.display()))?;
     log::info!(
         "koth: {} hills, {} scored features ({:.1}s)",

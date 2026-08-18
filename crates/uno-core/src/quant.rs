@@ -61,7 +61,15 @@ pub fn resolve_feature_competition(
             }
         }
     }
-    winner.values().map(|&i| peptides[i]).collect()
+    // Return in the input's own order, not the HashMap's. The winning SET is
+    // deterministic (ties keep the lower index, since the incumbent is always
+    // seen first), but `winner.values()` is process-random, and this Vec becomes
+    // `--out-lfq` row order and the summation order inside `group_abundance` —
+    // so without this the LFQ rows shuffle and the abundances differ in the low
+    // bits between two runs on identical input.
+    let mut idx: Vec<usize> = winner.values().copied().collect();
+    idx.sort_unstable();
+    idx.into_iter().map(|i| peptides[i]).collect()
 }
 
 /// Single-pass profile-guided reassignment (combines ID and quant).
@@ -168,7 +176,12 @@ pub fn profile_reassign(
         }
     }
     log::info!("profile reassignment: {} features re-routed by quant profile", moved);
-    by_feat.into_values().collect()
+    // Same reason as in `resolve_feature_competition`: emit in feature order, not
+    // HashMap order. This is the opt-in `--profile-reassign` path, which WAS used
+    // for the reported quantitation, so it is on the live path to `--out-lfq`.
+    let mut hits: Vec<PeptideHit> = by_feat.into_values().collect();
+    hits.sort_unstable_by_key(|h| (h.feature_idx, h.peptide_idx, h.decoy));
+    hits
 }
 
 /// Per-run log2 normalization offsets from the INVARIANT backbone: features
@@ -261,4 +274,65 @@ pub fn group_abundance(
         }
     }
     out
+}
+
+#[cfg(test)]
+mod determinism_tests {
+    use super::*;
+    use crate::database::{PeptideDb, TheoPeptide};
+    use std::sync::Arc;
+
+    fn db_of(specs: &[(&str, bool, &[&str])]) -> PeptideDb {
+        let peptides: Vec<TheoPeptide> = specs
+            .iter()
+            .map(|(seq, decoy, prots)| TheoPeptide {
+                sequence: Arc::from(*seq),
+                mass: 1000.0,
+                decoy: *decoy,
+                missed_cleavages: 0,
+                proteins: prots.iter().map(|p| Arc::from(*p)).collect(),
+            })
+            .collect();
+        let n_targets = peptides.iter().filter(|p| !p.decoy).count();
+        let n_decoys = peptides.len() - n_targets;
+        PeptideDb { peptides, n_targets, n_decoys }
+    }
+
+    /// `resolve_feature_competition` must return a stable ORDER, not just a stable set.
+    ///
+    /// It resolves winners through a `HashMap<feature_idx, usize>` and used to emit
+    /// `winner.values()` directly. Two `HashMap`s in one process get different seeds,
+    /// so this catches the bug without spawning a second process. The returned Vec is
+    /// `--out-lfq` row order and the summation order inside `group_abundance`, so a
+    /// shuffle there means the LFQ rows move and the abundances differ in the low bits.
+    #[test]
+    fn feature_competition_output_order_is_stable() {
+        let db = db_of(&[
+            ("PEPTIDEA", false, &["P1"][..]),
+            ("PEPTIDEB", false, &["P2"][..]),
+            ("PEPTIDEC", false, &["P1"][..]),
+            ("PEPTIDED", false, &["P3"][..]),
+            ("PEPTIDEE", false, &["P2"][..]),
+            ("PEPTIDEF", false, &["P3"][..]),
+        ]);
+        let mut prot_score: std::collections::HashMap<(bool, &str), f64> =
+            std::collections::HashMap::new();
+        prot_score.insert((false, "P1"), 9.0);
+        prot_score.insert((false, "P2"), 5.0);
+        prot_score.insert((false, "P3"), 1.0);
+
+        // Several peptides contend for the same features, so the map is exercised.
+        let hits: Vec<PeptideHit> = (0..6u32)
+            .map(|i| PeptideHit { peptide_idx: i, feature_idx: i % 3, decoy: false })
+            .collect();
+
+        let first = resolve_feature_competition(&hits, &db, &prot_score);
+        for _ in 0..12 {
+            let again = resolve_feature_competition(&hits, &db, &prot_score);
+            assert_eq!(first, again, "feature competition output order is not stable");
+        }
+        // And the output really is in feature order.
+        assert_eq!(first.len(), 3);
+        assert!(first.windows(2).all(|w| w[0].feature_idx < w[1].feature_idx));
+    }
 }

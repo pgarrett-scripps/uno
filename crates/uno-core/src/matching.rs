@@ -162,20 +162,15 @@ pub fn match_features_topk(
 mod tests {
     use super::*;
     use crate::database::DigestConfig;
-    use std::path::PathBuf;
 
     #[test]
     fn matches_real_data() {
-        let features = PathBuf::from(
-            "/home/patrick-garrett/Repos/uno/benchmark/data/run10.features.tsv",
-        );
-        let fasta = PathBuf::from(
-            "/home/patrick-garrett/Repos/uno/benchmark/data/entrap_human_yeast.fasta",
-        );
-        if !features.exists() || !fasta.exists() {
-            eprintln!("skipping: benchmark inputs not present");
+        let (Some(features), Some(fasta)) = (
+            crate::test_input("benchmark/data/09744.features.tsv"),
+            crate::test_input("benchmark/data/entrap_human_yeast.fasta"),
+        ) else {
             return;
-        }
+        };
 
         let matrix = FeatureMatrix::load(&features).unwrap();
         let db = PeptideDb::build(&fasta, &DigestConfig::default()).unwrap();
@@ -199,7 +194,39 @@ mod tests {
             matrix.len()
         );
         assert!(n_target > 0 && n_decoy > 0);
-        // All errors within tolerance
+        // All errors within tolerance. Necessary but weak: it holds for an empty
+        // match set and for a set that matched the wrong peptides, so the checks
+        // below assert the properties the search actually depends on.
         assert!(pfms.iter().all(|p| p.mass_error_ppm.abs() <= cfg.ppm_tolerance + 1e-6));
+
+        // Targets and decoys must arrive in comparable numbers. The decoy database
+        // is the null the whole FDR rests on, so a lopsided ratio means the null is
+        // not exchangeable with the targets, whatever the mass errors look like.
+        let ratio = n_decoy as f64 / n_target as f64;
+        assert!(
+            (0.5..=2.0).contains(&ratio),
+            "target/decoy PFM ratio is lopsided: {n_target} target vs {n_decoy} decoy"
+        );
+
+        // Every PFM must point at a real feature and a real peptide, and its charge
+        // must be one the matcher was allowed to consider.
+        assert!(pfms.iter().all(|p| (p.feature_idx as usize) < matrix.len()));
+        assert!(pfms.iter().all(|p| (p.peptide_idx as usize) < db.peptides.len()));
+
+        // The isotope offset is applied on the NEUTRAL mass in carbon-13 units, so
+        // only the offsets the config lists may appear.
+        assert!(pfms.iter().all(|p| cfg.isotope_offsets.contains(&p.isotope_offset)));
+
+        // Charges below the floor are skipped as non-peptide contaminants.
+        assert!(pfms
+            .iter()
+            .all(|p| matrix.features[p.feature_idx as usize].charge >= cfg.min_charge));
+
+        // A real search matches a substantial fraction of features, not a handful.
+        assert!(
+            n_feat_matched * 4 > matrix.len(),
+            "only {n_feat_matched}/{} features matched a peptide",
+            matrix.len()
+        );
     }
 }

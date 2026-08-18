@@ -3,9 +3,11 @@
 //!
 //! Both `uno-rt-train` (offline distillation) and the search scorer use
 //! [`rt_features`] so the model sees identical inputs at train and inference
-//! time. Features are the Klammer et al. (2007) composition set, matching
-//! sherlock for parity: 20 AA counts, 20 N-terminal-window counts, 20
-//! C-terminal-window counts, length, ln(1+mass), intercept = 63 features.
+//! time. [`rt_features`] emits the 99-d order-aware set described on
+//! [`RT_N_FEATURES`] below. It REPLACED an earlier composition-only set in the
+//! style of Klammer et al. (2007) (20 AA counts, 20 N-terminal-window counts, 20
+//! C-terminal-window counts, length, ln(1+mass), intercept = 63 features), which
+//! is no longer built here.
 
 use crate::mass;
 use anyhow::{Context, Result};
@@ -19,8 +21,9 @@ const N_POS_BINS: usize = 3;
 /// Number of features produced by [`rt_features`]. Order-aware "rich" set:
 /// 20 AA composition + 6 terminal-residue identities (first 3, last 3) +
 /// `N_POS_BINS`*20 position-binned composition + 13 scalar descriptors.
-/// Validated to match DeepLC's MS1 protein recovery (vs the old 69-d Klammer set
-/// which trailed it), via order-aware features the composition set lacked.
+/// Validated to match DeepLC's MS1 protein recovery (vs the old 63-feature
+/// composition-only set above, which trailed it), via order-aware features the
+/// composition set lacked.
 pub const RT_N_FEATURES: usize = 20 + 6 + N_POS_BINS * 20 + 13;
 
 /// Per-residue physicochemical scales, indexed by position in `AA`

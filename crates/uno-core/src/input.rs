@@ -366,21 +366,12 @@ fn read_features(path: &Path) -> Result<(String, Vec<MatrixRow>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn features_file() -> PathBuf {
-        PathBuf::from(
-            "/home/patrick-garrett/Repos/uno/benchmark/data/run10.features.tsv",
-        )
-    }
 
     #[test]
     fn loads_single_run_features() {
-        let path = features_file();
-        if !path.exists() {
-            eprintln!("skipping: feature file not present at {}", path.display());
+        let Some(path) = crate::test_input("benchmark/data/09744.features.tsv") else {
             return;
-        }
+        };
         let m = FeatureMatrix::load(&path).expect("load features");
         assert_eq!(m.n_samples(), 1, "single-run input");
         assert!(m.len() > 1000, "expected many features, got {}", m.len());
