@@ -1,0 +1,102 @@
+# The analysis that produces the manuscript's figures.
+#
+# THE CONTRACT WITH THE MANUSCRIPT IS ONE RECIPE: `assets`. It must regenerate
+# everything paper.typ and si-body.typ include, writing figures into ../figures/
+# and tables into ../si/. The paper's justfile calls `just assets` here and knows
+# nothing else about this directory.
+#
+# DEVIATIONS FROM THE STOCK SCAFFOLD, both deliberate:
+#
+#   1. Filenames. The scaffold globs `gen_*_figure.py`; this project keeps the
+#      `figN_name.py` -> `figures/figN_name.png` mapping, because the script name
+#      IS the figure number and paper/FIGURE_MANIFEST.md indexes it that way.
+#      A new figure needs no wiring here either -- it just has to be `fig*.py`.
+#
+#   2. Timestamp gating. `assets` regenerates only figures whose script (or
+#      style.py) is newer than the PNG. Regenerating all eleven costs about a
+#      minute and several of them re-read multi-gigabyte benchmark output from
+#      /mnt/labdata, so unconditional regeneration is the wrong default here.
+#      Use `just figures-all` after re-running a benchmark, since the data those
+#      scripts read lives outside the repo and its mtime is not consulted.
+#
+# Heavy inputs live outside the repo entirely (/mnt/labdata, ../../benchmark/).
+# The generated assets under ../figures/ are NOT gitignored: they are committed,
+# so a fresh clone compiles the PDF without re-running an analysis.
+
+# Default target
+default:
+  @just --list
+
+# Regenerate every asset the manuscript includes. This is the contract.
+assets: tables figures
+  @echo ""
+  @echo "assets regenerated into ../figures/ and ../si/"
+  @echo "rebuild the manuscript with: cd .. && just paper"
+
+# Tables -> ../si/*.typ.
+#
+# There are no table generators yet. The tables in ../si/ are hand-transcribed
+# from the benchmark outputs, and two of them carry a "GENERATED ... do not edit
+# by hand" header that no script on disk produces -- see paper/SUBMISSION_TODO.md
+# item D1, which is either to write the generator or to correct the label. This
+# recipe is the place the generators go when they are written: match
+# `gen_*_table.py` and they are picked up with no further wiring.
+tables:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  shopt -s nullglob
+  gens=(scripts/gen_*_table.py)
+  if [ ${#gens[@]} -eq 0 ]; then
+    echo "no table generators yet (../si/*.typ are hand-transcribed; see SUBMISSION_TODO D1)"
+    exit 0
+  fi
+  for s in "${gens[@]}"; do
+    echo "-> $s"
+    uv run --quiet "$s"
+  done
+
+# Figures whose script or style.py is newer than the PNG -> ../figures/
+figures:
+  @just _figures ""
+
+# Every figure, regardless of timestamps. Use after re-running a benchmark.
+figures-all:
+  @just _figures force
+
+# Each script is standalone, imports style.py, and writes
+# ../figures/<its own name>.{png,pdf}. Helpers (style.py, _*.py, test_*.py,
+# entrapment_data.py) are skipped -- they are imported, not run.
+_figures force="":
+  #!/usr/bin/env bash
+  set -euo pipefail
+  shopt -s nullglob
+  cd "{{justfile_directory()}}"
+  scripts=(scripts/fig*.py)
+  if [ ${#scripts[@]} -eq 0 ]; then
+    echo "no figure scripts in scripts/ yet"; exit 0
+  fi
+  mkdir -p ../figures
+  style=scripts/style.py
+  failed=() ran=0 skipped=0
+  for f in "${scripts[@]}"; do
+    b=$(basename "$f")
+    case "$b" in style.py|_*|conftest.py|test_*|entrapment_data.py) continue;; esac
+    png="../figures/${b%.py}.png"
+    if [ -z "{{force}}" ] && [ -f "$png" ] \
+       && [ "$png" -nt "$f" ] && [ "$png" -nt "$style" ]; then
+      skipped=$((skipped+1)); continue
+    fi
+    echo "=== $b"
+    if ! uv run --quiet "$f"; then failed+=("$b"); fi
+    ran=$((ran+1))
+  done
+  echo "figures: $ran regenerated, $skipped up to date"
+  if [ ${#failed[@]} -gt 0 ]; then
+    echo "FAILED figure scripts: ${failed[*]}" >&2
+    exit 1
+  fi
+
+# Remove the generated figures. Rarely wanted: they are tracked, so
+# `git checkout` is usually the better undo.
+clean:
+  rm -f ../figures/*.png ../figures/*.pdf

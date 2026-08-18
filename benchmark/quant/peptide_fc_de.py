@@ -47,14 +47,28 @@ def betai(a, b, x):
     return bt * betacf(a, b, x) / a if x < (a + 1) / (a + b + 2) else 1 - bt * betacf(b, a, 1 - x) / b
 
 
-def species(a):
-    a = a.upper()
-    return "UPS" if "UPS" in a else ("ECOLI" if "ECOLI" in a else "HUMAN")
+def species(acc):
+    """UPS1 / E. coli / human, by the deposit's own accession tags.
+
+    The UPS1 spike-ins are tagged `<accession>ups|<NAME>_HUMAN_UPS`. Testing for a
+    bare "UPS" substring after case-folding, which this did, also matches ordinary
+    human accessions that merely contain those three letters (`sp|Q9UPS8|ANR26_HUMAN`).
+    No such accession is present in this dataset, so no published number changes,
+    but the test has to be on the tag rather than on the letters.
+    """
+    if "ups|" in acc or acc.upper().endswith("_UPS"):
+        return "UPS"
+    return "ECOLI" if "ECOLI" in acc.upper() else "HUMAN"
 
 
-def main():
-    path, hi, lo = sys.argv[1], sys.argv[2], sys.argv[3]
-    gate = 1.0  # |mean log2 FC| >= 1 (2-fold) to enter the BH set, DirectMS1Quant-style FC_pass
+def analyze(path, hi, lo, gate=1.0):
+    """Run the contrast and return (rows, n_prot, thr).
+
+    ``rows`` is the FC-gated protein list sorted by p ascending, each entry
+    ``(p, species, accession, mean_log2fc, n)``; ``thr`` is the number of leading
+    rows accepted by Benjamini-Hochberg at 1%. ``n_prot`` is the pre-gate protein
+    count. Exposed so a figure can plot exactly what ``main`` prints.
+    """
     hdr = open(path).readline().rstrip("\n").split("\t")
 
     def repmap(n):
@@ -75,6 +89,13 @@ def main():
             continue
         acc = c[3].split(";")[0]
         his = [float(c[hi_i]) for hi_i, _ in pairs]
+        # ASYMMETRIC BY DESIGN, and it must be reported as such. The requirement is
+        # two non-zero replicates in the HIGH condition only, so a precursor that is
+        # absent at the high level and present at the dilute one is dropped before
+        # the test ever sees it. That is correct for a spike-DOWN dilution series,
+        # where the alternative hypothesis is one-directional: nothing in this design
+        # should rise as the spike is diluted. It also means the test cannot detect a
+        # protein that does, so the reported call set is not a two-sided result.
         if sum(1 for x in his if x > 0) < 2:  # need a confident up-state
             continue
         for hi_i, lo_i in pairs:
@@ -94,20 +115,26 @@ def main():
             continue
         se = s / math.sqrt(n) if s > 0 else 1e-9; t = m / se
         p = betai((n - 1) / 2, 0.5, (n - 1) / ((n - 1) + t * t))
-        rows.append((p, species(acc)))
+        rows.append((p, species(acc), acc, m, n))
 
     rows.sort(); M = len(rows); thr = 0
-    for k, (p, _) in enumerate(rows, 1):
+    for k, (p, *_) in enumerate(rows, 1):
         if p <= 0.01 * k / M:
             thr = k
-    u = e = o = tu = te = 0
-    for k, (p, s) in enumerate(rows):
-        tu += s == "UPS"; te += s == "ECOLI"
+    return rows, len(prot), thr
+
+
+def main():
+    path, hi, lo = sys.argv[1], sys.argv[2], sys.argv[3]
+    rows, n_prot, thr = analyze(path, hi, lo)
+    M = len(rows)
+    u = e = o = 0
+    for k, (p, s, *_) in enumerate(rows):
         if k < thr:
             u += s == "UPS"; e += s == "ECOLI"; o += s == "HUMAN"
     tot = u + e + o
     print(f"  {hi}_vs_{lo}: UPS(TP)={u}  ECOLI_FP={e}  human={o}  "
-          f"precision={100 * u / tot if tot else 0:.0f}%  (gated {M} of {len(prot)} prot)")
+          f"precision={100 * u / tot if tot else 0:.0f}%  (gated {M} of {n_prot} prot)")
 
 
 if __name__ == "__main__":

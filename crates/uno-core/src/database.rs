@@ -56,13 +56,16 @@ pub struct DigestConfig {
     pub decoy_order: usize,
 }
 
-/// Build the target + decoy database with ms1searchpy-style GLOBAL-POOL shuffled
-/// decoys. The interior residues of every target peptide are pooled, shuffled
-/// once, and dealt back out to the decoys (keeping each peptide's terminal
-/// residues). Unlike a per-peptide permutation, this gives each decoy a DIFFERENT
-/// composition — and therefore a different mass — so decoys sample the true random
-/// mass-coincidence background instead of being mass-twins of their targets. That
-/// is what keeps the per-protein binomial's random rate p low and the FDR honest.
+/// Build the target + decoy database with ms1searchpy-style shuffled decoys.
+///
+/// The interior residues are pooled PER PROTEIN (not globally — see the grouping
+/// below), shuffled, and dealt back out to that protein's decoys, keeping each
+/// peptide's terminal residues. Unlike a per-peptide permutation, this generally
+/// gives each decoy a different composition, and therefore a different mass, so
+/// decoys sample the random mass-coincidence background instead of being
+/// mass-twins of their targets. That is what keeps the per-protein binomial's
+/// random rate p low and the FDR honest. Nothing here enforces non-collision with
+/// a target: decoys are deduplicated against each other only.
 fn global_shuffle_decoy_db(
     sage_peptides: Vec<sage_core::peptide::Peptide>,
     cfg: &DigestConfig,
@@ -391,19 +394,14 @@ impl PeptideDb {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
-
-    fn fasta() -> PathBuf {
-        PathBuf::from("/home/patrick-garrett/Repos/koth_rust/benchmark/data/fasta/human_ecoli.fasta")
-    }
 
     #[test]
     fn builds_human_ecoli_db() {
-        let f = fasta();
-        if !f.exists() {
-            eprintln!("skipping: fasta not present");
+        // The two-proteome entrapment FASTA the benchmark uses. Portable and
+        // in-repo (gitignored), rather than a path into a sibling checkout.
+        let Some(f) = crate::test_input("benchmark/data/entrap_human_yeast.fasta") else {
             return;
-        }
+        };
         let cfg = DigestConfig::default();
         let db = PeptideDb::build(&f, &cfg).expect("build db");
         assert!(db.n_targets > 100_000, "targets: {}", db.n_targets);
@@ -412,8 +410,11 @@ mod tests {
         // sorted ascending
         assert!(db.peptides.windows(2).all(|w| w[0].mass <= w[1].mass));
 
-        // a 10 ppm window around a mid-range mass yields a small candidate set
-        let m = 1500.0;
+        // A 10 ppm window around a mid-range mass yields a small candidate set.
+        // Probe an actual peptide mass rather than a round number: peptide masses
+        // cluster by mass defect, so a nominal 1500.0 falls in the gap between
+        // clusters and legitimately has no candidates within 10 ppm.
+        let m = db.peptides[db.peptides.len() / 2].mass;
         let tol = m * 10e-6;
         let c = db.candidates(m - tol, m + tol);
         assert!(!c.is_empty());

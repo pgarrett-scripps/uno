@@ -20,3 +20,8 @@ __pycache__/
 .DS_Store
 *.swp
 experiments_archive/
+
+# Literature PDFs dropped at the repo root. Reference papers belong in
+# paper/references.bib, not in the tree. Root-level only, so the tracked
+# paper/paper.pdf is unaffected.
+/*.pdf

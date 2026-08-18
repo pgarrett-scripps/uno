@@ -1,9 +1,347 @@
-# uno paper (Typst, arkheion template)
+# uno manuscript build (Typst). See README.md for the tour.
+#
+# Single combined PDF: paper.pdf = main text followed by the appended Supporting
+# Information (S-numbered figures and tables). Splitting the OUTPUT is a
+# submission-bundle task, not a source-layout one -- see SUBMISSION_TODO.md B4.
+#
+# The analysis that produces the figures lives in analysis/, inside this
+# directory, and writes straight into figures/. The only thing this justfile
+# knows about it is that `just assets` regenerates everything the manuscript
+# includes. See analysis/justfile for that contract.
+#
+# The hand-written Typst sources, for `just fmt`. Add files here as the
+# manuscript grows. Deliberately does NOT include si/*.typ -- see the `fmt` note.
+typst_sources := "config.typ paper.typ si-body.typ"
+
+# Line width for typstyle. Must stay in step with `tinymist.formatterPrintWidth`
+# in .vscode/settings.json, or format-on-save and `just fmt` will fight.
+fmt_width := "80"
+
+# Default target
 default:
   @just --list
+
+# Which paper-scaffold version this manuscript is built on, and the state of the
+# working tree. See HISTORY.md for the versioning policy and how to upgrade.
+version:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  v=$(grep -m1 '^version = ' pyproject.toml | cut -d'"' -f2)
+  echo "paper-scaffold $v"
+  if git rev-parse --git-dir >/dev/null 2>&1; then
+    dirty=$(git status --porcelain . | wc -l)
+    echo "  commit  $(git log -1 --format='%h %ad %s' --date=short)"
+    [ "$dirty" -gt 0 ] && echo "  tree    $dirty uncommitted change(s) under paper/" || echo "  tree    clean"
+  fi
+
+# One-time (and after any pyproject change): build the Python environment. uv
+# resolves and locks it, so every machine gets the same versions. The analysis has
+# its own separate environment; `just assets` builds it on demand.
+setup:
+  uv sync
+  @echo "environment ready. For the audiobooks: just audio-setup"
+
+# Compile paper.typ -> paper.pdf, then print word counts, readability and density
 paper:
   typst compile paper.typ
+  @bash wordcount.sh
+  @echo ""
+  @uv run --quiet python readability.py
+  @echo ""
+  @uv run --quiet python density.py
+
+# Alias kept from the pre-scaffold justfile, where `just pdf` was the usual one.
+pdf: paper
+
+# Rebuild every artifact this directory owns: PDF, Word, and both audiobooks.
+#
+# SCOPE. This does NOT re-run the analysis. The figures under figures/ come from
+# `just assets`. `check` reports drift in those too, without rebuilding anything.
+all: paper docx audiobook-all
+  @echo ""
+  @echo "PDF, Word and both audiobooks rebuilt from the current source."
+  @just check
+
+# See wordcount.typ for exactly what is excluded (refs, figures/tables, captions,
+# math, code) vs. included (headings, inline code).
+# Journal-style word counts (main text / SI / total), without rebuilding the PDF
+wordcount:
+  @bash wordcount.sh
+
+# Readability metrics (Flesch-Kincaid grade, reading ease, words/sentence, fog)
+readability:
+  @uv run --quiet python readability.py
+
+# Density metrics: numerals, parentheticals, acronyms, nominalizations, passives
+# and hedges per 1,000 words, plus the sections that depart from the paper's own
+# norms. These are what make prose dense; a reading-level score cannot see them.
+density:
+  @uv run --quiet python density.py
+
+# Check the prose against the mechanical rules in STYLE.md. Errors are rules with
+# no legitimate exception here (em dash, British spelling, doubled word, an
+# uncited figure, a bold span or list in running prose) and exit non-zero.
+# Warnings are judgement calls (long sentences, verbosity, semicolons, citation
+# order) and are reported without failing.
+# Add --strict to treat warnings as failures: uv run python prose_check.py --strict
+prose-check:
+  @uv run --quiet python prose_check.py
+
+# Assert the prose extractors still handle every construct, and still do so after
+# a reflow. Runs against tests/fixture.typ, which is NOT part of the manuscript.
+test:
+  @uv run --quiet python tests/run.py
+
+# Rewrite tests/expected/ from the current extractor behaviour. Review the diff:
+# this is how a regression gets blessed into the baseline by accident.
+test-update:
+  @uv run --quiet python tests/run.py --update
+
+# Live preview, recompiling on save
 watch:
   typst watch paper.typ
+
+# ---------------------------------------------------------------------------
+# Formatting (typstyle), the same engine tinymist uses as its formatter backend,
+# so format-on-save and `just fmt` agree -- PROVIDED .vscode/settings.json keeps
+# formatterPrintWidth and formatterProseWrap in step with `fmt_width` below.
+#
+# SCOPE. `typst_sources` excludes si/*.typ, which are transcribed/generated and
+# would show up as spurious diffs. .vscode/settings.json marks them read-only.
+# ---------------------------------------------------------------------------
+
+# Reflow the hand-written Typst sources to `fmt_width` columns
+fmt:
+  typstyle --inplace --line-width {{fmt_width}} --wrap-text {{typst_sources}}
+  @echo "formatted. Rebuild with `just paper` and confirm nothing moved."
+
+# Exit non-zero if the hand-written sources need reformatting (gate for CI or a hook)
+fmt-check:
+  typstyle --check --line-width {{fmt_width}} --wrap-text {{typst_sources}}
+
+# Word export for ACS Paragon Plus, which wants an editable source file.
+# Route: Typst HTML export -> pandoc. Three things make it work:
+#   1. --input docx=true bypasses the arkheion template, whose page rules HTML
+#      export ignores, dropping the title block and abstract.
+#   2. paper.typ wraps equations in html.frame() under the same flag, because
+#      HTML export drops math outright; typst2docx.py rasterizes them back inline.
+#   3. pandoc comes from uv (pypandoc-binary), so no system install is needed.
+# Typst prints "ignored during HTML export" warnings for layout-only constructs;
+# those are expected. The PDF path is entirely unaffected by the flag.
+docx:
+  typst compile --features html --input docx=true -f html paper.typ paper.docx.html
+  uv run --quiet python typst2docx.py paper.docx.html paper.docx
+  @rm -f paper.docx.html
+
+# ---------------------------------------------------------------------------
+# Generated assets. Figures are written DIRECTLY by analysis/ into figures/, with
+# no staging copy, because a copy is the thing that goes stale.
+#
+# This is a single delegation on purpose. The manuscript knows one thing about
+# the analysis: `just assets` brings its outputs up to date.
+# ---------------------------------------------------------------------------
+
+# Regenerate every figure and table the manuscript includes (delegates to analysis/)
+assets:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{justfile_directory()}}"
+  if [ ! -d analysis ]; then
+    echo "no analysis/ directory: this manuscript has no generated assets."
+    exit 0
+  fi
+  (cd analysis && just assets)
+  # Record what produced these, so check-assets can tell whether the analysis has
+  # moved on since. Written here rather than in analysis/justfile so the contract
+  # with the analysis stays "regenerate the assets" and nothing more.
+  just _assets-stamp > .assets-stamp
+  echo "stamped .assets-stamp"
+
+# Force every figure, ignoring timestamps. Use after re-running a benchmark: the
+# data those scripts read lives outside the repo, so its mtime is never consulted.
+assets-all:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd "{{justfile_directory()}}"
+  (cd analysis && just figures-all && just tables)
+  just _assets-stamp > .assets-stamp
+  echo "stamped .assets-stamp"
+
+# Everything a submission bundle needs to be self-consistent. Run before tagging.
+#
+# Covers the ways this directory actually goes stale: a tracked paper.pdf
+# committed before a source fix, a Word export older than the text it renders,
+# figures older than the analysis code that produces them, a figure the
+# manuscript embeds that does not exist, and text outside the printable area.
+check:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  cd "{{justfile_directory()}}"
+  rc=0
+
+  just check-pdf || rc=1
+
+  # paper.docx is gitignored, so mtime is the only signal here.
+  #
+  # The audiobooks are deliberately NOT checked. Every prose edit would mark them
+  # stale, and clearing that costs minutes of narration, so the warning was almost
+  # always present and almost never acted on.
+  newest() { ls -t "$@" 2>/dev/null | head -1; }
+  check_artifact() {   # <artifact> <label> <input>...
+    local f="$1" label="$2"; shift 2
+    local src; src=$(newest "$@")
+    if [ ! -f "$f" ]; then
+      echo "MISSING: $f -- rebuild: $label"
+      rc=1
+    elif [ -n "$src" ] && [ "$f" -ot "$src" ]; then
+      echo "STALE:   $f is older than $src -- rebuild: $label"
+      rc=1
+    fi
+  }
+  check_artifact paper.docx "just docx" \
+    paper.typ config.typ si-body.typ references.bib si/*.typ figures/*.png
+
+  just check-assets || rc=1
+
+  # Every figure the manuscript embeds must exist.
+  for f in $(grep -hoE 'image\("figures/[^"]+"' paper.typ si-body.typ \
+             | sed 's/image("//;s/"//'); do
+    [ -f "$f" ] || { echo "MISSING FIGURE: $f"; rc=1; }
+  done
+
+  # No text outside the printable area. This is what caught Tables S2/S3, which
+  # `typst compile` reports as perfectly clean.
+  if command -v pdftotext >/dev/null 2>&1 && [ -f paper.pdf ]; then
+    uv run --quiet python check_overflow.py paper.pdf || rc=1
+  fi
+
+  [ $rc -eq 0 ] && echo "check: OK"
+  exit $rc
+
+# figures/ is generated by analysis/ but TRACKED, so a fresh clone compiles the
+# PDF without re-running an analysis that reads data from outside the repo. That
+# makes it the second thing here that can silently disagree with its own source:
+# edit a generator, forget to re-run it, and the manuscript keeps rendering the
+# old numbers with nothing to flag it.
+#
+# Compares a CONTENT STAMP of the analysis source, not commit dates: the
+# generators are deterministic on purpose, so re-running one after an edit that
+# does not move the output produces no new commit, and a date-based check would
+# then nag forever with no way to satisfy it.
+# Fail if the generated figures predate the analysis code that makes them
+check-assets:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  cd "{{justfile_directory()}}"
+  if [ ! -d analysis ]; then
+    echo "note:    no analysis/ directory, skipped the generated-asset check"
+    exit 0
+  fi
+  want=$(just _assets-stamp)
+  have=$(cat .assets-stamp 2>/dev/null || echo "")
+  if [ -z "$have" ]; then
+    echo "MISSING: .assets-stamp -- run: just assets"
+    exit 1
+  fi
+  if [ "$want" != "$have" ]; then
+    echo "STALE: analysis/ has changed since figures/ was last generated"
+    echo "  fix: just assets && git add figures .assets-stamp"
+    exit 1
+  fi
+  echo "figures/ is current with analysis/"
+
+# Hash of the analysis source: every file under analysis/ that can determine what
+# the figures look like.
+#
+# Markdown is excluded on top of the scaffold's exclusions. `analysis/README.md`
+# cannot change a plot, and including it meant a documentation edit reported the
+# figures as stale, whose only remedy is re-running an analysis that reads
+# multi-gigabyte inputs off /mnt/labdata. That is a nag with an expensive fix,
+# which is how a staleness check earns being ignored.
+_assets-stamp:
+  @cd "{{justfile_directory()}}" && find analysis -type f \
+      -not -path 'analysis/.venv/*' -not -name '*.pyc' -not -name 'uv.lock' \
+      -not -name '*.md' \
+      | sort | xargs sha256sum | sha256sum | cut -d" " -f1
+
+# paper.pdf is a TRACKED build artifact -- it is the reviewable output, so a
+# reader can get it from the repo without a Typst install. That makes it the one
+# thing here that can silently disagree with its own source. Compare commit
+# dates, not mtimes, since a fresh clone rewrites every mtime.
+# Fail if the committed paper.pdf is older than the manuscript source it was built from
+check-pdf:
+  #!/usr/bin/env bash
+  set -uo pipefail
+  cd "{{justfile_directory()}}"
+  if ! git rev-parse --git-dir >/dev/null 2>&1; then
+    echo "note:    not a git repository, skipped the paper.pdf staleness check"
+    exit 0
+  fi
+  pdf_commit=$(git log -1 --format=%H -- paper.pdf)
+  if [ -z "$pdf_commit" ]; then echo "paper.pdf is not committed yet"; exit 1; fi
+  sources="paper.typ config.typ si-body.typ references.bib si figures figdata analysis"
+  stale=$(git log --format=%ct "$pdf_commit"..HEAD -- $sources | head -1)
+  if [ -n "$stale" ]; then
+    echo "STALE: paper.pdf predates these source commits --"
+    git log --oneline "$pdf_commit"..HEAD -- $sources | sed 's/^/  /'
+    echo "  fix: just paper && git add paper.pdf"
+    exit 1
+  fi
+  echo "paper.pdf is current with $sources"
+
+# ---------------------------------------------------------------------------
+# Audiobook (audio/). Offline Piper TTS narration of the prose. Only the scripts
+# in audio/ are tracked -- the engine, the voice model, the ffmpeg venv and every
+# generated audio file are gitignored -- so a fresh clone needs `just audio-setup`
+# once. Voice, titles and pronunciations all come from audio/config.py.
+# ---------------------------------------------------------------------------
+
+# Piper 1.2.0, x86_64 Linux (the tarball unpacks to audio/piper/).
+piper_url := "https://github.com/rhasspy/piper/releases/download/v1.2.0/piper_amd64.tar.gz"
+
+# One-time: fetch the Piper engine and voice model, and build the ffmpeg venv.
+audio-setup:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd audio
+  test -x piper/piper || curl -sSL "{{piper_url}}" | tar -xz
+  mkdir -p models
+  # The voice name and its path under piper-voices both live in config.py.
+  read -r name lang < <(python3 -c "import config; print(config.VOICE_NAME, config.VOICE_LANG)")
+  base="https://huggingface.co/rhasspy/piper-voices/resolve/main/${lang}/${name}.onnx"
+  test -f "models/${name}.onnx"      || curl -sSL -o "models/${name}.onnx" "$base"
+  test -f "models/${name}.onnx.json" || curl -sSL -o "models/${name}.onnx.json" "${base}.json"
+  cd .. && uv sync --quiet --group audio
+  echo "audio toolchain ready -- build with: just audiobook"
+
+# Chaptered audiobook of the main text -> audio/paper.m4b (one chapter per section).
+audiobook: _audio-check
+  cd audio && uv run --quiet --group audio python make_audiobook.py
+
+# Chaptered audiobook of the Supporting Information -> audio/paper_si.m4b.
+audiobook-si: _audio-check
+  cd audio && uv run --quiet --group audio python make_audiobook.py si
+
+# Both chaptered audiobooks (main text, then SI).
+audiobook-all: audiobook audiobook-si
+
+# Fail early with a fix-it hint when the untracked toolchain is missing.
+_audio-check:
+  #!/usr/bin/env bash
+  set -euo pipefail
+  cd audio
+  name=$(python3 -c "import config; print(config.VOICE_NAME)")
+  if [ ! -x piper/piper ] || [ ! -f "models/${name}.onnx" ]; then
+    echo "audio toolchain missing -- run: just audio-setup"
+    exit 1
+  fi
+
+# Remove generated audio and intermediates, keeping the engine, voice, and venv.
+audio-clean:
+  rm -rf audio/chapters audio/chapters_si
+  rm -f audio/paper.wav audio/paper.mp3 audio/paper.opus audio/paper.m4b audio/paper_si.m4b
+  rm -f audio/paper_prose.txt audio/cover_main.png audio/cover_si.png
+
+# Remove the built PDF and Word export
 clean:
-  rm -f paper.pdf
+  rm -f paper.pdf paper.docx paper.docx.html

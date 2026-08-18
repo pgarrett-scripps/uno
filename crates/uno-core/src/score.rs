@@ -114,10 +114,12 @@ pub struct ScoreConfig {
     /// from the ENSEMBLE STRUCTURE (10 cumulative thresholds, averaged, like
     /// ms1searchpy's `final_iteration`), not classifier quality. When a feature
     /// file lacks the quality columns it correctly no-ops (guarded by a strict
-    /// better-than-baseline check). OFF by
-    /// default because it re-runs the full protein engine 10x (real runtime cost);
-    /// turn on for single-run biosaur2-native searches where depth matters more
-    /// than latency.
+    /// better-than-baseline check).
+    ///
+    /// ON by default (see `ScoreConfig::default`), and active in every benchmark
+    /// reported in the manuscript. It costs a re-run of the protein engine per
+    /// inclusion band, so it trades latency for depth. Set false for the plain
+    /// deviation path.
     pub ml_rescore: bool,
 }
 
@@ -457,11 +459,26 @@ fn mass_anchor_calibration(
         // Anchors + recalibration set = matched peptides of confident proteins.
         anchor_pos.clear();
         let mut cerr: Vec<f64> = Vec::new();
-        for (&pi, &(err, pos)) in &best {
+        // Sorted key order: `best` is a HashMap, and `cerr` is reduced by
+        // `clipped_sigma` below, which is a float reduction.
+        let mut best_keys: Vec<usize> = best.keys().copied().collect();
+        best_keys.sort_unstable();
+        for pi in best_keys {
+            let (err, pos) = best[&pi];
             if (err - shift).abs() > tol {
                 continue;
             }
             let pep = &db.peptides[pi];
+            // DECOY GUARD. `confident` is keyed (is_decoy, accession) and this
+            // asks only for the TARGET entry, but a decoy peptide carries the
+            // same parent accessions as the target it was shuffled from, so
+            // without this check a decoy peptide of a confident target protein
+            // is admitted as a mass anchor and into the recalibration sample.
+            // The RT path (`est_rt_sig`) has always guarded this; the mass path
+            // did not, which is the asymmetry that gave it away.
+            if pep.decoy {
+                continue;
+            }
             if pep.proteins.iter().any(|pr| confident.contains(&(false, pr.as_ref()))) {
                 anchor_pos.push(pos);
                 cerr.push(err);
@@ -547,7 +564,15 @@ fn mass_anchor_calibration(
     let est_rt_sig = |cal: &Calibration, confident: &HashSet<String>, m_shift: f64, m_gate: f64| -> f64 {
         let mut rr: Vec<f64> = Vec::new();       // best rt_diff per peptide (uno legacy)
         let mut all_rd: Vec<f64> = Vec::new();   // ALL confident-peptide PFM rt_diffs (ms1's noisygaus input)
-        for (&pi, pfm_list) in &pep_pfms {
+        // Sorted key order, not `&pep_pfms` directly: HashMap iteration is
+        // process-random, and while the resulting SET of residuals is the same
+        // either way, the reducers below are float reductions whose result
+        // depends on the order they see. Deterministic here, and `clipped_sigma`
+        // sorts defensively as well.
+        let mut pep_keys: Vec<usize> = pep_pfms.keys().copied().collect();
+        pep_keys.sort_unstable();
+        for pi in pep_keys {
+            let pfm_list = &pep_pfms[&pi];
             let pep = &db.peptides[pi];
             if pep.decoy || !pep.proteins.iter().any(|pr| confident.contains(pr.as_ref())) {
                 continue;
@@ -1065,13 +1090,21 @@ fn mass_anchor_calibration(
                 }
             }
             // Publish the RT+mass-gated peptide→feature map for the quant rollup.
+            // Sorted by peptide index: `pep_best` is a std HashMap, so iterating it
+            // directly published this list in process-random order. The list is
+            // `ScoreResult::peptides`, which feeds protein GROUPING and the quant
+            // rollup, so the order reached the reported group membership even though
+            // every score was identical -- two runs on one file agreed on all 3325
+            // proteins and disagreed on the members of 38 of them.
             MASS_ANCHOR_PEPTIDES.with(|c| {
-                *c.borrow_mut() = pep_best
+                let mut v: Vec<(u32, u32, bool)> = pep_best
                     .iter()
                     .map(|(&pi, &(decoy, pos, _))| {
                         (pi as u32, pfms[reduced[pos]].feature_idx, decoy)
                     })
                     .collect();
+                v.sort_unstable();
+                *c.borrow_mut() = v;
             });
             // Candidate set = mass+RT-gated peptides. The gate must be LOOSE: uno's CNN
             // RT is ~2 min MAE (only ~half of real peptides within 1 min), so a tight
@@ -1294,14 +1327,19 @@ fn mass_anchor_calibration(
             // Env-tunable: UNO_ENS_STEPS resolution, UNO_ENS_LO..UNO_ENS_HI the
             // included step band.
             //
-            // DEFAULT = "top-30%" (lo=1, hi=3): average only the 3 TIGHTEST of the 10
-            // inclusion bands (top 10/20/30% of ML-ranked peptides), dropping the loose
-            // junk-heavy passes (top 40-100%) that inflate the random-match background p.
+            // DEFAULT = steps=40, lo=1, hi=14: average only the 14 TIGHTEST of 40
+            // inclusion bands (roughly the top 2.5-35% of ML-ranked peptides), dropping
+            // the loose junk-heavy passes that inflate the random-match background p.
             // Validated 2026-07-20 on 2 large HeLa runs (run10 775->1218, deephela-240min
             // 1585->1752; neutral on a small run), dual-null calibrated (internal decoy
             // FDR and yeast-entrapment agree) and byte-deterministic. Takes uno from
-            // behind ms1searchpy-DeepLC to a tie. Set `UNO_ENS_HI=10` for the old full
-            // 1..=10 uniform sweep (the pre-2026-07-20 default).
+            // behind ms1searchpy-DeepLC to a tie. Set `UNO_ENS_HI=10` with
+            // `UNO_ENS_STEPS=10` for the old full uniform sweep (pre-2026-07-20).
+            //
+            // NOTE: this band was SELECTED by maximizing yeast-entrapment depth on
+            // run10 and deephela, which are development datasets from the same family
+            // as the published benchmark. The manuscript discloses it as a tuned
+            // default; do not present it as an independent result.
             let n_steps: usize = std::env::var("UNO_ENS_STEPS").ok().and_then(|s| s.parse().ok()).unwrap_or(40);
             let lo: usize = std::env::var("UNO_ENS_LO").ok().and_then(|s| s.parse().ok()).unwrap_or(1).max(1);
             let hi: usize = std::env::var("UNO_ENS_HI").ok().and_then(|s| s.parse().ok()).unwrap_or(14).min(n_steps);
@@ -1431,7 +1469,7 @@ thread_local! {
 }
 
 /// One RT+mass-gated peptide→feature hit, exposed for the quant rollup.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PeptideHit {
     pub peptide_idx: u32,
     pub feature_idx: u32,
@@ -1775,7 +1813,14 @@ fn robust_sigma(vals: impl Iterator<Item = f64>) -> f64 {
 /// MAD is inflated by that background. Restricting to |x| <= 2.5σ and recomputing
 /// the std converges to the true peak sigma (ms1searchpy fits a Gaussian for this).
 fn clipped_sigma(vals: impl Iterator<Item = f64>) -> f64 {
-    let v: Vec<f64> = vals.filter(|x| x.is_finite()).collect();
+    let mut v: Vec<f64> = vals.filter(|x| x.is_finite()).collect();
+    // Sort before reducing. Every caller builds its input by iterating a HashMap,
+    // so the values arrive in process-random order, and the two `sum::<f64>()`
+    // below are not associative in floating point: the same sample gives a
+    // slightly different sigma run to run. That sigma feeds the `dev <= cut`
+    // acceptance, so the low bits reach the accepted protein set. Sorting also
+    // makes the summation more accurate, since the magnitudes are then adjacent.
+    v.sort_unstable_by(f64::total_cmp);
     if v.len() < 20 {
         return robust_sigma(v.into_iter());
     }
@@ -1996,4 +2041,57 @@ pub fn score(
         (Vec::new(), Vec::new())
     };
     ScoreResult { proteins, peptides }
+}
+
+#[cfg(test)]
+mod determinism_tests {
+    use super::*;
+
+    /// `clipped_sigma` must not depend on the order it sees its sample.
+    ///
+    /// Every caller builds the input by iterating a `HashMap`, so the order is
+    /// process-random, and the function reduces with `sum::<f64>()`, which is not
+    /// associative in floating point. The resulting sigma feeds the `dev <= cut`
+    /// acceptance, so a low-bit difference reaches the accepted protein set. This
+    /// is the regression test for that fix: shuffled input, bit-identical output.
+    #[test]
+    fn clipped_sigma_is_order_invariant() {
+        // A tight Gaussian-ish core plus a flat background, i.e. the shape the
+        // function exists to handle, and large enough to pass its n >= 20 gate.
+        let base: Vec<f64> = (0..400)
+            .map(|i| {
+                let x = (i % 41) as f64 - 20.0;
+                if i % 17 == 0 { x * 3.7 } else { x * 0.11 }
+            })
+            .collect();
+
+        let want = clipped_sigma(base.iter().copied());
+
+        // Deterministic shuffles (no RNG: the test must not need one).
+        for stride in [7usize, 13, 29, 97] {
+            let mut shuffled = Vec::with_capacity(base.len());
+            let mut i = 0usize;
+            for _ in 0..base.len() {
+                shuffled.push(base[i]);
+                i = (i + stride) % base.len();
+            }
+            shuffled.reverse();
+            let got = clipped_sigma(shuffled.into_iter());
+            assert_eq!(
+                want.to_bits(),
+                got.to_bits(),
+                "clipped_sigma changed with input order (stride {stride}): {want} vs {got}"
+            );
+        }
+    }
+
+    /// The same property for the degenerate branch (n < 20 -> `robust_sigma`).
+    #[test]
+    fn clipped_sigma_is_order_invariant_below_the_gate() {
+        let base: Vec<f64> = vec![0.4, -1.2, 0.03, 2.9, -0.7, 0.11, -0.02, 1.4, 0.8, -0.35];
+        let want = clipped_sigma(base.iter().copied());
+        let mut rev = base.clone();
+        rev.reverse();
+        assert_eq!(want.to_bits(), clipped_sigma(rev.into_iter()).to_bits());
+    }
 }

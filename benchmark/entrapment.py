@@ -53,7 +53,22 @@ def load(path):
 
 
 def curve(rows, thresholds=(0.01, 0.05)):
-    rows.sort(key=lambda r: -r[0])
+    # Ties are broken ENTRAPMENT-FIRST, deterministically.
+    #
+    # Two things were wrong with the previous `key=lambda r: -r[0]`. Python's sort
+    # is stable, so equal scores kept their order in the input FILE -- and the two
+    # engines write their protein tables in different orders, so the same evidence
+    # gave different curves. uno's binomial protein score is quantized, so ties are
+    # common rather than exotic.
+    #
+    # Sorting entrapment hits ahead of true ones within a tie makes the estimate
+    # CONSERVATIVE at every tie boundary: a tied block is charged its false
+    # positives before it is credited its true ones, so the reported depth at a
+    # given FDP can only be understated. The alternative (`r[1]`, target-first) is
+    # equally deterministic but optimistic at every tie, which is the wrong
+    # direction for a paper whose claim is that its FDR is honest. Applied
+    # identically to both engines either way.
+    rows.sort(key=lambda r: (-r[0], not r[1]))
     human = yeast = 0
     steps = []
     for _, is_y in rows:

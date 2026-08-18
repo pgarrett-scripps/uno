@@ -1,7 +1,11 @@
 //! Pure-Rust inference for the `URTC` retention-time CNN — a sequence-aware
 //! model (learned AA embedding -> residual dilated Conv1d stack -> masked
-//! mean+max pool -> MLP head), trained offline on experimental iRT
-//! (ProteomeTools/Prosit) by `crates/uno-rt-train/python/train_rt.py`.
+//! mean+max pool -> MLP head), trained offline by
+//! `crates/uno-rt-train/python/train_rt.py` on experimental retention times from
+//! the Chronologer peptide library (see
+//! `crates/uno-rt-train/python/chronologer_to_labels.py`). The shipped model is
+//! `models/rt_cnn_chrono_global_v3_ch32.urtc`; unlike the `rt.rs` student it is
+//! NOT distilled from DeepLC.
 //!
 //! Replaces the positional one-hot MLP (`rt_mlp.rs`): a convolution shares
 //! weights across positions and reads a learned embedding, so it generalizes

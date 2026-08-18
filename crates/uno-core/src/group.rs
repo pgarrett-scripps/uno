@@ -87,7 +87,16 @@ pub fn build_groups(
                 set.insert(gid);
             }
         }
-        pep_gids.entry(h.peptide_idx).or_insert_with(|| set.into_iter().collect());
+        // Sorted, so `gids[0]` is a defined element rather than whichever one the
+        // HashSet happened to yield first. The `max_by` below already tie-breaks
+        // deterministically; this covers the `unwrap_or(&gids[0])` fallback, which
+        // is inert today only because its result is discarded at the `confident`
+        // check a few lines down.
+        pep_gids.entry(h.peptide_idx).or_insert_with(|| {
+            let mut v: Vec<usize> = set.into_iter().collect();
+            v.sort_unstable();
+            v
+        });
     }
     // Unique-peptide count per group (peptides touching exactly one group).
     let mut uniq_count: HashMap<usize, usize> = HashMap::new();
@@ -124,10 +133,22 @@ pub fn build_groups(
     (groups, pep_group)
 }
 
-/// Map each group's leading accession to its full member list (for output).
-pub fn members_by_leading(groups: &[ProteinGroup]) -> HashMap<String, Vec<String>> {
+/// Map each group's `(decoy, leading accession)` to its full member list (for output).
+///
+/// Keyed on the decoy flag as well as the accession, and it must be: uno's decoy
+/// peptides carry the SAME protein accessions as the targets they were shuffled
+/// from (see `database.rs`), so a target group and a decoy group routinely share a
+/// leading accession. Keyed on the accession alone, `collect()` silently kept
+/// whichever of the two came later in `groups` -- and `groups` is built by
+/// iterating a `HashMap`, so that was decided by the process hash seed.
+///
+/// This was the last source of run-to-run difference in `--out-proteins`: two runs
+/// agreed on every protein, score, peptide count and q-value, and disagreed on the
+/// group members of ~1% of rows, because those rows were being handed a decoy
+/// group's membership at random.
+pub fn members_by_leading(groups: &[ProteinGroup]) -> HashMap<(bool, String), Vec<String>> {
     groups
         .iter()
-        .map(|g| (g.leading.clone(), g.members.clone()))
+        .map(|g| ((g.decoy, g.leading.clone()), g.members.clone()))
         .collect()
 }

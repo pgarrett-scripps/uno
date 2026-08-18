@@ -1,0 +1,11 @@
+# benchmark/uno.toml, values copied verbatim, comments condensed. This is the only
+# uno configuration used for every identification benchmark in this manuscript. It
+# aligns uno's digest to ms1searchpy's defaults so the comparison isolates the
+# engines. ms1searchpy defaults: -lmin 7 -lmax 30 -mc 0 -fmods Carbamidomethyl@C.
+# Of the three fields, only max_len (50 -> 30) changes a uno default;
+# min_len and missed_cleavages already match it.
+
+[digest]
+min_len = 7
+max_len = 30
+missed_cleavages = 0

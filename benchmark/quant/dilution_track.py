@@ -16,7 +16,7 @@ below is DESCENDING (UPS_1 = 50 fmol, the highest; UPS_8 = 0.1 fmol, the lowest)
 established empirically from spike-peptide signal.
 """
 import sys, re, math
-from statistics import mean
+from statistics import mean, median
 
 FMOL = {1: 50, 2: 25, 3: 10, 4: 5, 5: 2.5, 6: 1, 7: 0.25, 8: 0.1}
 
@@ -43,8 +43,17 @@ def spearman(x, y):
 
 
 def species(acc):
-    a = acc.upper()
-    return "UPS" if "UPS" in a else ("ECOLI" if "ECOLI" in a else "HUMAN")
+    """UPS1 / E. coli / human, by the deposit's own accession tags.
+
+    The UPS1 spike-ins are tagged `<accession>ups|<NAME>_HUMAN_UPS`. Testing for a
+    bare "UPS" substring after case-folding, which this did, also matches ordinary
+    human accessions that merely contain those three letters (`sp|Q9UPS8|ANR26_HUMAN`).
+    No such accession is present in this dataset, so no published number changes,
+    but the test has to be on the tag rather than on the letters.
+    """
+    if "ups|" in acc or acc.upper().endswith("_UPS"):
+        return "UPS"
+    return "ECOLI" if "ECOLI" in acc.upper() else "HUMAN"
 
 
 def main():
@@ -68,7 +77,10 @@ def main():
         r = stats[sp]
         if not r:
             print(f"  {sp}: 0 proteins"); continue
-        med = sorted(r)[len(r) // 2]
+        # true median (mean of the two middle values when n is even). The old
+        # `sorted(r)[len(r) // 2]` returned the upper-middle order statistic,
+        # which reported +0.74 for the n=16 UPS set whose median is +0.71.
+        med = median(r)
         frac = sum(1 for x in r if x > 0.5) / len(r)
         print(f"  {sp:6s} n={len(r):3d}  median_rho={med:+.2f}  mean={mean(r):+.2f}  frac(rho>0.5)={frac:.0%}")
 

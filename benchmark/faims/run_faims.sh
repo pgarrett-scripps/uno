@@ -9,12 +9,14 @@
 #   $DATA/sprot_human_and_ecoli_shuffled.fasta         targets + DECOY_ (stripped below)
 set -u
 cd "$(dirname "$0")"
-ROOT="../.."
+# Absolute paths throughout: the ms1searchpy step below runs inside $OUT, so a
+# path relative to this directory would resolve against the wrong cwd there.
+ROOT="$(cd ../.. && pwd)"
 DATA="${DATA:-/mnt/labdata/pgarrett/PXD023977_FAIMS}"
 UNO="$ROOT/target/release/uno"
 RT="$ROOT/models/rt_cnn_chrono_global_v3_ch32.urtc"
 MS1="${MS1:-$ROOT/../FeatureFinder/.venv/bin/ms1searchpy}"
-OUT="${OUT:-faims_out}"; mkdir -p "$OUT"
+OUT="${OUT:-faims_out}"; mkdir -p "$OUT"; OUT="$(cd "$OUT" && pwd)"
 
 # Target-only DB (strip the pre-made DECOY_ entries; both engines add their own).
 FASTA="$OUT/hye_target.fasta"

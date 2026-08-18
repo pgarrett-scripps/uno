@@ -1,2 +1,4 @@
 data/
 results/
+# run_faims.sh output: ms1searchpy leaves ~400 MB of PFM intermediates per run
+faims/faims_out/

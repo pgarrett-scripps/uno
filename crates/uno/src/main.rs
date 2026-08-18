@@ -302,7 +302,7 @@ fn main() -> Result<()> {
             "accession\tdecoy\tn_group_members\tgroup_members\tobserved_peptides\ttheoretical_peptides\tcoverage\tbinomial_score\tmean_rt_diff\tq_value"
         )?;
         for p in &proteins {
-            let mem = members.get(&p.accession);
+            let mem = members.get(&(p.decoy, p.accession.clone()));
             let n_mem = mem.map(|m| m.len()).unwrap_or(1);
             let mem_str = mem.map(|m| m.join(";")).unwrap_or_else(|| p.accession.clone());
             writeln!(
@@ -455,7 +455,7 @@ fn main() -> Result<()> {
             let mut rows: Vec<(&String, &(Vec<f64>, std::collections::HashSet<u32>))> = ab.iter().collect();
             rows.sort_by(|a, b| a.0.cmp(b.0));
             for (leading, (ints, peps)) in rows {
-                let mem = members.get(leading);
+                let mem = members.get(&(false, leading.to_string()));
                 let n_mem = mem.map(|m| m.len()).unwrap_or(1);
                 let mem_str = mem.map(|m| m.join(";")).unwrap_or_else(|| leading.clone());
                 write!(w, "{}\t{}\t{}\t{}", leading, n_mem, mem_str, peps.len())?;

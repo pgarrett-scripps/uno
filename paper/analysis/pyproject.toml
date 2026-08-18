@@ -1,0 +1,27 @@
+[project]
+name = "analysis"
+version = "0"
+description = "Analysis that produces the uno manuscript's figures"
+# matplotlib is pinned to 3.11.0 below, which requires >=3.11. Leaving this at
+# the scaffold's >=3.10 makes the resolution unsatisfiable rather than merely
+# unsupported, and uv reports it as a pin conflict.
+requires-python = ">=3.11"
+
+# Deliberately separate from the manuscript toolchain in ../pyproject.toml: those
+# dependencies are the same for every paper built on this scaffold and stay
+# locked, while these change with the science.
+#
+# matplotlib is PINNED. Figures are tracked build artifacts compared by content,
+# and a minor matplotlib bump moves text metrics and PNG bytes on every figure,
+# which reads as real drift. 3.11.0 is what rendered the current set; two figures
+# (fig5, figS5) were last rendered under 3.6.3 and still need a re-render under
+# this pin -- see paper/SUBMISSION_TODO.md item D5.
+dependencies = [
+  "matplotlib==3.11.0",
+  "numpy",
+  "pandas",
+  "python-pptx>=1.0.2",
+]
+
+[tool.uv]
+package = false
