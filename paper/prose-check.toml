@@ -1,0 +1,41 @@
+# Per-project exceptions to the checks in tools/prose_check.py.
+#
+# STYLE.md is the policy a person reads. This is the machine-checkable subset
+# plus the exceptions this manuscript has earned. Every entry should be one a
+# reviewer would accept, so write the reason next to it.
+#
+# `just prose-check --list-rules` prints every rule id and how to suppress it.
+# `just prose-check --show-suppressed` lists what this file is currently hiding,
+# which is worth running occasionally so nothing rots behind a suppression.
+
+# Rules switched off entirely. Use this only for rules with no per-value form.
+disable = []
+
+[allow]
+# Acronyms standard in mass spectrometry / proteomics: a JPR reader who needed
+# "MS1" expanded would not be reading this journal. Where the manuscript does
+# expand one at first use, that expansion stays; this list is what must not be
+# NAGGED about. Carried from the pre-scaffold checker's vocabulary.
+unexpanded-acronym = [
+  "SI",   # Supporting Information, defined by the section it names
+  # field
+  "MS", "MS1", "MS2", "LC", "RT", "IM", "CCS", "FAIMS", "CV", "PSM", "PFM",
+  "FDP", "TDC", "AUC", "ROC", "MBR", "LFQ", "TMT", "DIA", "DDA", "UPS", "UPS1",
+  "BH", "KS", "PPM", "FASTA", "TSV", "MZML", "PRIDE", "PXD",
+  # methods and models named by acronym throughout
+  "LDA", "MLP", "CNN", "SVR", "GBDT", "RANSAC", "RNG", "ML", "CLI", "RSS",
+  # repo files and section pointers that survive the inline-code stripper
+  "RESULTS", "TODO",
+]
+
+# Thresholds. Omit any you are happy with.
+[limits]
+max-sentence-words = 40   # flags a run-on; STYLE.md aims for 25
+opener-run = 3            # consecutive sentences opening with the same word
+repeat-in-sentence = 3    # times a distinctive word may repeat in one sentence
+
+[severity]
+# (shipped severities stand; uno's list/bold rules are errors in the registry)
+
+# [vocabulary.*] add/remove entries go here as the checker meets this field's
+# vocabulary. See the scaffold's prose-check.toml for the syntax.

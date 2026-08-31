@@ -24,7 +24,8 @@ from pathlib import Path
 
 import readability
 
-HERE = Path(__file__).resolve().parent
+# The manuscript root, one level up: this file lives in tools/.
+ROOT = Path(__file__).resolve().parent.parent
 
 # A section that exceeds the manuscript's own median by this factor is flagged.
 OUTLIER_FACTOR = 1.6
@@ -95,8 +96,8 @@ def median(xs: list[float]) -> float:
 
 
 def main() -> int:
-    paper = readability.slice_body((HERE / "paper.typ").read_text())
-    si = (HERE / "si-body.typ").read_text()
+    paper = readability.slice_body((ROOT / "paper.typ").read_text())
+    si = (ROOT / "si-body.typ").read_text()
 
     rows: list[tuple[str, dict]] = []
     for label, src in (("Main text", paper), ("Supporting Info", si)):
@@ -108,13 +109,19 @@ def main() -> int:
         print("  no prose to measure")
         return 0
 
-    print("Density (per 1,000 words; FK grade does not see any of these)")
-    head = f"  {'':<16}  {'words':>6}" + "".join(f"  {c:>9}" for c in COLS)
-    print(head)
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from report import console, table
+
+    t = table("Density, per 1,000 words",
+              caption="what a reading-level score does not see")
+    t.add_column()
+    t.add_column("words", justify="right")
+    for c in COLS:
+        t.add_column(c, justify="right")
     for label, m in rows:
-        line = f"  {label:<16}  {m['words']:>6,}"
-        line += "".join(f"  {m[c]:>9.1f}" for c in COLS)
-        print(line)
+        t.add_row(label, f"{m['words']:,}",
+                  *(f"{m[c]:.1f}" for c in COLS))
+    console.print(t)
 
     # --- per-section outliers, judged against this paper's own median ---
     secs = []
@@ -128,21 +135,30 @@ def main() -> int:
         print("\n  (too few substantial sections to compare against each other)")
         return 0
 
-    print(f"\nSection outliers (> {OUTLIER_FACTOR}x this paper's own median, "
-          f"sections over {MIN_SECTION_WORDS} words)")
     meds = {c: median([m[c] for _, m in secs]) for c in COLS}
-    hits = 0
+    # Full names, never truncated. The old fixed 34-column cut turned
+    # "Implementation and format compatibility" into a string that had to be
+    # guessed at -- in a report whose whole job is to name a section.
+    flagged = []
     for name, m in secs:
-        flags = [f"{c} {m[c]:.0f} vs {meds[c]:.0f}"
+        flags = [f"{c} [bold]{m[c]:.0f}[/] (median {meds[c]:.0f})"
                  for c in COLS if meds[c] > 0 and m[c] > OUTLIER_FACTOR * meds[c]]
         if flags:
-            hits += 1
-            print(f"  {name[:34]:<34}  " + ";  ".join(flags))
-    if not hits:
-        print("  none: every section sits close to the manuscript's own norms")
+            flagged.append((name, flags))
 
-    print("\n  These are heuristics, not limits. A high rate is a prompt to reread")
-    print("  the section, not a defect. See STYLE.md.")
+    console.print()
+    t = table(f"Section outliers, > {OUTLIER_FACTOR}x this paper's own median",
+              caption="heuristics, not limits: a high rate is a prompt to "
+                      "reread the section, not a defect. See STYLE.md.")
+    t.add_column("section")
+    t.add_column("departs from the rest of the paper")
+    if flagged:
+        for name, flags in flagged:
+            t.add_row(name, "\n".join(flags))
+    else:
+        t.add_row("[dim]none[/]",
+                  "[dim]every section sits close to the manuscript's norms[/]")
+    console.print(t)
     return 0
 
 

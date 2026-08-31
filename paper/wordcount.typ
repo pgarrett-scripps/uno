@@ -27,6 +27,18 @@
 // into the eval scope so the sliced body evaluates.
 #let refn(l) = ref(l, supplement: none)
 
+// The generated-number lookup, same as paper.typ imports. Injected below for the
+// same reason as refn: the sliced body calls it, and an eval scope missing a
+// helper fails the whole count rather than just that number.
+#import "stats.typ": lit, n, s, todo
+
+// The generated-asset lookup, for the same reason again: the sliced body calls
+// fig() for every generated figure, and an eval scope missing it fails the whole
+// count with `unknown variable: fig` pointing at the slice rather than at the
+// figure. Imported under other names because `fig`/`tbl` would collide with the
+// per-file word-count locals below.
+#import "assets.typ": fig as asset-fig, tbl as asset-tbl
+
 #let src = read("paper.typ")
 #let start-m = src.match(regex("(?m)^// >>> BODY START.*$"))
 #let end-m = src.match(regex("(?m)^// <<< BODY END.*$"))
@@ -38,7 +50,7 @@
 #let main-body = eval(
   src.slice(start-m.end, end-m.start),
   mode: "markup",
-  scope: (refn: refn),
+  scope: (refn: refn, s: s, n: n, lit: lit, todo: (msg) => none, fig: asset-fig, tbl: asset-tbl),
 )
 #let si-body = include "si-body.typ"
 

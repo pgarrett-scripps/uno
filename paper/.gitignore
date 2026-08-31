@@ -1,14 +1,39 @@
-# Build artifacts. paper.pdf is deliberately NOT here -- it is the reviewable
-# output, so a reader can get the manuscript from the repo without a Typst
-# install, and `just check-pdf` guards it against going stale.
+# Build artifacts. paper.pdf used to be tracked so a reader could get the
+# manuscript without a Typst install. It is not any more: git keeps every version
+# of a binary forever, a clone pays for all of them, and removing one means
+# rewriting history. Ship the PDF as a release asset or a CI artifact instead.
+#
+# Staleness is answered without git now -- `just paper` and `just docx` record
+# the hash of what they rendered in .build-stamp and `just check-build` recompares
+# it. .build-stamp is untracked too, because it describes local build output:
+# tracking it would let a rebuild here report every other checkout stale.
+paper.pdf
+paper-draft.pdf
+.build-stamp
+# Stat-keyed cache for the content hashes `just verify` compares. Local build
+# state like .build-stamp: safe to delete, never the recorded truth (that stays
+# in stats.json / assets.json). See tools/hashcache.py.
+.hash-cache.json
+# Snapshot of paper.pdf's extracted text, for `just text-diff` around a
+# structural refactor. Local and disposable, like the build stamp.
+.text-baseline
+# Snapshots of the manuscript's mechanical properties (numbers, refs, floats,
+# headings), for `just edit-check` around a copy-edit pass. Same contract.
+.edit-guard/
+
+# Rendered from stats.json by tools/render_stats.py: the display strings Typst
+# reads. Derived, not source -- stats.json holds the value and the format spec,
+# and this is what Python's formatter makes of them. Every recipe that compiles
+# regenerates it, so it is never stale and never worth committing.
+stats-rendered.json
+# just viz diagnostics: regenerated on demand, never part of the manuscript
+viz/
 paper.docx
 paper.docx.html
-paper.docx.staged.html
-paper.staged.html
 
-# Audio toolchain: engine, voice models, venv, and every generated audio file.
+# Audio toolchain: voice models and every generated audio file. The engine is a
+# uv dependency now (piper-tts), so there is no downloaded binary to ignore.
 # Only the scripts in audio/ are tracked, so a fresh clone runs `just audio-setup`.
-audio/piper/
 audio/models/
 audio/.venv/
 audio/chapters/
@@ -21,11 +46,22 @@ audio/paper_prose.txt
 audio/cover_main.png
 audio/cover_si.png
 
-# Python caches and environments
+# Python caches
 __pycache__/
 *.pyc
-.venv/
+
+# Analysis inputs and intermediates. The CODE in analysis/ is tracked; the heavy
+# data and the results tree are not, and neither is its virtualenv. The generated
+# figures/ and si/ ARE tracked, so a fresh clone compiles the PDF without
+# re-running an analysis that may take hours.
+analysis/data/
+analysis/results/
 analysis/.venv/
 
-# Typst compile leftovers
+# The manuscript resolved to plain Typst for pandoc-based exports.
+# Derived from paper.typ + stats.json + assets.json on demand.
+paper.resolved.typ
+
+# uno additions: the root uv venv, and Typst editor backup files.
+.venv/
 *.typ.bak

@@ -1,0 +1,5 @@
+{
+  "_about": "Numbers the manuscript states in prose, read as #s(\"<id>\"). Scripts own each entry's value; fmt, unit, desc and expect are the author's to edit here. Entries with origin.by = \"hand\" are entirely yours.",
+  "sources": {},
+  "values": {}
+}

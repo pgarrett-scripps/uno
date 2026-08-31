@@ -10,7 +10,6 @@ with Piper, then muxes them into one .m4b with embedded chapter markers (titles
 
 Titles, descriptions, voice, and pronunciations all come from config.py.
 """
-import os
 import re
 import subprocess
 import sys
@@ -18,11 +17,12 @@ import wave
 from pathlib import Path
 
 import config
-from extract_prose import clean, extract_abstract, extract_body, strip_balanced
+from extract_prose import (
+    clean, extract_abstract, extract_body, report_unmapped, strip_balanced,
+)
 
 HERE = Path(__file__).resolve().parent
 VOICE = HERE / "models" / f"{config.VOICE_NAME}.onnx"
-PIPER = HERE / "piper" / "piper"
 
 # --- which document to narrate: `main` (default) or `si` ---------------------
 DOC = "si" if (len(sys.argv) > 1 and sys.argv[1] == "si") else "main"
@@ -91,22 +91,50 @@ def wav_seconds(path):
 def main():
     raw = SRC.read_text()
     chapters = build_chapters(raw)
+    # Before spending the synthesis time on it: say what got dropped.
+    report_unmapped()
     CHAPDIR.mkdir(exist_ok=True)
 
-    env = {**os.environ, "LD_LIBRARY_PATH": str(HERE / "piper")}
+    # Piper is a library call, not a subprocess. It used to be a binary fetched
+    # by curl, which is why this once needed an LD_LIBRARY_PATH and a process per
+    # chapter. The ONNX model is loaded ONCE here rather than per chapter, which
+    # is the whole saving: it was being re-read from disk for every section.
+    if not VOICE.is_file():
+        raise SystemExit(f"error: no voice at {VOICE}\n  fix: just audio-setup")
+    from piper import PiperVoice
+    voice = PiperVoice.load(VOICE)
 
-    # 1. synthesize each chapter to its own WAV, record durations
+    # 1. synthesize each chapter to its own WAV, record durations.
+    #
+    # Synthesis dominates the runtime -- minutes for a full manuscript -- and
+    # used to run silent between chapter lines. The bar shows which chapter is
+    # being spoken and how far along the book is; it is transient (gone when
+    # done) and renders nothing when output is piped, so logs keep only the
+    # per-chapter lines they always had.
+    from rich.progress import (BarColumn, Progress, TextColumn,
+                               TimeElapsedColumn)
     wavs, starts, cur = [], [], 0.0
-    for i, (title, text) in enumerate(chapters):
-        wav = CHAPDIR / f"{i:02d}.wav"
-        subprocess.run([str(PIPER), "--model", str(VOICE), "--output_file", str(wav)],
-                       input=text.encode(), env=env, check=True,
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        dur = wav_seconds(wav)
-        starts.append(cur)
-        cur += dur
-        wavs.append(wav)
-        print(f"  ch{i:02d} {int(cur//60):3d}:{int(cur%60):02d}  {title}")
+    with Progress(
+        TextColumn("  narrating"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+        TextColumn("[dim]{task.fields[title]}[/]"),
+        transient=True,
+    ) as prog:
+        task = prog.add_task("", total=len(chapters), title="")
+        for i, (title, text) in enumerate(chapters):
+            prog.update(task, title=title)
+            wav = CHAPDIR / f"{i:02d}.wav"
+            with wave.open(str(wav), "wb") as wf:
+                voice.synthesize_wav(text, wf)
+            dur = wav_seconds(wav)
+            starts.append(cur)
+            cur += dur
+            wavs.append(wav)
+            prog.console.print(
+                f"  ch{i:02d} {int(cur//60):3d}:{int(cur%60):02d}  {title}")
+            prog.advance(task)
     total = cur
 
     # 2. ffmpeg concat list
