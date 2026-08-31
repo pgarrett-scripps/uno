@@ -1,5 +1,107 @@
 {
   "_about": "Numbers the manuscript states in prose, read as #s(\"<id>\"). Scripts own each entry's value; fmt, unit, desc and expect are the author's to edit here. Entries with origin.by = \"hand\" are entirely yours.",
-  "sources": {},
-  "values": {}
+  "sources": {
+    "analysis/scripts/gen_stats.py": {
+      "analysis/scripts/gen_stats.py": "sha256:0ab02c5cb26bb0b84ef1c9e8c159542f887fccc9964e77baea2337edc1ca7892",
+      "../benchmark/results/summary.tsv": "sha256:06c53270e6dcda6c610c290ca526740dd6f876a1e961237f991ebaefb24577df"
+    }
+  },
+  "values": {
+    "bench.ms1_wall_max": {
+      "value": 247.4,
+      "fmt": ".0f",
+      "unit": "s",
+      "desc": "Slowest ms1searchpy replicate wall time across the six datasets",
+      "expect": {
+        "sign": "+",
+        "min": 1,
+        "max": 3600
+      },
+      "checksum": "v2:fadec913ce52956d",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-31T22:48:37Z"
+      }
+    },
+    "bench.ms1_wall_min": {
+      "value": 195.2,
+      "fmt": ".0f",
+      "unit": "s",
+      "desc": "Fastest ms1searchpy replicate wall time across the six datasets",
+      "expect": {
+        "sign": "+",
+        "min": 1,
+        "max": 3600
+      },
+      "checksum": "v2:7e99a4a159fb644c",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-31T22:48:37Z"
+      }
+    },
+    "bench.speed_factor_max": {
+      "value": 7.012084592145015,
+      "fmt": ".1f",
+      "unit": "x",
+      "desc": "Largest per-dataset ms1searchpy-median/uno wall-time factor",
+      "expect": {
+        "sign": "+",
+        "min": 1,
+        "max": 50
+      },
+      "checksum": "v2:f233711c0158eab3",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-31T22:48:37Z"
+      }
+    },
+    "bench.speed_factor_min": {
+      "value": 5.255605381165919,
+      "fmt": ".1f",
+      "unit": "x",
+      "desc": "Smallest per-dataset ms1searchpy-median/uno wall-time factor",
+      "expect": {
+        "sign": "+",
+        "min": 1,
+        "max": 50
+      },
+      "checksum": "v2:630e4a1f4fb0f1dc",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-31T22:48:37Z"
+      }
+    },
+    "bench.uno_wall_max": {
+      "value": 44.6,
+      "fmt": ".0f",
+      "unit": "s",
+      "desc": "Slowest uno single-run search wall time across the six datasets",
+      "expect": {
+        "sign": "+",
+        "min": 1,
+        "max": 600
+      },
+      "checksum": "v2:e14821c0248624ee",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-31T22:48:37Z"
+      }
+    },
+    "bench.uno_wall_min": {
+      "value": 31.9,
+      "fmt": ".0f",
+      "unit": "s",
+      "desc": "Fastest uno single-run search wall time across the six datasets",
+      "expect": {
+        "sign": "+",
+        "min": 1,
+        "max": 600
+      },
+      "checksum": "v2:f02032d50a64ed5e",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-08-31T22:48:37Z"
+      }
+    }
+  }
 }

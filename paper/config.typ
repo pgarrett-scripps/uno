@@ -62,16 +62,15 @@
   see identical input. On six datasets from the DirectMS1 papers, uno identified
   more proteins at 1% entrapment false-discovery rate (FDR) than the median of
   three ms1searchpy replicates, by 3.0 to 39.7%. It ran 5.3 to 7.0 times faster
-  in half the peak memory. On three independent 10 ng HeLa Orbitrap Astral
-  runs, uno returned 1006 to 1448 proteins at 1% entrapment FDR, against
-  ms1searchpy medians of 45 to 47, while running approximately 10 times faster.
-  uno is byte-deterministic. ms1searchpy's depth on
-  identical input varies by up to 40.5% of its median. Two-proteome entrapment
-  finds uno's reported 1% protein FDR conservative on four of six datasets and
-  about twice optimistic on one. On the DirectMS1Quant UPS1 dilution
-  series, uno-derived abundances tracked the spike design (median Spearman
-  $rho = +0.71$); trace-level differential testing remains outside the validated
-  scope.
+  in half the peak memory. On three independent 10 ng HeLa Orbitrap Astral runs,
+  uno returned 1006 to 1448 proteins at 1% entrapment FDR, against ms1searchpy
+  medians of 45 to 47, while running approximately 10 times faster. uno is
+  byte-deterministic. ms1searchpy's depth on identical input varies by up to
+  40.5% of its median. Two-proteome entrapment finds uno's reported 1% protein
+  FDR conservative on four of six datasets and about twice optimistic on one. On
+  the DirectMS1Quant UPS1 dilution series, uno-derived abundances tracked the
+  spike design (median Spearman $rho = +0.71$); trace-level differential testing
+  remains outside the validated scope.
 ]
 
 // -----------------------------------------------------------------------------

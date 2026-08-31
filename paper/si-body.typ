@@ -1,3 +1,8 @@
+// Included from paper.typ; an included file has its own scope, so the project
+// helpers are imported here too (MIGRATING.md trap 2).
+#import "stats.typ": lit, n, s, todo
+#import "assets.typ": fig, tbl
+
 // ============================ Supporting Information =======================
 // Appended to the same document, as a single combined PDF. S-prefixed
 // numbering for both figures and tables, following the mechanism used in
@@ -43,7 +48,7 @@ deposit and its feature file on disk.
 
 #figure(
   caption: [Software and hardware used for every measurement reported here.],
-  include "si/versions.typ",
+  tbl("tbl.versions"),
 ) <tbl:versions>
 
 #figure(
@@ -54,23 +59,23 @@ deposit and its feature file on disk.
     development-configuration experiments of Sections 3.4 and S9, which is a
     different run from 09746 despite the similar number; and deephela, a
     240-minute gradient used only where stated.],
-  include "si/datasets.typ",
+  tbl("tbl.datasets"),
 ) <tbl:datasets>
 
 The commands below regenerate the identification, FAIMS and quantitation
 results.
 
-#include "si/commands.typ"
+#tbl("tbl.commands")
 
 The only uno configuration used in the identification benchmark is the digest
 alignment to ms1searchpy's defaults.
 
-#raw(read("si/uno.toml"), lang: "toml", block: true)
+#raw(read("figdata/uno.toml"), lang: "toml", block: true)
 
 Every other uno setting took its default value. The defaults, read from the
 configuration structs rather than transcribed, are:
 
-#raw(read("si/defaults.toml"), lang: "toml", block: true)
+#raw(read("figdata/defaults.toml"), lang: "toml", block: true)
 
 = S2: Per-dataset and per-replicate results
 
@@ -84,7 +89,7 @@ summarized in the main text.
     proteins accepted at the stated two-proteome entrapment FDR, not a count
     from either engine's own reported $q$. Memory is peak resident set size in
     MiB, as reported by `/usr/bin/time -v`.],
-  include "si/results_per_dataset.typ",
+  tbl("tbl.results-per-dataset"),
 ) <tbl:perdataset>
 
 = S3: Entrapment calibration
@@ -108,7 +113,7 @@ trustworthy statistic, not any one panel.
 
 #figure(
   placement: auto,
-  image("figures/figS1_fdp_curves.png", width: 100%),
+  fig("fig.figs1-fdp-curves", width: 100%),
   caption: [
     Each engine's own reported $q$ against the entrapment false-discovery
     proportion of the list it reports at that $q$, one panel per dataset, for
@@ -122,7 +127,7 @@ trustworthy statistic, not any one panel.
 #figure(
   caption: [Each engine's own reported 1% protein list, scored against the
     entrapment probe.],
-  include "si/entrap_reported.typ",
+  tbl("tbl.entrap-reported"),
 ) <tbl:entrapreported>
 
 = S4: FAIMS benchmark
@@ -135,7 +140,7 @@ this comparison is independent of the yeast probe used elsewhere.
 
 #figure(
   placement: auto,
-  image("figures/figS2_faims.png", width: 100%),
+  fig("fig.figs2-faims", width: 100%),
   caption: [
     FAIMS benchmark on PXD023977, three replicate runs, #emph[E. coli]
     entrapment. uno against ms1searchpy at 1% and 5% FDR. uno is deeper on
@@ -148,14 +153,14 @@ this comparison is independent of the yeast probe used elsewhere.
 #figure(
   caption: [FAIMS benchmark, mean over the three replicate runs, with the
     per-replicate 1% counts in run order LUM2_05433 / 05434 / 05435.],
-  include "si/faims.typ",
+  tbl("tbl.faims"),
 ) <tbl:faims>
 
 = S5: Resource scaling
 
 #figure(
   placement: auto,
-  image("figures/figS3_resources.png", width: 100%),
+  fig("fig.figs3-resources", width: 100%),
   caption: [
     Wall-clock time, user CPU time and peak resident memory against input
     feature count. uno is plotted as its single deterministic value; ms1searchpy
@@ -191,7 +196,7 @@ classifier is further from chance again for both engines (@tbl:qualityauc).
 
 #figure(
   placement: auto,
-  image("figures/figS4_quality_columns.png", width: 100%),
+  fig("fig.figs4-quality-columns", width: 100%),
   caption: [
     The per-feature quality columns as a depth lever, on the run10 dataset.
     *(a)* Identification depth with and without the columns, for both engines.
@@ -207,7 +212,7 @@ classifier is further from chance again for both engines (@tbl:qualityauc).
     one-off diagnostic run whose scripts were not retained. The last two rows
     give the distance from chance for retention time and for the full match
     classifier, in the form the source records them, rather than a raw AUC.],
-  include "si/quality_auc.typ",
+  tbl("tbl.quality-auc"),
 ) <tbl:qualityauc>
 
 #figure(
@@ -215,7 +220,7 @@ classifier is further from chance again for both engines (@tbl:qualityauc).
     plus yeast entrapment. Every row except the column-stripped uno row was
     recomputed from protein tables still on disk. That row survives only in the
     benchmark record, because the run behind it was not retained.],
-  include "si/quality_ablation.typ",
+  tbl("tbl.quality-ablation"),
 ) <tbl:qualityablation>
 
 = S7: Quantitation detail
@@ -272,7 +277,7 @@ from one-scan noise.
 
 #figure(
   placement: auto,
-  image("figures/figS5_quant_detail.png", width: 100%),
+  fig("fig.figs5-quant-detail", width: 100%),
   caption: [
     Quantitation detail on PXD033350. *(a)* per-species abundance trajectories
     across the eight spike levels. The trajectories separate the spike from the
@@ -290,7 +295,7 @@ from one-scan noise.
   caption: [Dilution tracking by species on PXD033350. $rho$ is the Spearman
     correlation of protein abundance against log spike amount, and n is the
     number of proteins quantified in at least 8 of the 24 runs.],
-  include "si/quant_detail.typ",
+  tbl("tbl.quant-detail"),
 ) <tbl:quantdetail>
 
 = S8: Run-to-run reproducibility detail
@@ -306,7 +311,7 @@ broken. @fig:determinism plots the resulting contrast dataset by dataset.
 
 #figure(
   placement: auto,
-  image("figures/figS6_determinism.png", width: 100%),
+  fig("fig.figs6-determinism", width: 100%),
   caption: [
     Run-to-run reproducibility on fixed input. *(a)* and *(b)* plot the three
     ms1searchpy replicates against uno's single deterministic value at 1% and at

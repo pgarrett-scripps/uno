@@ -90,9 +90,9 @@ Verified after each batch: `typst compile` exits 0 with no warnings, and
   the eleven `[scoring]` defaults that were missing, including `ml_rescore = true`;
   removed the three inert `ondata_rt*` keys. Added the tuning-provenance note on
   `top_k` and the ensemble band (D2).
-- `paper/si/defaults.toml` regenerated from the config structs rather than copied,
+- `paper/figdata/defaults.toml` regenerated from the config structs rather than copied,
   and the SI prose changed from "The complete default set is" to an accurate claim.
-- `paper/si/uno.toml` header corrected: values verbatim, comments condensed, and only
+- `paper/figdata/uno.toml` header corrected: values verbatim, comments condensed, and only
   `max_len` actually differs from a uno default.
 
 **Stale documentation (§1b)**
@@ -204,14 +204,14 @@ config listing.
 - [ ] `example_config.toml:16` — `variable_mods = { M = [15.994915] }` contradicts the
       code default (empty, `database.rs:191`). As published it implies the benchmark
       searched Met oxidation, which it did not.
-- [ ] Write a generator that emits `paper/si/defaults.toml` from `DigestConfig::default()`,
+- [ ] Write a generator that emits `paper/figdata/defaults.toml` from `DigestConfig::default()`,
       `MatchingConfig`, `ScoreConfig::default()` and `ProteinConfig::default()`.
       Current file lists 19 of 44 defaulted settings; missing include `ml_rescore`
       (default `true`), `decoy_mass_shift`, `decoy_shuffle`, `decoy_method`,
       `decoy_order`, `min_charge`, `n_folds`, `calibration_fdr`, `bootstrap_rounds`,
       `iterations`, `max_depth`, `shrinkage`, `max_train_rows`, `seed_min_runs_frac`,
       `mass_anchor_ppm`, and the whole `[protein]` table.
-- [ ] Restore the `top_k` tuning comment that `paper/si/defaults.toml:24-27` elides
+- [ ] Restore the `top_k` tuning comment that `paper/figdata/defaults.toml:24-27` elides
       relative to `example_config.toml:22-32` (or handle via D2).
 - [ ] Remove or wire up the dead config surface: `ondata_rt`, `ondata_rt_finetune`,
       `ondata_rt_lambda` (read zero times), `discriminant`, `calibration_fdr`,
@@ -950,10 +950,10 @@ Corrections:
       label discourages the only check that would catch drift. Either relabel
       "Transcribed" or write the generator. (Both were re-derived by the audit and are
       currently numerically exact.)
-- [ ] `paper/si/uno.toml:1-4`, `paper/si/defaults.toml:1-3` — "Copy of" is not accurate:
+- [ ] `paper/figdata/uno.toml:1-4`, `paper/figdata/defaults.toml:1-3` — "Copy of" is not accurate:
       values are byte-identical but comments were rewritten and abridged. Say "values
       copied verbatim; comments condensed".
-- [ ] `paper/si/defaults.toml:2-3` — "overrides only the three `[digest]` fields"
+- [ ] `paper/figdata/defaults.toml:2-3` — "overrides only the three `[digest]` fields"
       overstates by one: `min_len = 7` equals the default, so only `max_len` and
       `missed_cleavages` change anything.
 - [ ] `paper/si/commands.typ:1-2` — "Verbatim from…" is inaccurate and the block is not

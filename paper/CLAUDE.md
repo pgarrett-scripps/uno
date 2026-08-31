@@ -1,7 +1,9 @@
 # Working in this directory
 
 Instructions for an agent editing the uno manuscript. Read [README.md](README.md)
-for what the pipeline does and [STYLE.md](STYLE.md) for prose conventions.
+for what the pipeline does and [STYLE.md](STYLE.md) for prose conventions. This
+directory is built on paper-scaffold 3.15.1 (`just version`); HISTORY.md records
+the migration and the upstream history.
 
 **Read [`SUBMISSION_TODO.md`](SUBMISSION_TODO.md) before editing the paper**, and
 [`AUDIT.md`](AUDIT.md) when you need the evidence behind an item. They hold a
@@ -10,84 +12,100 @@ Most of what looks like an error in this manuscript is already recorded there wi
 a decision attached, and every identification number is provisional pending the
 re-run (SUBMISSION_TODO C1). [`../TODO.md`](../TODO.md) is the code-side half.
 
+## The contract for generated things
+
+Figures and tables are declared in `assets.json` and referenced by id —
+`fig("fig.fig2-headtohead", width: 100%)`, `tbl("tbl.versions")` — never by
+filename; an undeclared id fails the compile, and `prose-check` errors on a
+declared file named directly. Numbers the analysis computes are declared in
+`analysis/scripts/gen_stats.py` and read back as `#s("id")`; guards there fail
+the build when a re-run changes a number's meaning under a sentence.
+
+Every current asset is **adopted** (`origin.by = "adopted"` in assets.json):
+committed pre-scaffold outputs that nothing can regenerate until generators call
+`record()`. The C1 re-run is when that flips — each `figN_*.py` gains a
+`record(...)` call, takes its id over from the adoption, and the typed numbers
+in the prose move into gen_stats.py as `#s()` reads (the `unaccounted-number`
+warnings from `just prose-check` are the worklist).
+
 ## Never do these
 
-**Never hand-edit `si/*.typ` without checking.** Two of them carry a
-"GENERATED … do not edit by hand" header that **no generator on disk produces** —
-they are hand-transcribed, and the label is itself a known defect
-(SUBMISSION_TODO D1). Until that is resolved, editing them by hand is how the
-numbers move; prefer fixing the source the numbers came from and transcribing
-deliberately. Once generators exist (`analysis/scripts/gen_*_table.py`), an edit
-survives only until the next `just assets`.
+**Never hand-edit files under `figures/` or `si/`.** Both are declared assets;
+`just check-assets` compares their hashes against assets.json and fails on a
+silent edit. The SI tables are hand-transcribed today (SUBMISSION_TODO D1) — a
+deliberate correction is: fix the source the number came from, edit the file,
+then re-record with `just adopt note="..."` so the change is accepted on the
+record. Once generators exist, an edit survives only until the next
+`just assets`.
 
-**Never hand-edit files under `figures/`.** They are written by `analysis/`.
-Change the script that produces the plot and run `just assets`.
-
-**Never type a result into the prose that no generated table or figure backs.**
-If a number is worth stating, it is worth being traceable.
+**Never type a result into the prose that no generated table, figure, or
+stats.json entry backs.** If a number is worth stating, it is worth being
+traceable; the ways out are `#s("id")`, a hand entry in stats.json with an
+origin note, or `#lit("...")` for genuine prose.
 
 **Never delete the `// >>> BODY START` / `// <<< BODY END` markers** in
-`paper.typ`. The word counter, the readability report, and the narrator all slice
-the prose at them, and each hard-fails without them.
+`paper.typ`. The word counter, the readability report, and the narrator all
+slice the prose at them, and each hard-fails without them.
 
 ## Before saying the work is done
 
-Run `just check`. It exits non-zero if the committed PDF predates a source
-commit, if the Word export is older than what it renders, if `figures/` has
-fallen behind `analysis/`, if an embedded figure is missing, or if any text sits
-outside the printable area. "I edited the text" is not done; "`just check` is
-clean" is done.
+Run `just verify`. It runs every gate — formatting, extractor tests, prose
+rules, the stats/assets declarations, and staleness (which includes
+`tools/check_overflow.py`, the uno-specific bbox scan that caught Tables S2/S3
+printing over the page number while `typst compile` reported the build clean).
+"I edited the text" is not done; "`just verify` is clean" is done. It rebuilds
+nothing, so build first: `just paper && just verify`.
 
-That last check is uno-specific and worth knowing about: `check_overflow.py`
-bbox-scans the PDF, and it is what caught Tables S2/S3 printing over the page
-number while `typst compile` reported the build perfectly clean.
+If you changed prose, quote the word count and readability numbers `just paper`
+prints rather than estimating, and read the prose-check warnings rather than
+silencing them (`prose-check.toml` takes an exception only with a written
+reason). `just density` shows which section is densest relative to the paper.
 
-If you changed prose, also run `just paper` so the word count and readability
-numbers in your report are current, and quote them rather than estimating. Run
-`just prose-check` too: it fails on em dashes, British spellings, doubled words,
-and uncited figures, and reports long sentences, verbosity, repetition, and
-unexpanded acronyms as warnings you should read rather than silence. `just
-density` shows which section is densest relative to the rest of the paper.
+If you changed inline markup, math, links, or cross-references, `just test`
+asserts the extractors still handle every construct; they are regexes in
+`tools/typst_prose.py` that a reflow can break silently, which has happened
+three times. If you taught an extractor a new construct, add a case to
+`tests/fixture.typ` and regenerate goldens with `just test-update`, reading the
+diff before committing. Do not add coverage via `paper.typ`; that prose gets
+deleted.
 
-If you changed inline markup, math, links, or cross-references, run `just test`.
-Those constructs are recognized by regexes in `typst_prose.py` that a reflow can
-break silently, which has happened three times (see that file for the cases).
-
-If you taught an extractor to handle a new construct, add a case for it to
-`tests/fixture.typ` and regenerate the golden files with `just test-update`,
-reading the diff before you commit it. Do not add coverage by putting the
-construct in `paper.typ`: that prose is placeholder and gets deleted.
+Before submitting: `just preflight` (fresh builds + verify + re-derived stats +
+the Crossref DOI audit; needs network).
 
 ## When adding a table or figure
 
 Read [FIGURE_MANIFEST.md](FIGURE_MANIFEST.md) first: it is the single source of
-truth for figure filenames, panel contents and data provenance, and its first
+truth for figure content, panel contents and data provenance, and its first
 hard rule is **never invent a number**.
 
 A figure: add `analysis/scripts/figN_name.py`, importing `style.py` before
-creating any figure (its rcParams apply at import). The script name is the output
-name — `fig2_headtohead.py` writes `../figures/fig2_headtohead.{png,pdf}` — and
-that mapping is the only wiring `just assets` needs. Set
-`metadata={"Software": None}` and seed any RNG, or every regeneration churns the
-PNG bytes and shows up as a diff that is not a real change. matplotlib is pinned
-in `analysis/pyproject.toml` for the same reason.
+creating any figure (its rcParams apply at import). The script name is the
+output name — `fig2_headtohead.py` writes `../figures/fig2_headtohead.{png,pdf}`
+— and the analysis justfile picks up any `fig*.py` with no wiring. The script
+must also call `record(...)` (see `analysis/scripts/_assets.py`) declaring the
+png and its data inputs, and the prose references it as `fig("fig.<id>")`. Set
+`metadata={"Software": None}` and seed any RNG, or every regeneration churns
+the PNG bytes. The `.pdf` twin is declared under `<id>-pdf` and allowed as an
+orphan in prose-check.toml — it is for the submission bundle, not the compile.
 
-A table: `si/*.typ` are hand-transcribed today. When generators are written they
-go in `analysis/scripts/` as `gen_*_table.py`, write a bare `#table(...)` into
-`../../si/` with no caption or label, and are picked up with no further wiring;
-`si-body.typ` wraps them in a `#figure` where the caption and label live.
+A table: generators go in `analysis/scripts/` as `gen_*_table.py`, write a bare
+`#table(...)` into `../../si/` with no caption or label, call `record(...)`,
+and are picked up with no further wiring; si-body.typ wraps `tbl("id")` in a
+`#figure` where the caption and label live.
 
-Then `just assets && git add figures si .assets-stamp`, because all three are
-tracked. Use `just assets-all` after re-running a benchmark: staleness is judged
-on the script's mtime, and the data these scripts read lives outside the repo.
+`just assets` regenerates (mtime-gated); `just assets-all` forces every figure
+— use it after re-running a benchmark, because the data these scripts read
+lives outside the repo and its mtime is not consulted.
 
 ## Editing the Typst preamble
 
-The `docx-mode` block in `paper.typ` is load-bearing for `just docx` and inert on
-the PDF path. It exists because Typst's HTML export silently discards the
-template's front matter, all section headings, and every equation. If you change
-it, verify with `just docx` and confirm the headings and abstract survive, not
-just that the command exits 0.
+The primary Word export is `just docx`: `tools/resolve_typst.py` resolves every
+project helper (`#s()`, `fig()`, `tbl()`, `refn()`, `@fig:x`) into plain Typst
+(`paper.resolved.typ`, gitignored — read it when the export looks wrong), and
+pandoc converts it with native equations and citeproc references. The
+`docx-mode` block in `paper.typ` serves only the `just docx-html` fallback and
+is inert on the PDF path; if you change it, verify with `just docx-html` and
+confirm the headings and abstract survive, not just that the command exits 0.
 
 Typst gotcha worth knowing: a method chain broken across lines after `#let x =`
 or inside `[...]` ends at the first newline, and the continuation is parsed as
@@ -97,13 +115,14 @@ literal text. The error points at a closure parameter and reads
 ## Python
 
 One environment per concern, both managed by uv. The manuscript toolchain is
-`pyproject.toml` at the root; the analysis has its own in `analysis/`. Run things
-with `uv run`, never a bare `python3` that picks up whatever is on PATH, and never
-`uv run --with X` inline: add the dependency to the right pyproject so the lock
-stays honest.
+`pyproject.toml` at the root (the scripts live in `tools/`); the analysis has
+its own in `analysis/`. Run things with `uv run`, never a bare `python3` that
+picks up whatever is on PATH, and never `uv run --with X` inline: add the
+dependency to the right pyproject so the lock stays honest.
 
 ## Scope
 
-Do not restructure the pipeline to fix a one-off problem. The staleness checks,
-the generated-table contract, and the docx bypass each exist because a specific
-failure happened. Ask before removing one.
+Do not restructure the pipeline to fix a one-off problem. The declaration
+checks, the build stamps, the adopted-asset contract, and the resolver-based
+docx path each exist because a specific failure happened — HISTORY.md records
+which. Ask before removing one.

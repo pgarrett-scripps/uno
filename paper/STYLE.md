@@ -8,6 +8,10 @@ than re-litigated in every review pass.
 The journal's own requirements always win where they conflict. Record those in
 the "Target journal" section at the bottom.
 
+Where a rule here is genuinely wrong for this manuscript, record the exception in
+`prose-check.toml` rather than ignoring the warning each time. An exception with a
+reason beside it is a decision; a warning everyone scrolls past is not.
+
 ## Punctuation
 
 **No em dashes.** Not in prose, not in figure captions, not in bibliography

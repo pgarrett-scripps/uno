@@ -1,0 +1,379 @@
+{
+  "_about": "Figures and tables the manuscript includes, referenced as #fig(\"<id>\") / #tbl(\"<id>\"). Written by the scripts in analysis/scripts/; see analysis/scripts/_assets.py.",
+  "values": {
+    "fig.fig-astral-validation": {
+      "path": "figures/fig_astral_validation.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:de053ed44be08de3c119064fb03305ecf7b566b1b621a67b688b55bf077c5b6f",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.fig-astral-validation-pdf": {
+      "path": "figures/fig_astral_validation.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:92305ad2ceccbe48ffc4dc60e082bc0a951bd06c27d3b9bcfdf76fea0c31b4e3",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.fig-toc-graphic": {
+      "path": "figures/fig_toc_graphic.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:0efd17d19a4490b47a4505a8f5cf2f122cb6a0d9d6c2a5994a56b45b6d69b8c3",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.fig-toc-graphic-pdf": {
+      "path": "figures/fig_toc_graphic.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:29b53d2d08d095cd9e690e5ec58db73aac0180ebb11347a0bb37f14032f1a5b7",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.fig1-pipeline": {
+      "path": "figures/fig1_pipeline.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:ec0aa5e8c7a950dbeed3dc4cb530c45b3305d4346df0b5fd06e8083362d68364",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.fig1-pipeline-pdf": {
+      "path": "figures/fig1_pipeline.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:b95a257af5eaba2b88648d1f22871c2bf25194f91d302e42f04378fd8cd2690d",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.fig2-headtohead": {
+      "path": "figures/fig2_headtohead.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:7441fa866c196a11f98ab4747e71443c73df0d43dc0254d4094f2c5ac5fc5756",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.fig2-headtohead-pdf": {
+      "path": "figures/fig2_headtohead.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:3ec5fe4dd76eea8c04a14cca6336507df64e4c52b462f6ad4552c6e7b908fbec",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.fig3-entrapment": {
+      "path": "figures/fig3_entrapment.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:b406f43f58c42d2544055bd637de9c9ac29948915731f804912c2a1bf31cd39a",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.fig3-entrapment-pdf": {
+      "path": "figures/fig3_entrapment.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:4ea77224c3506509d20b1c58ce646658bb9aebb1a50828cd852e470209d78f37",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.fig4-quant": {
+      "path": "figures/fig4_quant.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:e1b508b6c28260ac0daff2e4db95025495da263037a67f2ca81487e9ef259dbb",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.fig4-quant-pdf": {
+      "path": "figures/fig4_quant.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:042a0cbf6ad19d525ac7cab0e64183fbcc23a0a9a00be25cf89e109cc6cd1040",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.figs1-fdp-curves": {
+      "path": "figures/figS1_fdp_curves.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:5e743986d9e2e4f01330feabfb3e880a05143e7894a22e7fea75d1280602f434",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.figs1-fdp-curves-pdf": {
+      "path": "figures/figS1_fdp_curves.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:f612126d5283b9a2759f940276732be0d5ced9745cc14cce071eb597ef69574a",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.figs2-faims": {
+      "path": "figures/figS2_faims.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:8c66f6c849688092a8324ba15bc6eaf1cf65ab23b23e09c22372382f0719614f",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.figs2-faims-pdf": {
+      "path": "figures/figS2_faims.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:56303a048a25b829b7725f3e880d42eec9447d995a2078828ee60ebbfe83e77d",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.figs3-resources": {
+      "path": "figures/figS3_resources.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:39e782cc6584a76679e7fc696d8033f778e23b68004c5bd527e193ed285f83b4",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.figs3-resources-pdf": {
+      "path": "figures/figS3_resources.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:c6b2d7ae2affa96c8bae18285e066ace56fcd4198c446f01a9571bc0969ad058",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.figs4-quality-columns": {
+      "path": "figures/figS4_quality_columns.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:092aa9eb7513ed1f29ef94710e8d997bf1f0fbcda4be8ba17af64dbe19c1aa74",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.figs4-quality-columns-pdf": {
+      "path": "figures/figS4_quality_columns.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:c9e8866e3a8391a3a3dcfd86a095890c9d61d0b6661a1af6cc1e5374110aaab0",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.figs5-quant-detail": {
+      "path": "figures/figS5_quant_detail.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:747bb2cfd553a56bb30e87570f2ce2e52f501e0533a35dfb7c702987b50b5028",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.figs5-quant-detail-pdf": {
+      "path": "figures/figS5_quant_detail.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:d8d9547aafc49daa9502f8b23536399d451e6fdd13c41f9548afa3dc1420ccf4",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "fig.figs6-determinism": {
+      "path": "figures/figS6_determinism.png",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:672e25f99cd72e4cdd9de8024b79b5499796358bc45a2ac184243f6372680996",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "fig.figs6-determinism-pdf": {
+      "path": "figures/figS6_determinism.pdf",
+      "kind": "figure",
+      "desc": "",
+      "hash": "sha256:a476e0fe016ce78a897733f131366f6895ffe78b8655f8ef38a5d152f265d0e5",
+      "origin": {
+        "by": "adopted",
+        "note": "vector twin of the same-named .png, kept for the journal submission bundle; not embedded by the manuscript"
+      },
+      "inputs": {}
+    },
+    "tbl.commands": {
+      "path": "si/commands.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:d2230458d336323860557d40f8e8749a3d93e1626e8c3249131e972b0c34b2a5",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.datasets": {
+      "path": "si/datasets.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:b70740a0b7018fe5ff066d44ad9780f2cbeb7a1ad6dc9b1ca80fb9938846c2b6",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.entrap-reported": {
+      "path": "si/entrap_reported.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:0df2f9b97893b25e9975ad4c35602d76d6f6eff81398017ad61e402517835250",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.faims": {
+      "path": "si/faims.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:a39f7066b84901d6181c9a19edd2bd227c3082986fc0210961f5ce50bdaf58b1",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.quality-ablation": {
+      "path": "si/quality_ablation.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:a2101839d4c46457eefe56d0ce1016a1392449b2c1bb4d5cec6277a90155eeec",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.quality-auc": {
+      "path": "si/quality_auc.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:0d540f8aef0261c45916e8c68cb3b82a569fc88ba185d1cdf4a3aeb2f88fcf7e",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.quant-detail": {
+      "path": "si/quant_detail.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:3c409db054f9563cd0524fb62fe013f87ae9f43dc540f3f11e469b221e0f33d1",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.results-per-dataset": {
+      "path": "si/results_per_dataset.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:2766d51352de818f4ea496732ac73b4d078c6b0762337285bc0764848cd1b5ac",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.superseded": {
+      "path": "si/superseded.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:cba309e8c1525781127bdf3ebb87b2bcc824a7f9c0b4d410ee5dc7f48fef185f",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    },
+    "tbl.versions": {
+      "path": "si/versions.typ",
+      "kind": "table",
+      "desc": "",
+      "hash": "sha256:62e1c4450aaee8a602ee1131849c0c57886c13fa3c4aa4ebf881f976f0ddc7a9",
+      "origin": {
+        "by": "adopted",
+        "note": "note=pre-scaffold committed outputs of analysis/scripts (figN_*.py, hand-transcribed si tables); provisional pending the C1 re-run (SUBMISSION_TODO.md)"
+      },
+      "inputs": {}
+    }
+  }
+}

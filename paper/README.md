@@ -2,9 +2,12 @@
 
 The JPR submission for **uno**, an MS1-only protein identification and
 quantitation engine in Rust. Built on
-[`paper-scaffold`](https://github.com/) v1.0.0 (`just version`): PDF, Word
-export, journal word counts, readability and density metrics, prose checking,
-figure staleness checking, and offline audiobook narration.
+[`paper-scaffold`](https://github.com/pgarrett-scripps/paper-scaffold) v3.15.1
+(`just version`): PDF and native-equation Word builds, generated-number and
+asset manifests with staleness checking, journal word counts, readability and
+density metrics, prose checking, a bibliography audit, and offline audiobook
+narration. HISTORY.md records the 2026-08-31 migration from v1.0.0 and what was
+preserved through it.
 
 **Start with [`SUBMISSION_TODO.md`](SUBMISSION_TODO.md)** — the manuscript work,
 item by item, with 16 settled decisions. [`AUDIT.md`](AUDIT.md) is the evidence
@@ -16,10 +19,10 @@ described there (C1) lands.
 
 ```bash
 just setup         # one-time: build the Python toolchain (uv, locked)
-just paper         # -> paper.pdf, plus word count, readability and density
-just check         # is anything stale? (the submission gate)
-just prose-check   # house style, uncited figures, acronyms
-just docx          # -> paper.docx for ACS Paragon Plus
+just paper         # -> paper.pdf, plus word count and readability
+just verify        # every gate: formatting, extractors, prose, declarations, staleness
+just docx          # -> paper.docx (pandoc, native equations) for ACS Paragon Plus
+just preflight     # day-of-submission: fresh builds + verify + deep stats + DOI audit
 ```
 
 ## What is where
@@ -29,53 +32,62 @@ just docx          # -> paper.docx for ACS Paragon Plus
 | `config.typ` | Title, authors, abstract, keywords, date, bib style. The only place the paper's identity lives |
 | `paper.typ` | Main text, between the `BODY START` / `BODY END` markers |
 | `si-body.typ` | Supporting Information body, `#include`d as an appendix |
-| `si/` | SI tables and config dumps, hand-transcribed today (see SUBMISSION_TODO D1) |
+| `si/` | SI tables, hand-transcribed today and adopted in the manifest (see SUBMISSION_TODO D1) |
+| `assets.json` | The asset manifest: every figure and table, by id, with hashes and provenance |
+| `stats.json` | Numbers the prose states, read back as `#s("id")`, with guards |
 | `analysis/` | The code behind every figure, writing straight into `figures/` |
-| `figdata/` | Small transcribed inputs for figures, with provenance headers |
+| `figdata/` | Small transcribed inputs and config listings, with provenance headers |
+| `tools/` | The scaffold toolchain, plus uno's `check_overflow.py` |
 | `FIGURE_MANIFEST.md` | Figure filenames, panel contents, data provenance |
 | `STYLE.md` | House style, and what `just prose-check` enforces |
 | `cover_letter.md` | Draft cover letter |
 
 ## Deviations from the stock scaffold
 
-Three, each deliberate and commented where it lives:
+Each deliberate and commented where it lives:
 
 1. **Figure scripts keep `figN_name.py` names**, not the scaffold's
    `gen_*_figure.py`, because the script name is the figure number and
    `FIGURE_MANIFEST.md` indexes it that way.
-2. **`analysis/` gates on timestamps.** Regenerating all eleven figures costs
+2. **`analysis/` gates on timestamps.** Regenerating all the figures costs
    about a minute and several re-read multi-gigabyte benchmark output from
    `/mnt/labdata`, so `just assets` regenerates only what changed and
    `just assets-all` forces the lot.
-3. **`check_overflow.py`** is an extra check with no scaffold equivalent: a bbox
-   scan for text outside the printable area, which `typst compile` cannot see.
-
-`scripts/paper_stats.py`, a 1900-line hand-written Typst parser that did word
-counts, readability and house style, was **retired** when this directory moved
-onto the scaffold. Its four checks with no scaffold equivalent (list items in the
-body, bold in running prose, colons, uncited bib entries) were ported into
-`prose_check.py`.
+3. **`tools/check_overflow.py`** is an extra check with no scaffold equivalent:
+   a bbox scan for text outside the printable area, which `typst compile`
+   cannot see. `just check` runs it.
+4. **Two extra prose rules**, `list-in-prose` and `bold-in-prose` (ACS style),
+   live in the rules registry, and the mass-spectrometry acronym vocabulary in
+   `prose-check.toml`. Both came from `scripts/paper_stats.py`, a 1900-line
+   hand-written Typst parser retired when this directory first moved onto the
+   scaffold.
 
 ## What to run
 
 | Command | Does |
 |---|---|
 | `just paper` | Compile `paper.pdf`, then print word counts and readability |
+| `just draft` | Compile with unresolved `#s()` ids as loud placeholders → `paper-draft.pdf` |
 | `just watch` | Live preview, recompiling on save |
 | `just fmt` | Reflow the hand-written Typst sources (typstyle, 80 cols) |
-| `just docx` | Export `paper.docx` for journals and co-authors |
+| `just docx` | Export `paper.docx` via the resolver and pandoc — native Word equations |
 | `just wordcount` | Journal-style counts without rebuilding |
-| `just readability` | Flesch-Kincaid / reading ease / fog without rebuilding |
-| `just assets` | Regenerate every generated figure and table (delegates to `analysis/`) |
-| `just check` | Report every artifact that has fallen behind its source |
+| `just verify` | Every gate at once; rebuilds nothing |
+| `just preflight` | Fresh builds + verify + `check-stats-deep` + `bib-audit` |
+| `just assets` | Regenerate generated figures/tables/stats (delegates to `analysis/`) |
+| `just assets-all` | Force every figure, ignoring timestamps (after a benchmark re-run) |
+| `just check` | Staleness only: build stamps and the overflow scan |
+| `just check-stats-deep` | Re-run the analysis and diff every generated number |
+| `just adopt note="..."` | Adopt committed figures/tables no generator can rebuild |
+| `just bib-audit` | Every DOI against Crossref: resolution and retractions (network) |
 | `just test` | Assert the prose extractors handle every construct, before and after a reflow |
-| `just prose-check` | Check the prose against the mechanical rules in STYLE.md |
-| `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and section outliers |
-| `just setup` | Build the Python environment (uv, locked) |
+| `just prose-check` | Check the prose against STYLE.md and prose-check.toml |
+| `just density` | Numerals, parentheticals, acronyms, passives per 1,000 words, and outliers |
+| `just viz` | Diagnostics about the draft → `viz/` (sentence lengths, word use, citation ages) |
+| `just edit-baseline` / `edit-check` | Prove an editing pass changed only wording |
+| `just text-baseline` / `text-diff` | Prove a machinery refactor moved no words |
 | `just version` | Which scaffold version this manuscript is built on |
-| `just audio-setup` | One-time: fetch Piper, the voice model, and the ffmpeg venv |
-| `just audiobook` | Chaptered `.m4b` of the main text |
-| `just all` | PDF + Word + both audiobooks, then `just check` |
+| `just audiobook` | Chaptered `.m4b` of the main text (`just audio-setup` once first) |
 
 ## The parts worth understanding
 
@@ -83,10 +95,10 @@ body, bold in running prose, colons, uncited bib entries) were ported into
 
 Title, authors, affiliations, abstract, keywords, date, institution, and
 bibliography style. The PDF template reads it, the Word front matter is derived
-from it (including the numbered affiliation superscripts, so they cannot drift),
-the word counter counts the abstract out of it, and `audio/config.py` parses the
-title out of it so the narration can never announce a title the paper no longer
-has.
+from it (including the numbered affiliation superscripts, so they cannot
+drift), the word counter counts the abstract out of it, and `audio/config.py`
+parses the title out of it so the narration can never announce a title the
+paper no longer has.
 
 ### The BODY START / BODY END markers
 
@@ -101,247 +113,148 @@ has.
 
 Three tools slice the prose out at those markers, because "what counts as the
 paper's prose" is not the whole file: the front matter, the back matter, the
-acknowledgments, and the bibliography all have to be excluded from a journal word
-count, a reading-level score, and a narration. Each tool fails loudly if the
-markers go missing rather than guessing. Do not delete them.
+acknowledgments, and the bibliography all have to be excluded from a journal
+word count, a reading-level score, and a narration. Each tool fails loudly if
+the markers go missing rather than guessing. Do not delete them.
 
-### The `si/` contract: generated tables, never hand-typed numbers
+### Everything generated is declared, and referenced by id
 
-The design: tables whose numbers come from an analysis are written by a script
-into `si/*.typ` as a bare `#table(...)`, and `si-body.typ` wraps them in a
-`#figure` that supplies the caption and label. `just assets` runs every
-`gen_*_table.py`, so a new table needs no wiring beyond matching the pattern.
+Figures and tables live in `assets.json` and are referenced from the prose as
+`fig("fig.fig2-headtohead")` / `tbl("tbl.versions")`; an undeclared id fails
+the compile, and `just check-assets` compares every declared file's hash, so a
+hand-edit to a generated file is caught. Numbers the prose states are declared
+in `analysis/scripts/gen_stats.py` with guards and read back as `#s("id")` —
+the day a re-run flips a number's sign under a sentence that says "faster", the
+build fails instead of the paper contradicting itself.
 
-**This manuscript does not satisfy that contract yet.** `si/*.typ` are
-hand-transcribed from benchmark output, and two of them carry a "GENERATED … do
-not edit by hand" header that no script on disk produces — which actively
-discourages the only check that would catch drift. See `SUBMISSION_TODO.md` D1.
-
-The point is that a number in the manuscript should be traceable to the analysis
-that produced it. Re-run the analysis and the manuscript updates.
+**Where this manuscript stands:** every asset is currently *adopted*
+(`origin.by = "adopted"`) — committed pre-scaffold outputs that nothing can
+regenerate until the `figN_*.py` scripts gain `record()` calls. Six wall-time
+numbers in Section 3.1 read from `stats.json` (derived live from
+`benchmark/results/summary.tsv`); the rest are still typed, and
+`just prose-check`'s `unaccounted-number` warnings are the worklist. Both
+migrations are scheduled with the C1 re-run, which is when every number moves
+anyway.
 
 ### `analysis/` lives inside the manuscript, and writes to it directly
 
 The analysis that produces the numbers is a subdirectory, not a sibling
-repository. It writes its figures into `figures/` and its tables into `si/` with
-no staging copy in between.
+repository. It writes its figures into `figures/` and its tables into `si/`
+with no staging copy in between. A copy is the single most reliable way for a
+manuscript to go quietly wrong: a re-analysis updates the plot upstream, the
+copy is untouched, and the PDF keeps rendering a figure that no longer matches
+its own caption.
 
-That last part is the point. A copy is the single most reliable way for a
-manuscript to go quietly wrong: a re-analysis updates the plot upstream, the copy
-in `figures/` is untouched, and the PDF keeps rendering a figure that no longer
-matches the numbers in its own caption. Writing to the destination removes the
-failure rather than adding a guard for it.
+**The contract is one recipe.** `analysis/justfile` exposes `assets`;
+`just assets` at the top level delegates to it and knows nothing else.
+`figures/` and `si/` are generated but **tracked**, so a fresh clone compiles
+without re-running an analysis that reads data from outside the repo.
+Staleness is per-entry: each `record()` call declares the script and data a
+file was built from, and `just check-assets` names exactly what moved.
 
-**The contract is one recipe.** `analysis/justfile` exposes `assets`, which
-regenerates everything the manuscript includes. `just assets` at the top level
-delegates to it and knows nothing else. Whatever is inside `analysis/` is that
-project's business: sixty numbered scripts, one notebook, a Snakemake pipeline.
-Keep `assets` as the front door and the manuscript never has to care.
+### `just check` and the build stamps
 
-A paper with no computed results simply has no `analysis/` directory, and the
-recipes say so instead of failing.
+`paper.pdf` and `paper.docx` are **untracked** build artifacts. `just paper`
+and `just docx` record a content hash of the sources they rendered — and of
+the output they produced — in the untracked `.build-stamp`, and `just check`
+recompares both, so a stale build and a `paper.pdf` swapped in from Downloads
+are both caught. No check reads git, so everything works in an exported tree.
+`just check` also runs the overflow scan (deviation 3 above), which is what
+caught Tables S2/S3 printing over the page number while `typst compile`
+reported the build clean.
 
-`figures/` and `si/` are generated but **tracked**, for the same reason
-`paper.pdf` is: a fresh clone must compile without re-running an analysis that
-may take hours. `just check-assets` guards that with a content stamp of the
-analysis source, recorded in `.assets-stamp` when `just assets` runs, so editing
-a generator and forgetting to re-run it is reported rather than shipped.
+### The Word export
 
-It stamps rather than comparing commit dates because the generators are
-deterministic on purpose. Re-running them after an edit that does not move the
-output produces no new commit, and a date-based check would then nag with no way
-to satisfy it.
-
-### `just check` is a submission gate
-
-It exits non-zero if anything is stale, and covers the three failure modes that
-actually happen:
-
-- A tracked `paper.pdf` committed before a source fix. This is checked by comparing
-  *commit dates*, not mtimes, because a fresh clone rewrites every mtime and would
-  report a false alarm.
-- `paper.docx` or an `.m4b` older than the text it renders or narrates. Each
-  artifact is compared against its own inputs, so a regenerated SI table does not
-  wrongly mark the audiobooks stale (they never read `si/`).
-- `figures/` and `si/` older than the `analysis/` code that generates them.
-
-`paper.pdf` is deliberately tracked in git, so a reader can get the manuscript
-without installing Typst. `check-pdf` is what keeps that honest.
-
-### The Word export is more delicate than it looks
-
-`just docx` goes Typst → HTML → pandoc, and three things make it work:
-
-1. `--input docx=true` bypasses the arkheion template, whose front matter and
-   heading styling are layout-only primitives that Typst's HTML export silently
-   discards. Without the bypass you lose every section heading and the abstract.
-2. `paper.typ` wraps equations in `html.frame()` under that same flag, because
-   HTML export drops math outright. `typst2docx.py` rasterizes them back inline
-   and stitches the paragraphs Typst split around them.
-3. pandoc comes from `uv` (`pypandoc-binary`), so no system install is needed.
-
-Typst's HTML export prints "ignored during HTML export" warnings for layout-only
-constructs. Those are expected. The PDF path is entirely unaffected by the flag.
+`just docx` resolves the manuscript to plain Typst first —
+`tools/resolve_typst.py` replaces every project helper (`#s()`, `fig()`,
+`tbl()`, `refn()`, `@fig:x`) with its value — and then pandoc converts
+`paper.resolved.typ` with **native, editable Word equations**, real tables,
+and a reference list set by citeproc from `references.bib` (following
+`american-chemical-society.csl`). Read `paper.resolved.typ` when the output
+looks wrong; it is exactly what pandoc was fed. `just docx-html` keeps the old
+Typst-HTML route as a fallback; it rasterizes equations, which is why it is no
+longer the default. The `docx-mode` block in `paper.typ` serves only that
+fallback and is inert on the PDF path.
 
 ### Formatting: the editor and the CLI must agree
 
-`just fmt` runs [typstyle](https://github.com/Enter-tainer/typstyle), which is the
-same engine the [tinymist](https://marketplace.visualstudio.com/items?itemName=myriad-dreamin.tinymist)
-editor extension uses as its formatter backend. So format-on-save and `just fmt`
-can produce byte-identical output, but only if they are configured identically,
-and by default they are not:
+`just fmt` runs [typstyle](https://github.com/Enter-tainer/typstyle), the same
+engine the tinymist editor extension uses as its formatter backend, so
+format-on-save and `just fmt` produce identical output — provided the committed
+`.vscode/settings.json` keeps tinymist's width and prose-wrap in step with
+`fmt_width` (80). `--wrap-text` is the flag that matters for a manuscript:
+without it the long lines are the prose. `typst_sources` deliberately excludes
+`si/*.typ`, which the generators own.
 
-| | tinymist default | `just fmt` |
-|---|---|---|
-| Line width | 120 | `fmt_width` (80) |
-| Prose wrapping | off | on (`--wrap-text`) |
-
-Left alone, every save reflows the manuscript one way and every `just fmt`
-reflows it back, producing a churning diff that neither tool owns. The committed
-`.vscode/settings.json` pins `tinymist.formatterPrintWidth` and
-`tinymist.formatterProseWrap` to match the justfile. If you change `fmt_width`,
-change both.
-
-`--wrap-text` is the flag that matters for a manuscript: without it typstyle
-formats code and leaves markup lines however long they already were, and in a
-paper the long lines are the prose.
-
-| Command | Does |
-|---|---|
-| `just fmt` | Reflow the hand-written sources in place |
-| `just fmt-check` | Exit non-zero if reformatting is needed (CI / pre-commit gate) |
-
-`typst_sources` deliberately excludes `si/*.typ`, which the generator scripts own
-and would rewrite unformatted on the next run. `.vscode/settings.json` marks them
-read-only in the editor for the same reason.
-
-**Reformatting can break the prose extractors.** typstyle will break a long line
-*inside* a function call or an emphasis pair, turning `#refn(<sec:methods>)` and
-`_Saccharomyces cerevisiae_` into three-line forms. Any stripper regex written for
-the one-line version then leaks a bare `#refn(` into the word count and the
-narration, or leaves the literal underscores for the voice to pronounce. Both
-happened in the manuscript this scaffold came from, and the PDF looked fine
-throughout.
-
-`tests/fixture.typ` carries a case for each, and `just test` asserts the extracted
-prose is unchanged by a reflow. Add a case there when you add a construct.
-
-The recognition patterns those checks protect (`#refn(`, `#link(`, emphasis, and
-the balanced-paren stripper) live in `typst_prose.py`, imported by both
-`readability.py` and `audio/extract_prose.py`. They are shared because keeping
-them in two files meant fixing each of those three bugs twice.
+**Reformatting can break the prose extractors.** typstyle will break a long
+line *inside* a function call or an emphasis pair, and any stripper regex
+written for the one-line form then leaks markup into the word count or the
+narration. `tests/fixture.typ` carries a case for each known break, and
+`just test` asserts the extracted prose is unchanged by a reflow. The
+recognition patterns live in `tools/typst_prose.py`, shared by every extractor.
 
 ### Reading the prose metrics
 
-Three commands look at the writing rather than the build.
-
-`just readability` is Flesch-Kincaid and friends. Useful, but it only knows word
-length and sentence length.
-
-`just density` counts what FK is blind to and what actually makes a Results
-section unreadable: numerals, parentheticals (and what fraction of the words sit
-inside them), acronyms, nominalizations, passives, and hedges, all per 1,000
-words. **Read it relatively, not absolutely.** There is no published limit for any
-of these and anyone quoting one is guessing, so the second table flags sections
-that depart from *this paper's own median* by 1.6x. A Methods section running at
-three times your own parenthetical rate is a real signal you can act on.
-
-`just prose-check` enforces the mechanical rules in STYLE.md and adds two
-structural checks. A figure or table that no text ever references is an error,
-since most journals require every one to be cited and a reader who is never sent
-to a figure will not look at it. Two more are warnings: figures cited out of
-numerical order (a copy-editing return at many journals, but a conventions
-paragraph legitimately forward-references, so it does not gate), and an acronym
-used repeatedly but never expanded (what counts as common knowledge is
-field-specific).
+`just readability` is Flesch-Kincaid and friends. `just density` counts what FK
+is blind to — numerals, parentheticals, acronyms, nominalizations, passives,
+hedges per 1,000 words — and flags sections departing from *this paper's own
+median*, which is the only defensible baseline. `just prose-check` enforces the
+mechanical rules in STYLE.md; errors gate, warnings are judgement calls, and
+every exception in `prose-check.toml` carries its reason. `just viz` draws the
+shape of the draft into `viz/` (gitignored).
 
 ### `tests/` is the permanent smoke test
 
-`tests/fixture.typ` is a deliberately dense pile of every construct any extractor
-special-cases: citations, both reference forms, emphasis across a line break,
-things that only look like markup (`smooth_*`, `"K*,R*"`, `analysis.tdf_bin`),
-links, inline and display math, symbol tokens, block code, and figure captions.
-
-`just test` checks three properties: the extracted prose matches
-`tests/expected/`, a typstyle reflow changes neither output, and no forbidden
-token (a leaked caption, citation key, or call name) appears in the result. `just
-test-update` rewrites the golden files, which is also how a regression gets
-blessed into the baseline by accident, so read the diff.
-
-This is separate from the manuscript on purpose. Anything relying on placeholder
-prose for coverage would be tested once, at clone time, and never again.
+`tests/fixture.typ` is a deliberately dense pile of every construct any
+extractor special-cases. `just test` checks the extracted prose against golden
+files, asserts a typstyle reflow changes nothing, and greps for leaked tokens.
+`just test-update` rewrites the goldens — read the diff, because that is also
+how a regression gets blessed by accident. This is separate from the manuscript
+on purpose: placeholder prose gets deleted, fixtures do not.
 
 ### Audio
 
-Offline Piper TTS. `audio/extract_prose.py` rewrites the Typst source into
-speakable text (citations, cross-references, math, `#sym.*` tokens, figure blocks
-and code blocks all removed or verbalized), Piper narrates it, and ffmpeg muxes
-chapters and cover art into an `.m4b` with one chapter per section.
-
-Everything project-specific is in `audio/config.py`: the voice, the metadata
-blurbs, a `PRONUNCIATION` map for words the voice mangles, and a `MATH` map from
-inline equations to spoken English. Add every inline equation that appears in
-running prose; anything unmapped falls back to reading the raw Typst, which is
-usually wrong. Display equations are dropped rather than read.
-
-One inherent trait: stripped cross-references leave sentences like "resolves to
-and the bare-number kind" in the narration. Write around it in prose you care
-about hearing, or accept it.
-
-The engine, voice model, venv, and every audio file are gitignored, so a fresh
-clone needs `just audio-setup` once (~60 MB download).
+Offline Piper TTS (a uv dependency; `just audio-setup` fetches the ~60 MB voice
+model once). `audio/extract_prose.py` rewrites the Typst source into speakable
+text, Piper narrates it, and ffmpeg muxes chapters and cover art into `.m4b`
+files. Everything project-specific — voice, blurbs, the `PRONUNCIATION` map
+("M S one search pie"), the `MATH` map — is in `audio/config.py`.
 
 ## Requirements
 
-- `typst`, `just`, `uv`
+- `typst` (0.14+), `just`, `uv`
 - `typstyle` for `just fmt` (`cargo install typstyle`)
-- `curl` and a network connection for `just audio-setup` only
+- `pdftotext` (poppler-utils) for the overflow scan and `just text-diff`
 
-`just setup` builds the Python environment from `pyproject.toml` and commits the
-resolution to `uv.lock`, so every machine gets the same versions. There are two
-environments on purpose: the manuscript toolchain at the root (pandoc, cairosvg,
-textstat, small and stable, locked and shipped with the scaffold) and the
-analysis in `analysis/pyproject.toml` (whatever the science needs, rewritten per
-project). Keeping them apart means a project's churning analysis dependencies do
-not invalidate the toolchain lock. The audiobook extras are a `--group audio` so a
-clone that never builds audio stays light.
-
-The first PDF build fetches the `arkheion` template from Typst Universe and
-caches it.
+`just doctor` reports what is present and new enough. Two Python environments
+on purpose: the manuscript toolchain at the root, the analysis in
+`analysis/pyproject.toml`, so churning analysis dependencies never invalidate
+the toolchain lock. The first PDF build fetches the `arkheion` template from
+Typst Universe and caches it.
 
 ## Things that will bite you
 
-**Typst line continuations.** A method chain broken across lines after `#let x =`
-or inside `[...]` ends at the first newline, and the continuation is read as
-literal text. The error is confusing (`unknown variable: a` pointing at a closure
-parameter). Wrap multi-line chains in a code block `{ ... }`. `config.typ` has a
-worked example.
+**Typst line continuations.** A method chain broken across lines after
+`#let x =` or inside `[...]` ends at the first newline, and the continuation is
+read as literal text. The error is confusing (`unknown variable: a` pointing at
+a closure parameter). Wrap multi-line chains in a code block `{ ... }`.
 
 **Regenerated figures churning bytes.** matplotlib stamps a creation date into
-PNG metadata by default, which makes every regeneration look like real drift to
-`just check`. The bundled generator passes `metadata={"Software": None}`; do the
-same in yours, and seed any RNG.
+PNG metadata by default, which makes every regeneration look like drift to the
+manifest's hash check. `analysis/scripts/style.py` passes
+`metadata={"Software": None}`; do the same in new scripts, and seed any RNG.
 
-**The SI is not compiled on its own.** `si-body.typ` is body-only. Its title page,
-S-prefixed numbering, and counter resets are applied by `paper.typ` at the include
-site, so the whole manuscript is one compilation with one label namespace and
-cross-references resolve in both directions.
+**The SI is not compiled on its own.** `si-body.typ` is body-only: its
+S-prefixed numbering and counter resets live at the top of the file, and
+`paper.typ` `#include`s it, so the whole manuscript is one compilation with one
+label namespace. Editor diagnostics that come from compiling `si-body.typ`
+standalone (unresolved labels, citations) are noise.
 
 ## Versioning
 
-The scaffold version lives in `pyproject.toml` and is copied into every project
-built from it, so `just version` answers "what am I on" from inside a derived
-manuscript. [HISTORY.md](HISTORY.md) records what each release contains, what
-bumps major/minor/patch, and how to pull a later version's changes into an
-existing project.
-
-Read HISTORY.md's "Decisions reversed" section before changing something that
-looks obviously improvable. Several obvious improvements were tried here and were
-wrong for reasons only visible from use.
-
-## Provenance
-
-Extracted from the `dnoise` manuscript pipeline. The design decisions encoded
-here (commit-date PDF checking, byte-compared figure copies, generated SI tables,
-the docx-mode template bypass) each came from a specific way that manuscript went
-wrong.
+The scaffold version lives in `pyproject.toml`; `just version` answers "what am
+I on". [HISTORY.md](HISTORY.md) records the migration, the upstream releases,
+and how to pull a later version's changes into this project. Read its
+"Decisions reversed" section before changing something that looks obviously
+improvable — several obvious improvements were tried and were wrong for reasons
+only visible from use.
