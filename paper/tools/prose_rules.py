@@ -70,6 +70,12 @@ RULES: dict[str, tuple[str, str]] = {
     # Carried through the scaffold migration from the pre-scaffold checker.
     "list-in-prose":      ("error", "the item's first words"),
     "bold-in-prose":      ("error", "the bold text"),
+    # uno addition, read by tools/bib_audit.py rather than prose_check: a bib
+    # entry whose REGISTERED metadata is known-corrupt at the registrar. The
+    # audit compares the bibliography against the registrar's record; when the
+    # record itself is wrong, the bibliography must not be edited to match it,
+    # so the mismatch is allowed here with a written reason instead.
+    "doi-metadata":       ("error", "the bib entry key"),
 }
 
 DEFAULT_LIMITS = {
