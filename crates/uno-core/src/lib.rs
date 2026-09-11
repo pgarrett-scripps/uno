@@ -6,6 +6,7 @@
 //! decoy, which cross-run alignment drops.
 
 pub mod calibrate;
+mod broad_rt;
 pub mod database;
 pub mod decoy;
 pub mod group;
@@ -31,6 +32,24 @@ pub use rt::{rt_features, RtModel, RT_N_FEATURES};
 pub use rt_cnn::RtCnn;
 pub use rt_mlp::RtMlp;
 pub use score::{score, ScoreConfig, ScoreResult};
+
+/// Mix a user-chosen seed into the fixed constants behind uno's stochastic
+/// stages: the global-pool decoy shuffle, RANSAC pair sampling, CV fold
+/// assignment, and the tree booster's row/column subsampling. Seed 0 is the
+/// shipped default and returns 0, so every constant is left untouched and
+/// historical output is reproduced byte for byte; any other seed perturbs all
+/// of those stages together (`uno --seed N`). Used to measure uno's seed-to-seed
+/// spread the same way ms1searchpy's run-to-run spread is measured.
+pub fn seed_mix(seed: u64) -> u64 {
+    if seed == 0 {
+        return 0;
+    }
+    // splitmix64 finaliser: a small integer becomes a well-mixed 64-bit word.
+    let mut z = seed.wrapping_add(0x9e37_79b9_7f4a_7c15);
+    z = (z ^ (z >> 30)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    z = (z ^ (z >> 27)).wrapping_mul(0x94d0_49bb_1331_11eb);
+    z ^ (z >> 31)
+}
 
 /// Locate a large test input, portably and without lying about coverage.
 ///

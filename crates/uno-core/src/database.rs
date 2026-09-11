@@ -54,6 +54,9 @@ pub struct DigestConfig {
     pub decoy_method: String,
     /// Order k for "markov" / "debruijn" decoy methods (ignored otherwise).
     pub decoy_order: usize,
+    /// Seed for the decoy shuffle (0 = the shipped default stream; see
+    /// [`crate::seed_mix`]). Set with `uno --seed`.
+    pub decoy_seed: u64,
 }
 
 /// Build the target + decoy database with ms1searchpy-style shuffled decoys.
@@ -138,7 +141,7 @@ fn global_shuffle_decoy_db(
         if pool.is_empty() {
             continue;
         }
-        let mut h: u64 = 0x9e37_79b9_7f4a_7c15 ^ (pool.len() as u64);
+        let mut h: u64 = 0x9e37_79b9_7f4a_7c15 ^ (pool.len() as u64) ^ crate::seed_mix(cfg.decoy_seed);
         for b in acc.bytes() {
             h ^= b as u64;
             h = h.wrapping_mul(1099511628211);
@@ -209,6 +212,7 @@ impl Default for DigestConfig {
             decoy_mass_shift: 11.0,
             decoy_shuffle: true,
             decoy_method: "shuffle".to_string(),
+            decoy_seed: 0,
             decoy_order: 2,
         }
     }
@@ -254,7 +258,7 @@ impl PeptideDb {
         // collision filter drops any decoy peptide that equals a target peptide.
         let (fasta, gen_decoys, decoy_tag) = if protein_level {
             let tfasta = Fasta::parse(contents.clone(), "DECOY_", false);
-            let decoy_prots = crate::decoy::generate(&tfasta.targets, method, "DECOY_");
+            let decoy_prots = crate::decoy::generate(&tfasta.targets, method, "DECOY_", cfg.decoy_seed);
             let mut combined = contents.clone();
             if !combined.ends_with('\n') {
                 combined.push('\n');

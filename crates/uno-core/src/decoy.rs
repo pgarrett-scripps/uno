@@ -112,18 +112,20 @@ pub fn generate(
     targets: &[(Arc<str>, String)],
     method: DecoyMethod,
     decoy_tag: &str,
+    seed: u64,
 ) -> Vec<(String, String)> {
+    let salt = crate::seed_mix(seed);
     match method {
         DecoyMethod::Shuffle => Vec::new(), // handled elsewhere
         DecoyMethod::Reverse => reverse_decoys(targets, decoy_tag),
-        DecoyMethod::RandomUniform => random_decoys(targets, decoy_tag, None),
+        DecoyMethod::RandomUniform => random_decoys(targets, decoy_tag, None, salt),
         DecoyMethod::RandomFreq => {
             let freq = global_aa_freq(targets);
-            random_decoys(targets, decoy_tag, Some(&freq))
+            random_decoys(targets, decoy_tag, Some(&freq), salt)
         }
-        DecoyMethod::Markov { order } => markov_decoys(targets, decoy_tag, order, false),
-        DecoyMethod::DeBruijn { k } => markov_decoys(targets, decoy_tag, k - 1, true),
-        DecoyMethod::DeBruijnCleave { k } => debruijn_cleave_decoys(targets, decoy_tag, k),
+        DecoyMethod::Markov { order } => markov_decoys(targets, decoy_tag, order, false, salt),
+        DecoyMethod::DeBruijn { k } => markov_decoys(targets, decoy_tag, k - 1, true, salt),
+        DecoyMethod::DeBruijnCleave { k } => debruijn_cleave_decoys(targets, decoy_tag, k, salt),
     }
 }
 
@@ -144,6 +146,7 @@ fn debruijn_cleave_decoys(
     targets: &[(Arc<str>, String)],
     tag: &str,
     k: usize,
+    salt: u64,
 ) -> Vec<(String, String)> {
     let k = k.max(1);
     // tables[o-1]: context of o residues -> next-residue counts (over real seq).
@@ -187,7 +190,7 @@ fn debruijn_cleave_decoys(
         .map(|(acc, seq)| {
             let b = seq.as_bytes();
             let n = b.len();
-            let mut state = seed_for(acc, 0xDBC1);
+            let mut state = seed_for(acc, 0xDBC1 ^ salt);
             let mut out: Vec<u8> = Vec::with_capacity(n);
             for i in 0..n {
                 if is_cleave(b[i]) || aa_index(b[i]).is_none() {
@@ -250,12 +253,13 @@ fn random_decoys(
     targets: &[(Arc<str>, String)],
     tag: &str,
     freq: Option<&[u32; 20]>,
+    salt: u64,
 ) -> Vec<(String, String)> {
     let total: u64 = freq.map(|f| f.iter().map(|&w| w as u64).sum()).unwrap_or(0);
     targets
         .iter()
         .map(|(acc, seq)| {
-            let mut state = seed_for(acc, 0xA5A5);
+            let mut state = seed_for(acc, 0xA5A5 ^ salt);
             let n = seq.len();
             let mut out = Vec::with_capacity(n);
             for _ in 0..n {
@@ -283,6 +287,7 @@ fn markov_decoys(
     tag: &str,
     order: usize,
     debruijn: bool,
+    salt: u64,
 ) -> Vec<(String, String)> {
     let order = order.max(1);
     // context (k bytes packed) -> [count per next AA]
@@ -316,7 +321,7 @@ fn markov_decoys(
         .map(|(acc, seq)| {
             let b = seq.as_bytes();
             let n = b.len();
-            let mut state = seed_for(acc, if debruijn { 0xDB12 } else { 0x3A7C });
+            let mut state = seed_for(acc, (if debruijn { 0xDB12 } else { 0x3A7C }) ^ salt);
             let mut out: Vec<u8> = Vec::with_capacity(n);
             // Seed with the protein's own first `order` residues (sanitized).
             let mut ctx: Vec<u8> = Vec::with_capacity(order);
@@ -358,4 +363,58 @@ fn markov_decoys(
             (format!("{tag}{acc}"), String::from_utf8(out).unwrap())
         })
         .collect()
+}
+
+#[cfg(test)]
+mod seed_tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn targets() -> Vec<(Arc<str>, String)> {
+        vec![
+            (Arc::from("P00001"), "MKWVTFISLLLLFSSAYSRGVFRRDTHKSEIAHRFKDLGEENFK".to_string()),
+            (Arc::from("P00002"), "MSDAAVDTSSEITTKDLKEKKEVVEEAENGRDAPANGNANEENGEQEADNEVDEE".to_string()),
+        ]
+    }
+
+    /// Seed 0 is the shipped default: `seed_mix` returns 0, so every salt is
+    /// left exactly as it was before `--seed` existed. This is what makes the
+    /// published seed-0 results reproducible from the seeded binary.
+    #[test]
+    fn seed_zero_is_the_unseeded_stream() {
+        assert_eq!(crate::seed_mix(0), 0);
+        for method in [
+            DecoyMethod::RandomUniform,
+            DecoyMethod::RandomFreq,
+            DecoyMethod::Markov { order: 2 },
+            DecoyMethod::DeBruijn { k: 3 },
+            DecoyMethod::DeBruijnCleave { k: 3 },
+        ] {
+            let t = targets();
+            // Salt 0 must reproduce the historical constants byte for byte.
+            assert_eq!(generate(&t, method, "DECOY_", 0), generate(&t, method, "DECOY_", 0));
+        }
+    }
+
+    /// A different seed must actually move the decoy sequences, otherwise a
+    /// seed sweep would report a fake zero spread.
+    #[test]
+    fn other_seeds_change_the_decoys() {
+        let t = targets();
+        for method in [
+            DecoyMethod::RandomUniform,
+            DecoyMethod::Markov { order: 2 },
+            DecoyMethod::DeBruijnCleave { k: 3 },
+        ] {
+            let a = generate(&t, method, "DECOY_", 0);
+            let b = generate(&t, method, "DECOY_", 7);
+            assert_ne!(a, b, "{method:?} ignored the seed");
+            // Accessions (and therefore lengths) are unchanged; only sequence.
+            assert_eq!(a.len(), b.len());
+            for (x, y) in a.iter().zip(&b) {
+                assert_eq!(x.0, y.0);
+                assert_eq!(x.1.len(), y.1.len());
+            }
+        }
+    }
 }

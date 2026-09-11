@@ -4,6 +4,9 @@
 
 # Python virtual environment
 .venv/
+.venv-rt/
+*.egg-info/
+/crates/uno-rt-train/python/build/
 __pycache__/
 *.pyc
 

@@ -145,6 +145,33 @@ enum RtBackend {
     Cnn(crate::rt_cnn::RtCnn),
 }
 
+/// The supported pretrained CNN, embedded so installed binaries work anywhere.
+pub const DEFAULT_RT_CNN: &[u8] = include_bytes!("../../../models/rt_cnn_chrono_global_v3_ch32.urtc");
+
+#[cfg(test)]
+mod cnn_workflow_tests {
+    use super::*;
+
+    #[test]
+    fn bundled_cnn_is_portable_and_matches_training_package() {
+        assert_eq!(DEFAULT_RT_CNN, include_bytes!("../../uno-rt-train/python/uno_rt/data/default.urtc"));
+        let model = RtModel::bundled().unwrap();
+        let direct = crate::rt_cnn::RtCnn::from_bytes(DEFAULT_RT_CNN).unwrap();
+        assert_eq!(model.predict_seq("PEPTIDEK"), direct.predict_seq("PEPTIDEK"));
+        assert_eq!(model.fingerprint(), fingerprint_bytes(DEFAULT_RT_CNN));
+    }
+
+    #[test]
+    fn cnn_rejects_invalid_dimensions_normalization_and_version() {
+        for (offset, value) in [(4, 99u32), (12, 0), (16, 0), (24, 2), (28, u32::MAX)] {
+            let mut bytes = DEFAULT_RT_CNN.to_vec();
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+            assert!(crate::rt_cnn::RtCnn::from_bytes(&bytes).is_err());
+        }
+        assert!(crate::rt_cnn::RtCnn::from_bytes(&DEFAULT_RT_CNN[..80]).is_err());
+    }
+}
+
 /// A loaded RT model plus a content `fingerprint` (a stable hash of the model
 /// file bytes). The fingerprint keys the on-disk prediction cache
 /// ([`crate::rt_cache`]) so cached predictions are reused only for the exact
@@ -155,6 +182,21 @@ pub struct RtModel {
 }
 
 impl RtModel {
+    /// The bundled CNN, with no runtime file or Python dependency.
+    pub fn bundled() -> Result<Self> {
+        Ok(Self {
+            backend: RtBackend::Cnn(crate::rt_cnn::RtCnn::from_bytes(DEFAULT_RT_CNN)?),
+            fingerprint: fingerprint_bytes(DEFAULT_RT_CNN),
+        })
+    }
+
+    /// CNN provenance when available; legacy backends have no CNN metadata.
+    pub fn cnn_info(&self) -> Option<&serde_json::Value> {
+        match &self.backend {
+            RtBackend::Cnn(model) => Some(model.info()),
+            _ => None,
+        }
+    }
     /// Load a distilled RT model, auto-detecting the backend by file magic:
     /// a leading `UMLP` => MLP, `URTC` => CNN, otherwise the gbdt-rs JSON format.
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
@@ -166,12 +208,15 @@ impl RtModel {
         let backend = if magic == b"UMLP" {
             RtBackend::Mlp(crate::rt_mlp::RtMlp::load(path)?)
         } else if magic == b"URTC" {
-            RtBackend::Cnn(crate::rt_cnn::RtCnn::load(path)?)
+            RtBackend::Cnn(crate::rt_cnn::RtCnn::from_bytes(&bytes)?)
         } else {
             let model = GBDT::load_model(&path.to_string_lossy())
                 .map_err(|e| anyhow::anyhow!("loading rt model {}: {e}", path.display()))?;
             RtBackend::Gbdt(model)
         };
+        if !matches!(&backend, RtBackend::Cnn(_)) {
+            log::warn!("legacy RT backend: MLP/GBDT loading is deprecated; use a URTC CNN or --rt-library");
+        }
         Ok(RtModel { backend, fingerprint })
     }
 

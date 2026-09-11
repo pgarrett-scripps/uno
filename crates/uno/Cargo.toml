@@ -18,6 +18,10 @@ log.workspace = true
 env_logger.workspace = true
 serde.workspace = true
 toml.workspace = true
+serde_json.workspace = true
+csv.workspace = true
+sha2 = "0.10"
+tempfile = "3"
 
 [features]
 # Native Thermo .raw input in the built-in feature finder. Forwards to

@@ -50,6 +50,13 @@ fn median(v: &mut [f64]) -> f64 {
 }
 
 impl Calibration {
+    /// A positive global map over the full observed abstract-RT domain.
+    pub(crate) fn affine(slope: f64, intercept: f64, xmin: f64, xmax: f64) -> Calibration {
+        assert!(slope.is_finite() && slope > 0.0 && intercept.is_finite());
+        assert!(xmin.is_finite() && xmax.is_finite() && xmax > xmin);
+        Calibration { x: vec![xmin,xmax], y: vec![slope*xmin+intercept,slope*xmax+intercept] }
+    }
+
     /// Fit from `(abstract, observed)` pairs.
     pub fn fit(pairs: &[(f64, f64)]) -> Calibration {
         let mut p: Vec<(f64, f64)> = pairs
@@ -153,6 +160,12 @@ impl Calibration {
     /// PWL on the inliers and expands. Returns the calibration and the indices
     /// of the inlier pairs (a likely-correct subset, usable as positives).
     pub fn fit_ransac(pairs: &[(f64, f64)], thresh: f64, iters: usize) -> (Calibration, Vec<usize>) {
+        Self::fit_ransac_seeded(pairs, thresh, iters, 0)
+    }
+
+    /// [`fit_ransac`](Self::fit_ransac) with the sampling stream salted by `seed`
+    /// (0 = the shipped default stream; see [`crate::seed_mix`]).
+    pub fn fit_ransac_seeded(pairs: &[(f64, f64)], thresh: f64, iters: usize, seed: u64) -> (Calibration, Vec<usize>) {
         // Work through a canonical (value-sorted) view of the finite pairs. The
         // sampling LCG below draws index *positions*, so without a fixed order the
         // same iteration would pick different points depending on how the caller
@@ -178,7 +191,7 @@ impl Calibration {
             return (Calibration::fit(pairs), order);
         }
         // deterministic LCG
-        let mut state: u64 = 0x2545_f491_4f6c_dd1d;
+        let mut state: u64 = 0x2545_f491_4f6c_dd1d ^ crate::seed_mix(seed);
         let mut next = |m: usize| -> usize {
             state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
             ((state >> 33) as usize) % m
@@ -242,5 +255,51 @@ impl Calibration {
             (v - x0) / (x1 - x0)
         };
         y0 + t * (y1 - y0)
+    }
+}
+
+#[cfg(test)]
+mod seed_tests {
+    use super::*;
+
+    fn pairs() -> Vec<(f64, f64)> {
+        // Noisy line with outliers, enough points to reach the RANSAC path.
+        (0..200)
+            .map(|i| {
+                let x = i as f64 * 0.1;
+                let y = if i % 17 == 0 { x * 2.0 + 30.0 } else { x * 2.0 + 1.0 + ((i % 7) as f64 - 3.0) * 0.05 };
+                (x, y)
+            })
+            .collect()
+    }
+
+    /// `--seed 0` must leave the RANSAC sampling stream on its historical
+    /// constant, so published seed-0 calibrations stay reproducible.
+    #[test]
+    fn ransac_seed_zero_matches_unseeded() {
+        let p = pairs();
+        let (a, ai) = Calibration::fit_ransac(&p, 0.5, 400);
+        let (b, bi) = Calibration::fit_ransac_seeded(&p, 0.5, 400, 0);
+        assert_eq!(ai, bi);
+        assert_eq!(a.x, b.x);
+        assert_eq!(a.y, b.y);
+    }
+
+    /// A non-zero seed must draw a different sample sequence. The consensus fit
+    /// may well land in the same place on clean data; what must change is the
+    /// stream, so assert on that directly rather than on the fitted line.
+    #[test]
+    fn ransac_seed_changes_the_sampling_stream() {
+        let draw = |seed: u64| {
+            let mut state: u64 = 0x2545_f491_4f6c_dd1d ^ crate::seed_mix(seed);
+            (0..8)
+                .map(|_| {
+                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    (state >> 33) as usize % 200
+                })
+                .collect::<Vec<_>>()
+        };
+        assert_ne!(draw(0), draw(1));
+        assert_ne!(draw(1), draw(2));
     }
 }

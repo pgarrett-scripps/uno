@@ -61,6 +61,9 @@ fn is_val(idx: usize, val_frac: f64) -> bool {
 
 fn main() -> Result<()> {
     let cli = Cli::parse();
+    if cli.im_labels.is_none() && cli.predict_seqs.is_none() {
+        eprintln!("DEPRECATED: this command trains legacy RT GBDTs. Use `uno rt train` for supported CNN training. IM training is unchanged.");
+    }
 
     if let Some(seq_file) = &cli.predict_seqs {
         let model = uno_core::RtModel::load(&cli.out)?;

@@ -11,11 +11,37 @@ use uno_core::{
 };
 
 mod koth_ingest;
+mod rt_cli;
+
+#[cfg(test)]
+mod rt_command_tests {
+    use super::*;
+
+    #[test]
+    fn rt_commands_do_not_require_search_inputs() {
+        for argv in [
+            vec!["uno", "rt", "inspect", "custom.urtc"],
+            vec!["uno", "rt", "train", "--data", "labels.tsv", "--out", "custom.urtc", "--units", "minutes", "--method", "C18"],
+            vec!["uno", "rt", "evaluate", "--model", "custom.urtc", "--data", "heldout.tsv", "--units", "minutes"],
+        ] { assert!(Cli::try_parse_from(argv).is_ok()); }
+        assert!(Cli::try_parse_from(["uno", "--features", "run.tsv"]).is_err());
+        assert!(Cli::try_parse_from(["uno", "--fasta", "db.fasta"]).is_err());
+    }
+
+    #[test]
+    fn rt_sources_are_mutually_exclusive_and_default_needs_no_flag() {
+        assert!(Cli::try_parse_from(["uno", "--features", "run.tsv", "--fasta", "db.fasta"]).is_ok());
+        assert!(Cli::try_parse_from(["uno", "--features", "run.tsv", "--fasta", "db.fasta", "--rt-model", "a", "--rt-library", "b"]).is_err());
+        assert!(Cli::try_parse_from(["uno", "rt", "train", "--data", "d", "--out", "o", "--units", "irt", "--method", "m", "--init", "a", "--from-scratch"]).is_err());
+    }
+}
 
 /// uno — MS1-only protein identification over a single-run biosaur2 feature file.
 #[derive(Parser, Debug)]
-#[command(name = "uno", version)]
+#[command(name = "uno", version, args_conflicts_with_subcommands = true, subcommand_negates_reqs = true)]
 struct Cli {
+    #[command(subcommand)]
+    command: Option<rt_cli::Command>,
     /// Single-run biosaur2 feature file (`*.features.tsv`) — the same single-run
     /// input ms1searchpy consumes. Aligned/consensus matrices are NOT accepted:
     /// alignment drops the per-feature quality columns that separate target from
@@ -46,11 +72,11 @@ struct Cli {
     matrix_min_runs: u32,
 
     /// Protein FASTA database.
-    #[arg(long)]
-    fasta: PathBuf,
+    #[arg(long, required = true)]
+    fasta: Option<PathBuf>,
 
-    /// Distilled RT model (`uno-rt-train` output). Without it, RT is not used.
-    #[arg(long)]
+    /// Custom URTC CNN. Defaults to the bundled CNN; legacy models are deprecated.
+    #[arg(long, conflicts_with = "rt_library")]
     rt_model: Option<PathBuf>,
 
     /// Distilled IM/CCS model (`uno-rt-train --im-labels` output). Used only when
@@ -62,9 +88,8 @@ struct Cli {
     #[arg(long)]
     config: Option<PathBuf>,
 
-    /// Precomputed RT library TSV (`peptide<TAB>rt`), e.g. from DeepLC. When given,
-    /// these replace the distilled model's predictions as the abstract RT (still
-    /// calibrated on-data). DeepLC-quality RT is what makes RT discriminate.
+    /// External predictions (`peptide<TAB>rt`), calibrated to the run at search time.
+    /// Must cover candidate target AND decoy sequences; replaces the bundled CNN.
     #[arg(long)]
     rt_library: Option<PathBuf>,
 
@@ -108,6 +133,16 @@ struct Cli {
     /// backgrounds. Design-free (uses across-sample variation, not labels).
     #[arg(long)]
     profile_reassign: bool,
+
+    /// Seed for every result-affecting random component (decoy shuffle, RANSAC
+    /// sampling, CV fold assignment, booster subsampling). Output is a pure
+    /// function of (input, seed). Default 0 = the shipped streams; other values
+    /// give an independent draw, for measuring seed-to-seed spread. Overrides
+    /// `digest.decoy_seed` and `scoring.seed` in the config file. Explicit
+    /// `scoring.rt_seed`, `scoring.cv_seed`, and `scoring.classifier_seed` overrides
+    /// still take precedence for their individual stages.
+    #[arg(long)]
+    seed: Option<u64>,
 }
 
 #[derive(Debug, Default, serde::Deserialize)]
@@ -122,17 +157,30 @@ struct Config {
     koth: Option<koth_ff::config::KothConfig>,
 }
 
+impl Config {
+    fn apply_cli_seed(&mut self, seed: Option<u64>) {
+        if let Some(seed) = seed {
+            self.digest.decoy_seed = seed;
+            self.scoring.seed = seed;
+        }
+    }
+}
+
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
+    if let Some(command) = cli.command {
+        return rt_cli::run(command);
+    }
 
-    let config: Config = match &cli.config {
+    let mut config: Config = match &cli.config {
         Some(p) => {
             let s = std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
             toml::from_str(&s).with_context(|| "parsing config")?
         }
         None => Config::default(),
     };
+    config.apply_cli_seed(cli.seed);
 
     let t = Instant::now();
     let matrix = match (&cli.features, &cli.raw, &cli.matrix) {
@@ -166,7 +214,7 @@ fn main() -> Result<()> {
     );
 
     let t = Instant::now();
-    let db = PeptideDb::build(&cli.fasta, &config.digest)?;
+    let db = PeptideDb::build(cli.fasta.as_ref().context("--fasta is required for search")?, &config.digest)?;
     log::info!(
         "built peptide db: {} targets + {} decoys ({:.1}s)",
         db.n_targets,
@@ -244,12 +292,11 @@ fn main() -> Result<()> {
             log::info!("loaded RT model from {}", p.display());
             Some(m)
         }
-        None => {
-            if rt_library.is_none() {
-                log::warn!("no --rt-model or --rt-library given; scoring without retention time");
-            }
-            None
+        None if rt_library.is_none() => {
+            log::info!("using bundled RT CNN");
+            Some(RtModel::bundled()?)
         }
+        None => None,
     };
 
     let im_model = match &cli.im_model {
@@ -469,4 +516,46 @@ fn main() -> Result<()> {
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod seed_config_tests {
+    use super::*;
+
+    #[test]
+    fn cli_seed_keeps_legacy_joint_behavior() {
+        let cli = Cli::try_parse_from([
+            "uno", "--features", "run.tsv", "--fasta", "db.fasta", "--seed", "9",
+        ]).unwrap();
+        let mut cfg: Config = toml::from_str("[digest]\ndecoy_seed = 2\n[scoring]\nseed = 3\n").unwrap();
+        cfg.apply_cli_seed(cli.seed);
+        assert_eq!(cfg.digest.decoy_seed, 9);
+        assert_eq!(cfg.scoring.seed, 9);
+        assert_eq!(cfg.scoring.effective_rt_seed(), 9);
+        assert_eq!(cfg.scoring.effective_cv_seed(), 9);
+        assert_eq!(cfg.scoring.effective_classifier_seed(), 9);
+    }
+
+    #[test]
+    fn explicit_stage_seeds_survive_cli_override() {
+        let mut cfg: Config = toml::from_str(
+            "[digest]\ndecoy_seed = 2\n[scoring]\nseed = 3\nrt_seed = 0\ncv_seed = 5\nclassifier_seed = 6\n",
+        ).unwrap();
+        cfg.apply_cli_seed(Some(9));
+        assert_eq!(cfg.digest.decoy_seed, 9);
+        assert_eq!(cfg.scoring.seed, 9);
+        assert_eq!(cfg.scoring.effective_rt_seed(), 0);
+        assert_eq!(cfg.scoring.effective_cv_seed(), 5);
+        assert_eq!(cfg.scoring.effective_classifier_seed(), 6);
+    }
+
+    #[test]
+    fn absent_cli_seed_preserves_independent_config_seeds() {
+        let mut cfg: Config = toml::from_str("[digest]\ndecoy_seed = 2\n[scoring]\nseed = 3\ncv_seed = 5\n").unwrap();
+        cfg.apply_cli_seed(None);
+        assert_eq!(cfg.digest.decoy_seed, 2);
+        assert_eq!(cfg.scoring.effective_rt_seed(), 3);
+        assert_eq!(cfg.scoring.effective_cv_seed(), 5);
+        assert_eq!(cfg.scoring.effective_classifier_seed(), 3);
+    }
 }

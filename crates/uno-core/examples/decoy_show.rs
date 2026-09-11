@@ -78,7 +78,7 @@ fn main() {
     ];
 
     for (name, m) in methods {
-        let decoys = generate(&targets, m, "DECOY_");
+        let decoys = generate(&targets, m, "DECOY_", 0);
         let (dacc, dseq) = &decoys[show_idx];
         println!("=== {} ===", name);
         println!("decoy protein {}:", dacc);
