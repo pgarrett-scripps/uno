@@ -825,15 +825,15 @@
       "path": "figures/figS4_rt_throughput.png",
       "kind": "figure",
       "desc": "RT-prediction throughput of the uno CNN and DeepLC vs batch size",
-      "hash": "sha256:b4321b32d107d65d872c9ce383e302801d51a1065e5cfb07c9ac66cb02482105",
+      "hash": "sha256:911940c5f9926a363565a50793141b45884ae01bca3ee71470d97014118e075c",
       "origin": {
         "by": "analysis/scripts/figS4_rt_throughput.py",
-        "at": "2026-09-04T00:23:34Z"
+        "at": "2026-09-11T22:45:59Z"
       },
       "inputs": {
         "../benchmark/rt_predictor/prepare_library.py": "sha256:b68cfef82975cd2394ddf5e7e0968e3a69da8ead93f313a1e300eff0662396e3",
-        "../benchmark/rt_predictor/results/throughput.tsv": "sha256:41a84265635ecec8d3bb7d69c159429e65e1480a8439f278e9990ff0ec2d5518",
-        "../benchmark/rt_predictor/results/throughput_environment.json": "sha256:af9736883af4933aed551bbbb6a7de77b9e3d391650912638bf2b5c1ad4ee5c9",
+        "../benchmark/rt_predictor/results/throughput.tsv": "sha256:7e7ef1ee493adcf45b22b6f8d5945e5b11faf8deb1e99c16f39d427b5113709e",
+        "../benchmark/rt_predictor/results/throughput_environment.json": "sha256:0e1aecefad76fc626c9af535b305569c5cb429d9b75a6f96273ee725d1b6a456",
         "../benchmark/rt_predictor/sets/synthetic_tryptic.tsv": "sha256:86a9204cfb48d43368e24bf29f917b28eb3c0ead93694dd51f4b8e6ae268fff6",
         "../benchmark/rt_predictor/throughput.py": "sha256:32a24356f320daa8f7f0162bed62e35506f704485b4ef2ccc179d7faa3625106",
         "../models/rt_cnn_chrono_global_v3_ch32.urtc": "sha256:c8f1a017526670444059f1e2c06341f39484f31433c266a029a6a7e802e6237a",
@@ -845,15 +845,15 @@
       "path": "figures/figS4_rt_throughput.pdf",
       "kind": "figure",
       "desc": "Vector twin of the RT throughput figure",
-      "hash": "sha256:746543ca903e3678b28f8f5bb1054001d4601e06b60b0c469299bd94fecfdb55",
+      "hash": "sha256:2276240f9e246b5c9430e9495aaaf95815308441e92f0fd7da644628852c39f9",
       "origin": {
         "by": "analysis/scripts/figS4_rt_throughput.py",
-        "at": "2026-09-11T21:44:18Z"
+        "at": "2026-09-11T22:45:59Z"
       },
       "inputs": {
         "../benchmark/rt_predictor/prepare_library.py": "sha256:b68cfef82975cd2394ddf5e7e0968e3a69da8ead93f313a1e300eff0662396e3",
-        "../benchmark/rt_predictor/results/throughput.tsv": "sha256:41a84265635ecec8d3bb7d69c159429e65e1480a8439f278e9990ff0ec2d5518",
-        "../benchmark/rt_predictor/results/throughput_environment.json": "sha256:af9736883af4933aed551bbbb6a7de77b9e3d391650912638bf2b5c1ad4ee5c9",
+        "../benchmark/rt_predictor/results/throughput.tsv": "sha256:7e7ef1ee493adcf45b22b6f8d5945e5b11faf8deb1e99c16f39d427b5113709e",
+        "../benchmark/rt_predictor/results/throughput_environment.json": "sha256:0e1aecefad76fc626c9af535b305569c5cb429d9b75a6f96273ee725d1b6a456",
         "../benchmark/rt_predictor/sets/synthetic_tryptic.tsv": "sha256:86a9204cfb48d43368e24bf29f917b28eb3c0ead93694dd51f4b8e6ae268fff6",
         "../benchmark/rt_predictor/throughput.py": "sha256:32a24356f320daa8f7f0162bed62e35506f704485b4ef2ccc179d7faa3625106",
         "../models/rt_cnn_chrono_global_v3_ch32.urtc": "sha256:c8f1a017526670444059f1e2c06341f39484f31433c266a029a6a7e802e6237a",
