@@ -12,9 +12,47 @@ Three documents, no overlap:
 | [`paper/SUBMISSION_TODO.md`](paper/SUBMISSION_TODO.md) | the manuscript work, item by item |
 | [`paper/AUDIT.md`](paper/AUDIT.md) | the evidence: what was measured, what was verified correct, and every item cut from here |
 
-**Critical path: land the three code fixes → re-run → correct the numbers → submit.**
+**Critical path: the code fixes and the re-run are done (2026-09-11). What is left
+is the author-blocked material in §3 and the submission bundle.**
 
 ---
+
+## DONE 2026-09-03 — koth: split hills by FAIMS compensation voltage (`uno --raw`)
+
+Found 2026-09-03 by the Figure 6 raw-mode comparison (`benchmark/raw_mode/`).
+koth now reads `MS:1001581` (and Thermo's `FAIMS CV` trailer), keys hill
+detection on -50/-65/-80 V with per-channel scan indices, and runs feature
+assembly and scoring within each CV. The 05433 rerun reports 99,812 features and
+2,175 proteins @1%, versus biosaur2's 100,949 features and 2,072 proteins. The
+previous unsplit path reported 68,183 features and 867 proteins.
+
+## DONE 2026-09-09 — `uno --seed`: the determinism claim was not a fair comparison
+
+uno's byte-identical output came entirely from hardcoded constants: the booster
+seed (42), the RANSAC sampling LCG constant, the decoy-shuffle hash salt, and
+the CV fold-assignment hash. Nothing about the algorithm carries less randomness
+than ms1searchpy's. Reporting one locked uno run against three unlocked
+ms1searchpy runs measured the locking, not the engines.
+
+`uno --seed N` now perturbs all four stages together. Seed 0 is the default and
+leaves every constant untouched, so published results still reproduce: a seed-0
+run on `hela5min_09766` is byte-identical to the committed benchmark output.
+Unit tests in `decoy.rs` and `calibrate.rs` pin seed 0 to the historical stream
+and assert that other seeds actually move the decoys and the sample sequence.
+
+What the seed sweep (`benchmark/seed_sweep.sh`, `benchmark/spread_table.py`)
+shows is that uno's seed-to-seed spread is the same order as ms1searchpy's
+run-to-run spread, and that the published single value is not a typical draw on
+every dataset. The manuscript's determinism section, Figure S6 and the cover
+letter were rewritten around that; see `paper/SUBMISSION_TODO.md`.
+
+The reciprocal also holds and is now demonstrated rather than asserted:
+ms1searchpy's decoy database is byte-identical across processes once its
+module-level generator is seeded. `benchmark/ms1_seeded.py` locks that plus the
+LightGBM hyperparameter search, LightGBM training, and — the one that is easy to
+miss — `PYTHONHASHSEED`, because ms1searchpy repeatedly applies a *seeded*
+shuffle to a `list(set(peptides))` whose order randomized string hashing already
+changed.
 
 ## 1. Code fixes that gate the re-run
 
@@ -78,43 +116,80 @@ Still open in this area, not a gate:
       Pre-existing and off the default path (the ML backend is sequoia-boost;
       LightGBM is opt-in via `UNO_ML_LIGHTGBM=1`), but it makes a bare `cargo test`
       red, which trains people to ignore it.
+- [ ] `BroadFit::sigma_floor` (`broad_rt.rs:27`) is never read — bounded RT recovery sets
+      the applied floor to zero, so the field records an input nothing consumes. It is the
+      only warning `cargo build --release` emits from this workspace. Deliberately left
+      alone until the manuscript's builds are done: removing it changes the binary, and the
+      published results are pinned to `c376954d`.
 
-## 2. The re-run
+## 2. The re-run — DONE 2026-09-11
 
-The gate for every identification number in the paper. Do it **once**, correctly.
-Budget half a day, serialized on one idle host, `/usr/bin/time -v` on every invocation.
+The gate for every identification number in the paper, run once against one pinned
+binary (commit `0710225`, binary SHA-256 `c376954d`) with `/usr/bin/time -v` on
+every invocation. Repeat it with `benchmark/publication_rerun.py` followed by
+`benchmark/refresh_summaries.py` whenever the engine changes again.
+
+**2026-08-31 Technical Note scope:** the paper now reports only the six primary
+DirectMS1-study files and three independent Astral files. Quantitation, the
+run10 quality-column arms, and the separate three-replicate FAIMS analysis were
+removed from the manuscript and no longer belong in the publication re-run.
 
 **Preconditions**
 
 - [x] §1 above landed and the determinism test passing.
-- [ ] Working tree committed. **Record the commit hash** — it becomes the single value in
-      `paper/si/versions.typ`.
-- [ ] The ms1searchpy patch committed to a branch or captured as a diff, with **its**
-      commit recorded. (The comparator is a local uncommitted +45-line patch, not released
-      2.8.12 — which does not exist on PyPI. Without it, stock ms1searchpy reads none of
-      the five quality columns that §3.5 and S6 depend on.)
-- [ ] Log the uno build metadata alongside each run. Last round's `benchmark/results/*.log`
-      are zero-length, which is why the build could not be identified afterwards.
+- [x] Working tree committed. **Commit `0710225`**, binary SHA-256
+      `c376954dbd7c725c8cd280b9c392ba3854fd9c831eb423601a3eb7ebc5539eda`. Both are in
+      `paper/si/versions.typ`, along with the three out-of-tree path dependencies
+      (sage-core, sequoia-boost, koth_ff), which a commit is the only way to pin.
+- [x] The ms1searchpy patch captured as a diff: `benchmark/ms1searchpy_comparator.patch`
+      (SHA-256 `f8d0c455`), taken from the installed checkout at commit `9df4a94`, which
+      reports itself as 2.8.12 — a version that does not exist on PyPI. Without it, stock
+      ms1searchpy reads none of the five quality columns the comparison depends on.
+- [x] Log the uno build metadata alongside each run. Every search now writes a provenance
+      stamp (command, input hashes, **binary hash**, commit, output hash) into
+      `benchmark/results/publication_rerun/`, and the `/usr/bin/time -v` capture holds the
+      engine's own log. Last round's `benchmark/results/*.log` were zero-length, which is
+      why the build could not be identified afterwards.
 
-**Scope**
+**Scope — DONE 2026-09-11.** `benchmark/publication_rerun.py`, 156 uno searches on
+the pinned binary: six primary files × biosaur2 × seeds 0-10, six primary files ×
+`--raw` × seeds 0-2, twelve Astral files × both feature sources × seeds 0-2.
+Seed-0 searches serialized (their `/usr/bin/time -v` output is what the resource
+panels report), the rest two at a time.
 
-- [ ] Six datasets: uno ×1 + ms1searchpy ×3.
-- [ ] run10: uno ×1 + ms1searchpy ×3. run10 is a **tuning set**, not a benchmark.
-- [ ] run10 column-stripped: uno ×1 + ms1searchpy ×3. Fills the one unauditable row of
-      Table S5, whose caption currently admits the uno arm "was not retained".
-- [ ] FAIMS: ms1searchpy **×3 per replicate**, not ×1. The previous round ran it once,
-      which violates the paper's own stated standard.
-- [ ] **Dump uno's PFM table** for run10, so Table S6's uno column can be re-derived.
-- [ ] Quantitation: re-run `uno --matrix` at the pinned commit on the existing
-      `uno_proc_newkoth/align_avg/` matrix, and **save the log**. Do *not* re-run koth
-      alignment — that is the expensive step and its output is unchanged.
+- [x] **149 of the 156 outputs are byte-identical to the superseded build.** The
+      seven that differ had all returned nothing before; all seven now report
+      proteins (200 pg rep1 biosaur2 seeds 1-2, 200 pg rep2 raw seeds 1-2, 200 pg
+      rep3 biosaur2/raw seed 1, 1 ng rep4 biosaur2 seed 1). One search still
+      returns nothing: 200 pg rep1, `--raw`, seed 1. All 36 seed-0 searches are
+      byte-identical, so no headline depth moved; only the re-measured timings did
+      (wall +2 to +13%, peak RSS within ±12%).
+- [x] ms1searchpy was not re-run: the comparator did not change. Its existing
+      serialized searches carry through. The re-run did surface 20 comparator
+      replicates that existed on disk but had never entered `spread.tsv`
+      (reps 4-10 on 09746, 09766 and the FAIMS file); they are now in the
+      inventory, which takes the comparator from 19 draws to 39 and leaves the
+      headline unchanged (uno's median still wins 4 of 6 at 1% and 6 of 6 at 5%).
+- [x] RT-model comparison: dropped from the manuscript 2026-09-01, not re-run.
+      The RT-predictor accuracy benchmark WAS re-run on the pinned build in an
+      isolated worktree: every accuracy metric and every per-peptide prediction
+      came back byte-identical. Throughput (Figure S4) is a timing measurement and
+      is re-measured separately on a quiet host.
 
-**After**
+**After — DONE 2026-09-11**
 
-- [ ] Regenerate `benchmark/results/summary.tsv`, then `paper/figdata/*.tsv`, then
-      `cd paper && just assets-all`.
-- [ ] Re-derive every table from the new outputs **by script**, and keep the script.
-- [ ] Then the manuscript work: `paper/SUBMISSION_TODO.md` C3, C4, C6, then C2 and C5.
+- [x] `benchmark/refresh_summaries.py` rebuilds every derived summary from the
+      re-run tables: `spread.tsv`, the seed-sweep and variability-extension
+      summaries, the uno rows of `summary.tsv`, `raw_mode/summary.tsv` and the
+      Astral input-series summary.
+- [x] Every referenced table is now written by a script.
+      `analysis/scripts/gen_perdataset_table.py` was the last hand transcription;
+      it reproduces the old cells exactly, which also validates the transcription
+      it replaces.
+- [x] Manuscript registry updated and rebuilt: `paper/si/versions.typ` pins the
+      commit, the binary hash, the three out-of-tree path dependencies and the
+      comparator patch; `just verify` is clean apart from build staleness that
+      clears on commit.
 
 ---
 
@@ -186,3 +261,39 @@ Removed from this list as not required to publish. All of it survives in
 Two cuts that are **not** safe to forget, so they moved into `paper/SUBMISSION_TODO.md`
 rather than disappearing: the SI's unrunnable S1 commands (D2) and the two
 "GENERATED … do not edit by hand" labels that no generator produces (D1).
+
+## uno low-input bootstrap floor (found 2026-09-04, PXD066701 input series)
+
+On `CW0710_OldFAIMS_1ng__RA7_rep6_ch2_DIA200pg` (1 ng HeLa, Astral, 79,917
+features) uno returned **0 proteins at 1%** while its replicates gave 187, 567,
+688, 975. The mass-anchor bootstrap found only 23 confident proteins (205 RANSAC
+inliers, RT residual 0.12 min, i.e. the calibration itself was fine), so the
+stage-2 calibration-pair floor at `crates/uno-core/src/score.rs:998`
+(`if cal_pairs.len() < 100 { break; }`) tripped and the run exited with an empty
+list instead of falling back to the stage-1 (mass-anchor) protein set. Two other
+1 ng replicates (rep4: 50 confident, 187 final) sit just above the floor, which
+is why the 1 ng level is so variable. Fix candidates, in order: (1) when the
+floor trips, score and report the stage-1 confident set rather than nothing;
+(2) widen the anchor gate or lower the floor when the initial confident count is
+small. Not changed during the preregistered input-series run (frozen binary).
+
+**Fixed 2026-09-04 (uncommitted, `score.rs`):** the stage loop is now a
+closure `run_stages(floor, seed)`; when stage 1 returns <20 confident proteins
+it is retried with the mass-bootstrap proteins seeding stage 2, once at the
+estimated RT sigma and once floored at 1.0 min, keeping the deeper result. The
+two collapsed files recover (1 ng rep6 0 -> 523, 200 pg rep1 0 -> 389 at 1%);
+1 ng rep1/rep4, 200 pg rep2, and 10 ng rep1 are byte-identical to the frozen
+binary. `results/uno_fixed/` holds the reruns; `results/uno/` keeps the frozen
+outputs. Needs a unit test for the collapse path and inclusion in the C1 re-run.
+
+**Shipped 2026-09-04 as the default (`UNO_SMOOTH` level 2):** the stage loop
+and the ML stage are `run_stages` / `run_ml` / `finalize` closures; the whole
+pipeline runs at RT sigma ×1.0 and ×1.5 (plus the seeded retries on collapse)
+and the candidate whose FINAL list has the larger soft depth Σ clamp(1 − q/0.05)
+is kept. Against the current binary on the 14 Astral + 6 primary files: 1 ng
+rep4 187 → 768, 1 ng rep2 688 → 925, 200 pg rep3 476 → 458 (5%: 786 → 929),
+09950 1454 → 1466, 16 files byte-identical. Wall +50–80%. Levels 1 and 3 were
+tested and rejected (see score.rs comment). `UNO_SMOOTH=0` restores the old
+path. NOTE: the July primary reference outputs differ from the current binary
+on 09734 (1035 → 946) and 05433 (2072 → 2327) independent of this change;
+that is the C1 re-run.

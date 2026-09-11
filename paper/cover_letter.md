@@ -2,107 +2,98 @@
 
 **To:** The Editors, *Journal of Proteome Research*
 
-**Re:** Submission of an original Article
+**Re:** Submission of a Technical Note
 
 ---
 
 **Manuscript title**
 
-uno: A Fast, Reproducible, Dependency-Light Rust Engine for MS1-Only Protein
-Identification and Quantitation
+uno: A Fast Rust Engine for MS1-Only Protein Identification
 
 **Corresponding author**
 
 Patrick Garrett
+
 Department of Chemical Physiology, The Scripps Research Institute
+
 10550 North Torrey Pines Road, La Jolla, CA 92037, USA
+
 Telephone: [PHONE]
+
 Email: pgarrett@scripps.edu
 
 **Co-author**
 
-John R. Yates III (Department of Chemical Physiology, The Scripps Research Institute)
+John R. Yates III, Department of Chemical Physiology, The Scripps Research
+Institute
 
 ---
 
 Dear Editors,
 
-Please consider the enclosed manuscript for publication as an Article in the
-*Journal of Proteome Research*.
+Please consider the enclosed manuscript for publication as a Technical Note in
+the *Journal of Proteome Research*.
 
-MS1-only proteomics identifies peptides and proteins from precursor mass and
-retention time alone, without MS2 fragmentation. It is the route to very short
-gradients and high sample throughput, and the open-source reference implementation
-for it, ms1searchpy, has been developed and published in this journal. We present
-uno, an MS1-only search and quantitation engine written in Rust. uno reads the same
-single-run feature files that ms1searchpy reads, which lets the two engines be
-compared on genuinely identical input rather than on separately prepared pipelines.
+MS1-only proteomics identifies proteins from precursor mass and retention time
+without MS2 fragmentation, supporting short gradients and high throughput. We
+present uno, an open-source Rust engine for this task. uno reads the same
+single-run feature tables as the reference implementation, ms1searchpy, allowing
+the engines to be compared on identical feature input, database, and digest.
 
-Two properties motivated the work. The first is reproducibility. The reference
-engine's decoy shuffle and hyperparameter search draw on an unseeded random number
-generator, so repeating a search of the same feature file returns a materially
-different protein list; across our benchmark that spread reached 40% of the
-engine's own median. A single reported number from such a pipeline is a draw rather
-than a measurement. uno is deterministic by construction and returns byte-identical
-output across repeated runs, which is what makes its single column a fair
-comparator for a median of three. The second is dependency weight. uno predicts
-retention time in-process with a pure-Rust convolutional model trained on
-experimental retention times, so the Python and deep-learning stack that dominates
-single-run wall-clock time in the reference pipeline is not required at search time.
+On six datasets from the DirectMS1 studies, uno had higher median protein
+depth on four files at 1% two-proteome entrapment FDR and all six at 5%. The
+serialized searches ran several-fold faster in approximately half the peak
+memory. Twelve independent Orbitrap Astral files from another laboratory test
+transfer beyond the primary instrument and deposits. Both engines are
+randomized, and the revised figures show individual draws and medians. Protein
+list agreement and empirical FDP are also evaluated across seeds. Fixed-seed
+repeatability is an operational benefit, not evidence of lower variability.
 
-On six datasets taken from the DirectMS1 papers' own deposits, uno identified more
-proteins at a 1% entrapment false-discovery rate than the median of three
-ms1searchpy replicates, while running several times faster in roughly half the peak
-memory. We report depth by a two-proteome entrapment probe scored identically for
-both engines rather than by either engine's own target/decoy estimate, and we use
-the same probe to ask what each engine's reported 1% list is actually worth. We
-think that second question is the more useful contribution: the probe shows a
-learned protein-level rescorer inflating the empirical false-discovery rate while
-raising apparent counts, which is why uno's protein score is a transparent binomial
-model. We report that as a cautionary result rather than as a feature.
+The manuscript connects these comparisons to the engine's mass-search,
+retention-time calibration, scoring, and protein-inference architecture. It
+separates identification depth from internal FDR calibration by scoring each
+engine's protein lists against the same absent-species probe. The depth
+advantage depends on the dataset and threshold; no universal superiority or
+uniform internal FDR calibration is claimed. The Astral and built-in feature
+finder comparisons include a smaller three-seed extension, and acquisition
+variation is distinguished from search variation. These repeats also reveal
+remaining seed-dependent zero-depth failures at low input, which are retained
+and described as a limitation.
 
-We have tried to be explicit about the limits. Several of uno's defaults were
-selected on development data drawn from the same family as the benchmark, and the
-manuscript says so and identifies which. The quantitation path is validated for
-dilution tracking, which is robust, and not for trace-level differential testing,
-where it trails the reference method in both sensitivity and precision. We report
-that gap with its measured numbers rather than omitting it.
+This work fits the Technical Note format as a concise software advance with a
+directly demonstrated advantage over the existing implementation. The source,
+trained retention-time model, benchmark scripts, exact comparator patch, and
+result archive will be released at the repository and DOI below. The manuscript
+also discloses which defaults were tuned on related development data and keeps
+those data outside the validation claim.
 
-This work fits *Journal of Proteome Research* in both subject and form. The journal
-publishes the MS1-only method papers this tool is measured against, the entrapment
-and false-discovery-rate methodology we rely on, and the open-source proteomics
-software this manuscript sits among.
+**Supporting Information.** One PDF containing the software environment and
+benchmark inputs, complete per-run measurements, entrapment counts and
+calibration curves, and seeding and repeatability checks.
 
-**Supporting Information.** A single PDF containing Sections S1 to S8, Figures S1
-to S5, and Tables S1 to S8. It covers the benchmark protocol with software
-versions, hardware and the exact commands; the full per-dataset and per-replicate
-results; entrapment calibration of each engine's own reported list with
-per-dataset false-discovery-proportion curves; the FAIMS benchmark across all three
-replicate runs; resource scaling against input size; the per-feature quality-column
-ablation with per-column target/decoy separation; extended quantitation detail; and
-the retired measurements this revision supersedes.
+**Length.** The abstract is within the journal's 200-word limit, and the text is
+within the Technical Note recommendation. The Experimental Section is reported
+separately in accordance with the journal's counting guidance.
 
-**Length.** The manuscript complies with the journal's limits. The abstract is 200
-words. [Confirm main-text word count and figure/table counts against the current
-guidelines at submission.]
+**Data and software.** [Repository URL and Zenodo DOI to be inserted on
+release.] The mass spectrometry data are available through PRIDE under
+PXD015669, PXD023977, and PXD066701.
 
-**Data and software.** [Repository URL and Zenodo DOI to be inserted on release.]
-The mass spectrometry data reanalyzed here are publicly available from
-ProteomeXchange via PRIDE under accessions PXD015669, PXD023977 and PXD033350.
+**Declarations.** This manuscript is original, has not been published
+previously, and is not under consideration elsewhere. Both authors approved the
+submission and declare no competing financial interest. The work is a secondary
+computational analysis of public data and required no additional ethics review.
+Use of AI tools during manuscript preparation is disclosed in the
+Acknowledgments.
 
-**Declarations.** This manuscript is original, has not been published previously,
-and is not under consideration elsewhere. All authors have approved the submission.
-The authors declare no competing financial interest. The study is a secondary
-computational analysis of publicly deposited data and required no ethics review.
-Use of AI tools during preparation is disclosed in the Acknowledgments.
-
-We suggest the manuscript is best handled by an editor with an interest in
-proteomics software, false-discovery-rate methodology, or high-throughput
-bottom-up workflows.
+Because John R. Yates III is a co-author and the journal's Editor-in-Chief, we
+respectfully request conflict-free handling by an independent editor, with no
+editorial involvement by the co-author.
 
 Thank you for your consideration.
 
 Sincerely,
 
 Patrick Garrett
+
 On behalf of both authors

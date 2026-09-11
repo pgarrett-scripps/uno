@@ -35,8 +35,8 @@
 // Apply the template for PDF; on the docx path pass the document through untouched.
 #show: if docx-mode { doc => doc } else { _template }
 
-// arkheion normally supplies heading numbering. Without it the "Section 3.x"
-// pointers would not line up with anything, so restore it on the docx path only.
+// arkheion normally supplies heading numbering. Without it the section pointers
+// would not line up with anything, so restore it on the docx path only.
 // The SI's own S-numbering is set later in si-body.typ and still overrides this.
 #set heading(numbering: "1.") if docx-mode
 
@@ -63,8 +63,8 @@
   text(9pt, strong("Keywords: ") + paper-keywords.join(", "))
 }
 
-// Print just a cross-reference's number (e.g. "3") with no "Figure"/"Table"/
-// "Section" prefix, for enumerations like "Figures 2 and 3".
+// Print just a cross-reference's number with no "Figure"/"Table"/"Section"
+// prefix, for enumerations that share one prefix.
 #let refn(l) = ref(l, supplement: none)
 
 // No global `raw` language: the inline code spans in this manuscript are file
@@ -72,22 +72,20 @@
 // globally syntax-highlights them, which puts a red `*` inside `*.features.tsv`
 // and a red `=` inside `min_scans = 2`. Block listings set their own language.
 
-// Let long tables break across pages. Without this, the 24-row Tables S2 and S3
-// overflow the text block and their last row prints on top of the caption and
-// the page number.
+// Let long tables break across pages. Without this, the long Supporting
+// Information tables overflow the text block and their last row prints on top
+// of the caption and the page number.
 #show figure: set block(breakable: true)
+// Keep the compact seed summary with its caption; long SI tables may split.
+#show <tbl:variability>: set block(breakable: false)
 
-// Provenance note for reviewers of this draft. Every identification number in
-// Sections 3.1-3.4 comes from benchmark/results/summary.tsv, the per-engine
-// protein outputs under benchmark/results/, and benchmark/RESULTS.md. The FAIMS
-// numbers of Section 3.1 come from benchmark/faims/faims_out/ and the
-// quantitation numbers of Section 3.5 from benchmark/quant/results/, both
-// re-measured on 2026-07-28 against a fresh release build. They supersede the
-// values previously transcribed from benchmark/faims/README.md and
-// benchmark/quant/README.md, which did not reproduce.
-// The retention-time and rescorer experiments made on an earlier development
-// configuration now live in the Supporting Information (Section S9); that
-// scope is stated inline and the retired values are tabulated in Section S10.
+// Provenance note for reviewers of this draft. Every uno search reported here
+// was executed by one pinned build (paper/si/versions.typ), inventoried in
+// benchmark/results/publication_rerun/cases.tsv with a per-search command,
+// input hashes, binary hash and output hash. Comparator numbers come from the
+// serialized ms1searchpy searches under benchmark/results/, which were not
+// re-run because the comparator did not change. The independent Astral values
+// are recorded under analysis/astral/.
 
 // The graphical abstract, placed under the abstract for this draft. ACS takes
 // it as a separate Paragon Plus upload at submission; see SUBMISSION_TODO B7.
@@ -97,272 +95,241 @@
 
 // >>> BODY START -- everything from here to BODY END is counted as prose and narrated.
 
-= Introduction
+= Introduction <sec:introduction>
 
-Bottom-up proteomics conventionally identifies peptides from MS2 fragment
-spectra. Identification from precursor mass and retention time alone is an older
-idea, developed as the accurate-mass-and-time tag strategy @zimmer2006amt, and
-revived for short-gradient work as DirectMS1 @ivanov2020directms1. It matches
-the accurate precursor mass of an LC–MS feature to a theoretical peptide and
-confirms the assignment with predicted retention time, omitting MS2 entirely.
-Because no time is spent acquiring fragment spectra, MS1-only workflows support
-very short gradients (minutes) and correspondingly high throughput, at the cost
-of an information-poor identification problem. Mass and RT alone are weak
-discriminators, and identity must be concentrated at the protein level across
-multiple consistent peptides. The same group had earlier shown that combining
-enzymes of complementary specificity recovers some of the lost information
-@ivanov2017multienzyme. Recent work continues to develop MS1-driven
-identification, including deep-learning frameworks for propagating peptide
-identity across runs @xiao2025swaps.
+In bottom-up proteomics, MS1 survey scans are conventionally the quantitative
+channel. Identification rests on MS2 fragmentation of selected precursors, and
+the MS1 signal is integrated afterward into extracted ion chromatograms for
+label-free quantification. Yet the MS1 frames record every peptide species that
+ionizes, including the many that data-dependent acquisition (DDA) never selects
+for fragmentation, so each run carries identification-relevant evidence that a
+fragment-centric analysis discards. Match-between-runs and identity-propagation
+methods recover part of it by transferring identifications onto unfragmented
+features @yu2021ionquant @xiao2025swaps.
 
-The established open-source tool for this approach, ms1searchpy
-@ivanov2021ms1searchpy, couples a precursor mass search to RT prediction by
-DeepLC @bouwmeester2021deeplc and a LightGBM @ke2017lightgbm rescoring stage,
-with protein-level inference by a binomial model. It is effective but has two
-practical costs that matter at scale. First, its identification counts are not
-reproducible run to run. Its decoy shuffle and its hyperparameter search both
-draw on an unseeded random number generator, so repeated searches of the same
-feature file yield materially different protein lists (Section 3.2). Second, it
-carries a heavyweight Python and deep-learning dependency stack whose
-RT-prediction step dominates wall-clock time for a single run, as our own
-timings show (Section 3.1).
+Dropping MS2 acquisition altogether takes this a step further. An instrument
+method that records only MS1 frames spends its full duty cycle on the survey
+scan, which places more points across each chromatographic peak and supports
+faster separations, both of which benefit quantification. The cost is the
+fragment-ion evidence on which confident peptide identification normally rests.
+Identification must instead come from what MS1 retains: accurate precursor mass
+and retention time (RT). The accurate mass and time tag approach established
+that this pair can identify peptides against a library of previously observed
+coordinates @smith2002amt @zimmer2006amt. Building on earlier MS/MS-free
+multi-enzyme work @ivanov2017multienzyme, DirectMS1 removed the need for a prior
+MS/MS census, assigning proteins from single short-gradient runs against an in
+silico database @ivanov2020directms1 @ivanov2021ms1searchpy. The tradeoff is a
+weak peptide-level signal: mass and RT alone produce many plausible matches, so
+evidence must accumulate across multiple peptides at the protein level.
 
-We present uno, an MS1-only protein-identification engine written in Rust. uno's
-identification path consumes the same single-run feature files that ms1searchpy
-consumes, so the two engines can be benchmarked on identical input. As a
-secondary capability, it can read the cross-run aligned intensity matrix
-produced by the koth feature finder @koth, maps identifications onto it, and
-emits protein-group abundance matrices. uno's design goals are determinism,
-speed, and minimal external dependencies, while meeting or exceeding the
-identification depth of ms1searchpy.
+The reference implementation, ms1searchpy @ivanov2021ms1searchpy, combines a
+mass search with DeepLC RT prediction @bouwmeester2021deeplc and learned
+rescoring. Its Python and deep-learning stack adds substantial single-run cost,
+and its decoy shuffle and hyperparameter search draw from generators it does not
+expose, so repeated searches on one input return different protein lists. That
+complicates high-throughput use, and it makes a single search of either engine a
+weak basis for comparison.
 
-This work makes three contributions. First, we provide a clean, open-source Rust
-reimplementation of DirectMS1-style MS1 search whose output is byte-identical
-across runs by construction and whose RT prediction runs in-process in pure
-Rust, so the Python and deep-learning dependency stack is gone (Section 2).
-Second, we report a same-input head-to-head against ms1searchpy on six datasets
-taken from the DirectMS1 papers themselves. uno is deeper at 1% entrapment FDR
-on all six while running several times faster in less memory (Section 3.1), and
-we quantify how far the reference engine's own answer moves between repeated
-runs of the same search (Section 3.2). Third, we validate the reported protein
-FDR of both engines against a two-proteome entrapment probe. The same probe
-rejected a tested learned protein rescorer whose apparent counts increased,
-supporting uno's transparent binomial protein score (Sections 3.3 and 3.4).
+The engineering problem is therefore not only to reproduce an identification
+count. An MS1-only engine must search a large mass-compatible candidate space,
+adapt a sequence RT predictor to an individual gradient, accumulate weak peptide
+evidence at protein level, and expose enough intermediate structure to audit its
+FDR. Moving one stage into a faster language would leave most of that workflow
+unchanged. uno instead implements the complete search cascade in one Rust
+process and makes its reduction order independent of input order and thread
+scheduling.
 
-= Experimental Section
+We present uno, an open-source MS1-only identification engine written in Rust.
+It reads the same single-run feature files as ms1searchpy and predicts RT
+in-process. Like the comparator it draws on randomness, and holding its seed
+fixed reproduces a run exactly. We evaluate the practical claim directly: on
+matched feature files and databases, does uno provide greater externally
+calibrated protein depth with less computation? The comparison uses datasets
+from the DirectMS1 studies and an independent Orbitrap Astral series, with
+two-proteome entrapment applied identically to both engines.
 
-== Input and pipeline position
+= Experimental Section <sec:methods>
 
-uno's identification path consumes a single-run feature file, the same
-`*.features.tsv` that ms1searchpy takes. Four columns are required, a neutral
-mass (`massCalib`), `mz`, `charge` and apex retention time (`rtApex`).
-Everything else is used when present. That covers ion mobility and the shape
-columns `nIsotopes`, `nScans` and `rt_width`. It also covers the per-feature
-quality columns emitted by the feature finder: `cosine_score`, `isotope_score`,
-`combined_score`, `ppm_error`, `neutron_offset`, `isoerror` and `isoerror2`.
-ms1searchpy additionally requires `nIsotopes` and `nScans`, which uno does not.
-Single-run input is deliberate. Cross-run alignment collapses many per-run
-observations into one consensus row and drops those per-feature quality columns,
-so an aligned matrix cannot be used for identification without changing the
-information available to the search. The koth-aligned intensity matrix is used
-only by uno's quantitation path (`uno --matrix`), described below. Because the
-identification path works one run at a time, RT is in that run's own gradient
-space and is calibrated per file (@fig:pipeline).
+== Input and pipeline position <sec:methods-input>
+
+uno consumes a single-run feature table and a protein FASTA. Required feature
+fields are neutral mass, $m slash z$, charge, and apex RT; shape and quality
+columns are used when present. Each run is searched independently so that RT is
+calibrated in its own gradient space. The benchmark gives uno and ms1searchpy
+the same feature table, FASTA, and digest, isolating the search engines from
+feature detection and cross-run alignment.
+
+uno can also skip the external table. With `--raw` it runs the koth feature
+finder @koth in-process on an mzML, Bruker `.d`, or Thermo `.raw` file and
+passes the scored features straight to the search. The bundled koth profile
+keeps short, low-abundance hills so that its feature depth matches biosaur2 for
+this search. For FAIMS acquisitions, koth partitions MS1 hill detection and
+feature assembly by compensation voltage before concatenating the results. To
+measure the cost of the built-in path, the six benchmark files and the #s(
+  "astral.files",
+) Astral files (#s("raw.dataset_count") in all) were searched a second time from
+their converted mzML with `--raw`. The FASTA, RT model, and configuration were
+held fixed, and the two protein lists were compared under the same entrapment
+scorer (@sec:results-raw).
+
+== Software architecture and data flow <sec:methods-architecture>
 
 #figure(
   placement: auto,
   fig("fig.fig1-pipeline", width: 100%),
   caption: [
-    uno's identification cascade. The two lanes at the top are its inputs: the
-    FASTA is digested to a mass-sorted peptide database with decoys (left), and
-    one run's feature file is read directly (right). Each feature is matched to
-    mass-compatible peptides and their decoys, and each match is scored on
-    recalibrated mass error and calibrated RT deviation. Identity is then
-    concentrated at the protein level by a binomial survival score, greedy
-    parsimony and a target/decoy FDR walk. The quantitation path, which reads a
-    cross-run aligned intensity matrix instead of a feature file, is described
-    in the Experimental Section and is not drawn here. Only the identification
-    path is compared against ms1searchpy in this work, and it takes the same
-    single-run input that ms1searchpy takes.
+    uno's identification workflow. Dashed boxes are external inputs or tools,
+    blue boxes are stages executed in one uno process, and the green box is the
+    reported protein output. For the benchmark, biosaur2 performs feature
+    detection and both engines receive the identical single-run feature table.
   ],
 ) <fig:pipeline>
 
-== Peptide database and decoys
+uno separates feature detection from identification (@fig:pipeline). This
+boundary permits a controlled engine comparison and lets users substitute any
+feature finder that supplies neutral mass, charge, apex RT, and optional quality
+columns. Once the feature table and FASTA are loaded, digestion, candidate
+retrieval, RT prediction, calibration, match scoring, and protein inference run
+without exporting candidates to an external prediction service.
 
-In-silico tryptic digestion is performed with sage-core @lazear2023sage (enzyme
-rules, missed cleavages, length/mass bounds, fixed/variable modifications), and
-masses are recomputed in `f64`. Candidate lookup is a binary search over a
-mass-sorted peptide vector. Mass bounds are applied after modifications, which
-is the behavior an MS1-only search wants. Decoys are generated by
-interior-residue shuffling. The interior residues are pooled per protein rather
-than across the whole database, so each organism's residue composition is
-preserved and the per-protein binomial background stays an in-organism rate.
-Shuffling generally yields a decoy of different composition, and therefore of
-different mass, from its target, though nothing forbids a collision. A further
-mass shift is applied so that a decoy is not a mass twin of its target. We
-prefer these to same-mass reversed decoys because a reversed decoy is an
-RT-indistinguishable twin of its target under composition-based RT models
-(Supporting Information Section S9), and such twins give the protein-level null
-no room to separate. That argument is about composition-based predictors. uno's
-shipped model is order-aware and does recover most of the forward-minus-reverse
-signal, so the objection to reversed decoys is weaker for it, but the
-per-protein shuffle is what the reported searches used.
+The theoretical peptide database is sorted by neutral mass. For each feature and
+isotope-error hypothesis, a binary partition locates the beginning of the mass
+window; scanning stops when peptide mass exceeds its upper boundary. Candidate
+generation is fused with separate target and decoy top-$K$ reductions, so the
+full unreduced peptide-feature match set is never materialized. This streaming
+step bounds the dominant intermediate while preserving the candidates needed for
+RT discrimination.
 
-== Feature–peptide matching
+RT predictions are computed for unique candidate sequences and mapped onto the
+observed gradient before protein inference. The final protein table reports
+accession and grouping information, observed and theoretical peptide counts, the
+binomial score, and the internal $q$ value. The benchmark measures this whole
+application boundary; it does not assign the observed speed difference to any
+one implementation stage.
 
-Each feature is matched to all peptides within a ppm tolerance, enumerating
-isotope-error offsets of zero and $plus.minus 1$ carbon-13 neutron (1.00335 Da)
-on the neutral mass. The resulting peptide–feature matches (PFMs) are reduced to
-the top-$K$ best-mass targets and the top-$K$ best-mass decoys per feature, to
-bound the downstream cost without discarding the RT-correct assignment. $K$ is
-50 by default, so a feature carries at most 100 candidates into scoring.
+== Peptide database and decoys <sec:methods-database>
 
-== Retention-time model
+sage-core @lazear2023sage performs in-silico digestion, after which uno stores
+peptides in a mass-sorted vector. Decoys are generated by pooling and shuffling
+interior residues within each protein while retaining peptide termini. This
+preserves organism-level composition while generally changing peptide sequence
+and mass, so the null samples random mass coincidences rather than exact
+target-decoy twins. Full digest and decoy settings are reported in Supporting
+Information @sec:si-protocol.
 
-uno predicts RT in-process with a pure-Rust sequence model, so no Python or
-deep-learning runtime is required at search time. The model distributed with
-uno, and the one passed explicitly to every search reported in Section 3, is a
-convolutional network trained directly on experimental retention times from the
-Chronologer peptide library @wilburn2023chronologer. A learned residue embedding
-feeds a residual dilated convolution stack, a masked mean and max pool, and an
-MLP head that also receives 11 global physicochemical descriptors. A second,
-lighter option is a student model distilled from DeepLC predictions over a
-99-dimensional order-aware feature encoding, with a multilayer-perceptron and a
-gradient-boosted @gbdtcrate backend. Its characterization, together with a
-reverse-sequence benchmark that measures how much sequence-order information an
-RT model actually captures, is in Supporting Information Section S9. Both models
-predict RT for all candidate peptides in-process.
+== Feature–peptide matching <sec:methods-matching>
 
-Because a frozen predictor lives in an abstract RT space, uno calibrates it to
-the run's observed gradient with a RANSAC-seeded @fischler1981ransac, monotone
-piecewise-linear bootstrap on confident identifications, progressively tightened
-across rounds and vouched by protein-level multiplicity.
+Each feature is matched to peptides within the mass tolerance at isotope-error
+offsets of zero and $plus.minus 1$ carbon-13 neutron (#lit("1.00335") Da). The
+top-$K$ target and decoy candidates by mass error enter scoring; $K$ is 50 in
+the reported configuration.
 
-== Scoring and FDR
+== Retention-time model <sec:methods-rt>
 
-PFMs are scored by a deviation discriminant combining recalibrated mass error
-(in $sigma$ units, via sigma-clipped re-estimation of the mass-error
-distribution) and calibrated RT deviation. Because mass and RT alone do not
-separate target from decoy at the single-peptide level in this regime (Section
-3.4), identity is concentrated at the protein level. A binomial survival score
-$-log_10 P(X >= k | n, p)$ evaluates whether a protein's $k$ observed peptides
-exceed the random-match background rate $p$ estimated from decoys, followed by
-greedy parsimony, target/decoy pair competition, and a target/decoy FDR walk.
-The protein FDR is the decoy-over-target ratio in its $(d + 1) \/ t$ form, made
-monotone by a running minimum from the deepest rank upward. ms1searchpy reports
-its own protein list under the same convention, so the two are directly
-comparable.
+uno predicts RT in-process with a pure-Rust convolutional sequence model trained
+on experimental RTs from the Chronologer library @wilburn2023chronologer. Each
+residue becomes a learned embedding vector; a convolution stem and three
+residual blocks with increasing dilation give every position a widening sequence
+context; masked mean and maximum pooling reduce the peptide to a fixed-length
+vector regardless of its length. Eleven explicit physicochemical descriptors of
+the whole peptide are concatenated to that pooled vector before a two-layer head
+returns one number. The descriptors are quantities pooling cannot recover,
+principally the total rather than the mean hydropathy and the identity of the
+terminal residues, and they are computed by the same formulas in the training
+code and in the Rust inference path. The model is small enough to ship inside
+the binary and to run over a whole candidate list without a separate service.
+Architecture, corpus, and the worked feature vector for one peptide are given in
+Supporting Information @sec:si-rt-model.
 
-Acceptance is set by sweeping a single combined deviation threshold over a fixed
-grid. The swept quantity is the sum of the squared mass error in $sigma$ units
-and the squared calibrated RT deviation, and the cutoff kept is the one
-accepting the most target proteins at the chosen FDR. The mass gate and the RT
-scale are not swept. They come from the monotone recalibration described above.
-This selection is an argmax over a noisy decoy-derived estimate, so the estimate
-at the selected cutoff is optimistically biased, in the same way any best-of-$n$
-order statistic is. Two things bound that bias. The sweep is capped so it cannot
-run away to a loose, decoy-heavy cutoff, and the entrapment probe of Section 3.3
-measures the residual optimism directly rather than assuming it away.
+Training used amino-acid sequences only, with cysteine treated as
+carbamidomethylated; peptides carrying any other modification were removed.
+Labels are the Chronologer hydrophobic-index scale, which harmonizes eleven
+source datasets acquired on different gradients into one physicochemical scale,
+so the model learns peptide ordering rather than one instrument's minutes.
+Peptides were partitioned into training, validation, and holdout sets by a hash
+of the sequence, so no sequence appears in more than one partition. A
+RANSAC-seeded @fischler1981ransac monotone calibration maps the model output
+into each run's gradient space using progressively refined, high-confidence
+identifications.
 
-A learned per-match rescorer runs by default ahead of the protein stage. It is a
-cross-validated gradient-boosted-tree classifier over the per-match features,
-including the feature finder's quality columns, trained on confident targets
-against decoys with folds assigned by peptide. Its ranking is then used to build
-a cumulative-inclusion ensemble: the protein binomial is evaluated over a series
-of progressively looser inclusion bands and the scores are averaged over the
-tightest of them. The stage is guarded, so it is kept only when it accepts more
-targets at the same estimated FDR than the deviation path alone, and it no-ops
-when the quality columns are absent. The classifier is pure Rust @sequoiaboost
-and seeded, so the stage does not reintroduce a Python or deep-learning
-dependency and does not compromise determinism. This peptide level learning is
-distinct from protein-level rescoring, which is the subject of Section 3.4:
-uno's protein score is always the transparent binomial, and the learned LDA
-protein rescorer evaluated there is not part of the released engine.
+The frozen model supplies an abstract peptide ordering rather than an absolute
+time in minutes. Mass-supported protein identifications seed the first
+calibration; subsequent scoring rounds refine the mapping and residual scale on
+the current confident set. This division retains a sequence model learned from
+many gradients while adapting offset, scale, and nonlinear gradient shape to
+each analyzed run.
 
-All stages are implemented to be deterministic. No result-affecting path uses an
-unseeded RNG, and every path where hash-map iteration order could reach the
-result was made order-independent, so repeated runs on identical input produce
-byte-identical output. A two-run byte-diff on a full feature file is part of the
-test suite, alongside unit tests for the individual reductions (Section 3.2).
+To isolate predictor quality from search and protein inference, we also compared
+the shipped model with DeepLC #lit("3.1.13") @bouwmeester2021deeplc on three
+public unmodified-peptide sets. Peptides present in the Chronologer training or
+validation partitions were excluded. A sequence hash assigned 20% of each set to
+calibration and 80% to testing, and both models received the same calibration: a
+least-squares affine map from the model's native output to the experimental
+scale, fitted on that 20%. Accuracy was evaluated only on the held-out
+partition. Prediction throughput was measured separately, on a synthetic tryptic
+library at batch sizes from 100 to 100,000 peptides, because throughput depends
+on the peptides rather than on which experimental set they came from. Complete
+set construction and metrics are reported in Supporting Information
+@sec:si-rt-predictor.
 
-== Quantitation
+== Scoring and FDR <sec:methods-scoring>
 
-For multi-sample experiments, identified peptides and proteins are mapped onto
-koth's per-sample aligned intensities to emit peptide- and protein-level quant
-matrices. uno does not implement its own feature extraction. Where it reads raw
-data it embeds koth's finder, and every result reported here was computed from
-precomputed feature files. koth owns alignment, XIC integration, and
-match-between-runs. The quantitation path competes each aligned feature to a
-single protein and groups indistinguishable proteins. It can also reassign a
-feature to the protein whose across-sample profile it tracks, which is an opt-in
-flag and was enabled for the results reported here. A minimum-runs floor is
-required: a precursor must be present in at least a stated number of samples to
-enter the search, without which the random-match background rises to the point
-that no protein is accepted.
+Peptide-feature matches are ranked by recalibrated mass error and calibrated RT
+deviation. Protein evidence is a binomial survival score,
+$-log_10 P(X >= k | n, p)$, asking whether a protein's $k$ matched peptides
+exceed the decoy-estimated random-match rate $p$. Greedy parsimony, target-decoy
+pair competition, and a monotone $(d + 1) \/ t$ FDR walk produce the reported
+protein list.
 
-Two per-cell intensity estimators are available in koth at the alignment stage.
-A box-sum takes all signal in the ($m slash z$, RT) extraction window. An
-averagine projection instead reports the observed isotopologue vector projected
-onto the mass-derived averagine isotope pattern @senko1995averagine. That
-projection acts as a matched filter, retaining on-pattern signal and rejecting
-co-eluting off-pattern interference. The interference-rejection property is a
-consequence of the projection rather than a result of the cited work. We use the
-averagine projection for quantitation because it is mass-based and
-identity-free, with no reliance on the MS1 peptide-level FDR, and because under
-the current koth feature finder it preserves the entrapment-scored protein-ID
-count where the box-sum regresses it. It is not koth's default and was enabled
-explicitly.
+The engine selects a fixed-grid cutoff on the sum of squared standardized mass
+error and squared calibrated RT deviation. Selecting the most permissive cutoff
+that maximizes accepted targets can bias an internal target-decoy estimate, so
+the comparison does not use either engine's reported FDR as its performance
+criterion. Instead, @sec:methods-benchmark applies the same external entrapment
+calculation to both outputs.
 
-uno emits precursor- and protein-group-level abundance matrices and stops there.
-Downstream differential testing is left to standard tools, keeping uno an
-identification-and-quantitation engine rather than a statistics framework. The
-test used in Section 3.5 is a per-protein $t$-test on peptide fold changes with
-a fold-change gate and Benjamini–Hochberg control @benjamini1995fdr. It follows
-DirectMS1Quant @ivanov2022directms1quant in spirit rather than in detail, and
-Supporting Information Section S7 states where the two differ. The contrast is
-one-directional by construction: a precursor enters the test only if it is
-detected in at least two replicates of the more concentrated condition. That
-matches a spike-down dilution series, in which nothing is expected to rise as
-the spike is diluted, and it means the reported calls are not a two-sided
-result.
+A seeded, cross-validated gradient-boosted classifier @sequoiaboost can rerank
+matches before protein inference. It uses available feature-quality columns and
+no-ops when they are absent. The protein score remains the binomial model.
 
-== Benchmark data and comparison
+All result-affecting random components -- the decoy shuffle, the RANSAC
+calibration sample, the cross-validation fold assignment and the classifier's
+row and column subsampling -- draw from one selectable seed, and reductions are
+sorted before floating-point aggregation or tie-breaking. The default seed
+reproduces the archived default runs; varying the seed gives independent draws,
+which is how the run-to-run variability in @sec:results-reproducibility was
+measured. A two-run byte comparison on a complete feature file is part of the
+test suite.
 
-The head-to-head benchmark uses six runs from the DirectMS1 papers' own
-deposits. Five are 5-minute HeLa runs from PXD015669 (Q Exactive HF, no FAIMS),
-referred to here by their run numbers 09746, 09766, 09734, 09778 and 09950. The
-sixth is LUM2_05433_VG from PXD023977 (Orbitrap Fusion Lumos with FAIMS). uno
-reads it as a single run and ignores its three compensation-voltage fractions.
-The feature count of each file is given in @tbl:perdataset. Features were called
-by biosaur2 0.2.28 @abdrakhimov2021biosaur on mzML converted with
-ThermoRawFileParser 1.4.5 @hulstaert2020thermorawfileparser, and the same
-feature file was handed to both engines.
+== Benchmark data and comparison <sec:methods-benchmark>
 
-Both engines searched one human plus #emph[S. cerevisiae] FASTA (20,647 human
-and 6,066 yeast entries) and generated their own decoys internally. The digest
-was held identical (peptides of length 7 to 30, no missed cleavages,
-carbamidomethyl cysteine), so the comparison isolates the engines. uno was run
-once per dataset because it is deterministic, ms1searchpy 2.8.12 three times
-because it is not, always with `-deeplc 1 -ad 1` so that its RT model is DeepLC
-3.1.13 and it generates decoys. Runs were serialized on one workstation, and
-wall-clock time, user CPU time and peak resident memory were captured with
-`/usr/bin/time -v`. Exact commands, versions and configuration files are in
-Section S1.
+The primary benchmark comprises five 5-minute HeLa Q Exactive HF runs from
+PXD015669 and one Orbitrap Fusion Lumos FAIMS run from PXD023977, all used in
+the DirectMS1 studies. ThermoRawFileParser @hulstaert2020thermorawfileparser
+converted each raw file and biosaur2 @abdrakhimov2021biosaur detected features.
+Both engines received the same feature table for each run.
 
-run10 and deephela were development data, not independent benchmarks. Four
-defaults (`top_k = 50`, the ensemble inclusion band, `min_child_weight = 80`,
-and `cut_max = 8.0`) were selected during development by maximizing
-yeast-entrapment depth on those related data. The six runs used for the primary
-head-to-head were not used to select among the reported configurations. The
-shipped RT model was retained despite a lower run10 score than an alternative,
-rather than selected to maximize that tuning result.
+Both engines searched the same human-plus-#emph[S. cerevisiae] FASTA and tryptic
+digest and generated decoys internally. The initial resource cohort comprised
+one default-seed uno search and three ms1searchpy searches per file, serialized
+on one workstation. Wall time and peak resident memory were captured by
+`/usr/bin/time -v`. Depth, overlap, and calibration were subsequently evaluated
+over #s("bench.uno_seed_count") uno seeds and #s("bench.ms1_draw_min") to #s(
+  "bench.ms1_draw_max",
+) ms1searchpy runs per primary file. Versions, hardware, commands, files, and
+per-run results are in Supporting Information @sec:si-protocol and
+@sec:si-results.
 
-The comparator was a locally patched ms1searchpy development state based on the
-2.8 series, not an unmodified PyPI release. The patch lets ms1searchpy read the
-same five per-feature quality columns available to uno; stock ms1searchpy
-ignores them. This gives the comparator additional information and therefore
-makes the comparison conservative for uno. The exact commit and patch are
-supplied with the archived benchmark materials (Section S1).
+Four defaults (`top_k`, the ensemble inclusion band, `min_child_weight`, and
+`cut_max`) were selected on the related run10 and deephela development data by
+maximizing yeast-entrapment depth. Neither development set is counted as an
+independent benchmark. The six primary files and the Astral series were not used
+to select among reported configurations.
+
+The comparator was a patched ms1searchpy #lit("2.8")-series development state
+that reads the feature-quality columns available to uno; the exact patch is part
+of the benchmark archive. This gives the comparator more information than the
+stock release and therefore does not disadvantage it.
 
 Depth is reported by two-proteome entrapment rather than by either engine's own
 target/decoy estimate, using one scorer for both engines
@@ -379,435 +346,425 @@ and the running minimum of this from the deepest cutoff upward gives $q$. Depth
 at a threshold is the largest number of human proteins whose entrapment $q$
 meets it. Every depth number in this paper, for both engines, is an entrapment
 depth in this sense, not a count taken from either engine's own reported $q$.
-The two are compared directly in Section 3.3, where each engine's own reported
-list is scored against the same probe to check its calibration.
+The two are compared directly in @sec:results-calibration, where each engine's
+own reported list is scored against the same probe to check its calibration.
 
-The database-size correction assumes that the entrapment and target proteomes
-are exchangeable apart from their size, so estimators of this family give a
-bound rather than an unbiased estimate @wen2025entrapment @madej2024entrapment.
-Scaling by entries rather than by tryptic peptides is the conservative direction
-for the human counts reported here, and the Limitations return to how coarse the
-resulting bound is.
+The calculation assumes that target and entrapment proteomes are exchangeable
+apart from database size and therefore provides a bound rather than an unbiased
+FDR estimate @wen2025entrapment.
 
-A second, independent comparison uses the three replicate 200 ng HeLa
-Lumos-with-FAIMS runs of PXD023977 (LUM2_05433, 05434 and 05435) with a
-different probe. There both engines searched a target-only human plus #emph[E.
-  coli] FASTA (20,193 human and 4,431 #emph[E. coli] entries) built by stripping
-the deposit's premade decoy entries, and #emph[E. coli] is the absent entrapment
-species. The replicate close-up of Section 3.2 and the quality-column ablation
-of Supporting Information Section S6 use a separate 211,064-feature
-medium-length HeLa run, referred to as run10, which carries the same quality
-columns.
+Independent validation uses #s("astral.files") HeLa Orbitrap Astral runs from
+PXD066701, acquired in another laboratory on an 11-minute dual-column method
+with a fixed FAIMS compensation voltage. Three 10 ng runs were selected as a
+complete matched set before any search result was examined. After the 10 ng
+result, the deposit's input series on the same method was declared as an
+extension before any further file was searched, and was then cut for compute
+time to the decade levels only, again before any of the dropped levels had been
+searched: 200 pg, 1 ng, and 100 ng, three files each by file name. Five 1 ng
+files had already been searched when the cut was made; the two beyond the first
+three by name were removed after their results had been seen, so that every
+level has three files. Their default-seed results stay in the benchmark archive:
+uno #lit(
+  "567",
+) and #lit("523") proteins at 1% entrapment FDR against #lit("768") to #lit(
+  "975",
+) on the three reported 1 ng files. Stock ms1searchpy returned #lit("27") to
+#lit("39"), and the externally calibrated arm #lit("84") to #lit("197"). Both
+engines received identical biosaur2 feature tables, FASTA, and digest. uno was
+initially run once per file, then extended to #s("bench.extension_seed_count")
+seeds per file. ms1searchpy was run three times per file (ten on the 10 ng
+files). These data were not used for model or parameter selection. Input-level
+summaries are the median of the three file medians, with seeds or reruns
+summarized within each file first. Additional uno searches ran concurrently and
+contribute only depth and list measurements; resource comparisons retain the
+serialized runs.
 
-External instrument validation uses three 10 ng Pierce HeLa runs from PXD066701,
-acquired in the Kelly laboratory on an Orbitrap Astral with FAIMS Pro at a fixed
--45 V compensation voltage and an 11.4-minute dual-column cycle. The three raw
-files were selected as a complete matched set from the deposit metadata before
-either search result was examined. ThermoRawFileParser 1.4.5 converted the raw
-files and biosaur2 0.2.28 detected 85,274 to 90,376 features without skipping an
-MS1 scan. Both engines received each same feature table, human-plus-yeast FASTA,
-and digest used in the primary benchmark. uno was run once per file and
-ms1searchpy ten times per file; all searches were serialized. This dataset was
-not used for method development, parameter selection, or RT-model selection.
+Stock ms1searchpy did not calibrate retention time on any of these files. Its
+second-stage DeepLC sigma was #s("astral.ms1_stock_rt_sigma_min") to #s(
+  "astral.ms1_stock_rt_sigma_max",
+) min on an 11-minute acquisition at every input level, wide enough that the RT
+gate admitted most candidates. The calibration set it builds from its first-pass
+proteins was dominated by random matches on this data, and none of its shipped
+calibration options changed that (@sec:si-protocol). To separate this
+calibration failure from the search itself, ms1searchpy was also run with its
+documented `-pl` option, which calibrates DeepLC on a supplied list of
+MS/MS-identified peptides. The list for each file was taken from the deposit's
+own DIA-NN #lit("2.0.2") report, restricted to precursors at q #sym.lt.eq #lit(
+  "0.01",
+), unmodified and fully tryptic, giving #s("astral.pl_list_min") to #s(
+  "astral.pl_list_max",
+) peptides per file. In the tested ms1searchpy version `-pl` with DeepLC raised
+an exception; a one-line fix that keeps its two-stage path enabled is part of
+the benchmark archive. This arm was run three times per file. uno received no
+such list. The 10 ng runs of this arm were not serialized, so their timing is
+not reported.
 
-Quantitation is evaluated on the DirectMS1Quant @ivanov2022directms1quant
-UPS1-into-#emph[E. coli] dilution series (PXD033350), eight spike levels from
-0.1 to 50 fmol × 3 replicates, 24 runs on an Orbitrap Fusion Lumos with a FAIMS
-Pro interface. It was searched against the 48 UPS1 spike proteins, the #emph[E.
-  coli] proteome as a constant background, and the human proteome as a
-known-absent entrapment probe. Runs were converted, feature-found and
-cross-run-aligned by koth. uno searched the aligned matrix, and peptide
-fold-change differential testing was scored against the published DirectMS1Quant
-results.
+Low input is where the search is most seed-sensitive, so the engine's behavior
+there is stated exactly. Every stage of its bootstrap selects between
+alternatives by the number of proteins at 1% internal FDR. That count is a step
+function on short lists, so at low input a small change in the estimated
+retention-time sigma can move a whole stage between zero and a hundred proteins.
+Three bounded behaviors address it. First, the pipeline runs at two
+retention-time sigmas, the estimate and #lit("1.5") times the estimate, and
+keeps the candidate whose final list has the larger soft depth. Soft depth is
+the sum over target proteins of #lit("1") minus the internal $q$ divided by
+#lit("0.05"), clipped to [#lit("0"), #lit("1")]. Second, when every deviation
+cut accepts no protein at the conservative internal threshold, the cut with the
+largest training set is retained instead of an empty list, and the later stages
+are re-seeded from the mass-bootstrap proteins. A candidate carrying training
+evidence alone never displaces one that reports identifications. Third, if the
+complete pipeline still reports no target at 1%, one further broad
+retention-time calibration pass runs with the persistent broad RT-error floor
+removed. That pass is accepted only if it identifies targets; otherwise the
+empty result stands. The second and third behaviors do no work on a search that
+succeeds, and the first costs a second pass through the classifier stage.
 
-The RT-model experiments of Supporting Information Section S9 and the LDA
-rescorer experiment of Section 3.4 predate this benchmark and were measured on
-an earlier development configuration, on run QEHF1_09744_JB of PXD015669 with
-koth-called features and the distilled MLP RT model. Their scope is stated where
-they are reported.
+Every uno search reported in this manuscript was executed by one build, pinned
+by commit and binary hash in Supporting Information @tbl:versions and recorded
+per search in `benchmark/results/publication_rerun/`. Re-executing the complete
+inventory of #s("rerun.searches") uno searches on that build left #s(
+  "rerun.unchanged",
+) protein tables byte-identical to those of the superseded build used in earlier
+drafts. The #s("rerun.changed") that differ are searches that had previously
+returned nothing, #s("rerun.recovered") of which now report proteins; #s(
+  "rerun.empty",
+) searches still return nothing. The comparator was not rebuilt, so its outputs
+and timings are carried over unchanged.
 
-= Results and Discussion
+Threshold sensitivity was evaluated on the complete ranked protein lists at
+entrapment-FDR cutoffs of #lit("0.5"), #lit("1"), #lit("2"), #lit("3"), #lit(
+  "5",
+) and #lit("10")%. At each cutoff and on each primary dataset, the median uno
+depth was divided by the median ms1searchpy depth across the available draws.
+The complete ratios are archived in `paper/figdata/threshold_sensitivity.tsv`;
+the two conventional operating points are shown in @tbl:variability.
 
-== uno is deeper than ms1searchpy on identical input, on all six benchmark datasets
+= Results and Discussion <sec:results>
 
-On the six DirectMS1-paper datasets, given the same feature file, the same
-database and the same digest, uno identified more proteins at 1% entrapment FDR
-than the median ms1searchpy replicate on every dataset (@fig:headtohead). The
-margin was 3.0% on the shallowest run and 39.7% on the FAIMS run. // ratios from benchmark/results/summary.tsv
-At 5% entrapment FDR uno was deeper on five datasets and tied on the deepest of
-the 5-minute runs. Depth ranged from 862 proteins on the sparsest 5-minute run
-to 2072 on the FAIMS run, which reproduces the 2000-protein figure the reference
-method reports for that acquisition @ivanov2021ms1searchpy.
+== Identification depth and computational efficiency <sec:results-headtohead>
 
-Against ms1searchpy's best replicate rather than its median, a harsher test, uno
-still wins three of the six. Which engine appears deeper on the other three
-depends on which ms1searchpy run one happens to keep, which is the subject of
-Section 3.2.
+At 1% entrapment FDR, uno's median identification depth exceeded the ms1searchpy
+median on #s("bench.uno_median_wins") of the #s("bench.dataset_count")
+DirectMS1-study datasets (@fig:headtohead). The relative differences between
+medians ranged from #s("bench.median_margin_1pct_min") to #s(
+  "bench.median_margin_1pct_max",
+)%. At 5% entrapment FDR, uno's median was higher on #s(
+  "bench.uno_median_wins_5pct",
+) datasets (@tbl:variability). These are descriptive comparisons of repeated
+searches on identical input.
 
-uno was also several times cheaper. Each search finished in #s(
-  "bench.uno_wall_min",
-) to #s("bench.uno_wall_max") s of wall time against #s(
-  "bench.ms1_wall_min",
-) to #s("bench.ms1_wall_max") s for ms1searchpy. That is a factor of #s(
-  "bench.speed_factor_min",
-) to #s("bench.speed_factor_max"). It also ran in roughly half the peak resident
-memory, and user CPU time separated the two engines in the same way. The gap
-holds on a larger input. On the run10 dataset uno identified 1309 proteins at 1%
-against an ms1searchpy median of 1155 (@tbl:qualityablation). It did so in 46 s
-against 360 s and in 3.8 GiB against 9.3 GiB.
-// depths from benchmark/RESULTS.md; memory recomputed as MiB/1024 from the
-// `Maximum resident set size` lines of benchmark/results/uno.time and
-// benchmark/results/ms1_rep{1,2,3}/ms1.time (3,980,332 KB and a median of
-// 9,751,400 KB), since RESULTS.md quotes those two figures in MiB/1000
-Per-dataset resource scaling is plotted in @fig:resources and tabulated in
-@tbl:perdataset.
+uno completed the searches in #s("bench.uno_wall_min") to #s(
+  "bench.uno_wall_max",
+) s, compared with #s("bench.ms1_wall_min") to #s("bench.ms1_wall_max") s for
+ms1searchpy. The per-dataset speed advantage was #s("bench.speed_factor_min") to
+#s("bench.speed_factor_max")-fold, with approximately half the peak resident
+memory. Complete per-run values are in @tbl:perdataset.
 
 #figure(
   placement: auto,
   fig("fig.fig2-headtohead", width: 100%),
   caption: [
-    uno against ms1searchpy on six datasets from the DirectMS1 deposits, five
+    uno against ms1searchpy on six datasets from the DirectMS1 deposits: five
     5-minute HeLa runs from PXD015669 and one FAIMS run from PXD023977, with the
     same single-run feature file, database and digest given to both engines.
-    *(a)* proteins accepted at 1% two-proteome entrapment FDR and *(b)* at 5%.
-    *(c)* each dataset's ms1searchpy replicate range as a percentage of its own
-    median; uno's is 0% by construction, because identical reruns are
-    byte-identical (Section 3.2). *(d)* wall-clock seconds and *(e)* peak
-    resident memory. Bars are uno, which is deterministic and was run once.
-    Points are the three ms1searchpy replicates with their median marked. uno is
-    deeper at 1% on all six datasets and at 5% on five, and finishes 5.3 to 7.0
-    times faster in roughly half the memory.
+    *(a)* Proteins accepted at 1% two-proteome entrapment FDR. Open circles show
+    independent seed draws for uno and reruns for ms1searchpy; horizontal ticks
+    mark medians and vertical lines the full observed ranges. Sample sizes are
+    labeled above each group. *(b)* Wall time versus peak resident memory for
+    the original serialized searches: one default-seed uno run and three
+    ms1searchpy runs per file. Concurrent seed-sweep timings are excluded.
   ],
 ) <fig:headtohead>
 
-The result carries to the acquisition the reference method's 2000-protein claim
-@ivanov2021ms1searchpy rests on. Because the FAIMS run in @fig:headtohead is one
-file scored against a yeast probe, we repeated the comparison on all three
-replicate 200 ng HeLa FAIMS runs of PXD023977 with a different and independent
-probe, the deposit's own human plus #emph[E. coli] database with #emph[E. coli]
-as the absent species. Averaged over the three runs, uno accepted 1591 proteins
-at 1% entrapment FDR against ms1searchpy's 1474, an 8% margin, and the margin at
-5% was 7.6% (@fig:faims, @tbl:faims).
-// benchmark/faims/faims_out/figS2_stdout.txt
-ms1searchpy is the deeper engine on one replicate at 1% and on a different
-replicate at 5%. uno leads the remaining four of the six replicate-by-threshold
-comparisons and both means, and the spread across ms1searchpy's three replicates
-again exceeds the between-engine difference. uno reaches this depth while
-ignoring the compensation-voltage structure of the files entirely, treating the
-three CV fractions as one run, so the third dimension FAIMS provides remains
-unexploited upside.
+The median depth advantage depended on the dataset, and the observed ranges
+overlapped. The primary benchmark therefore supports a tendency toward greater
+depth, rather than a uniform gain or a resolved difference on every file. The
+resource advantage persisted across the original serialized searches.
 
 *Independent Orbitrap Astral validation.*
 
-The external Astral set tests whether the result extends beyond the instruments,
-laboratory, and deposits used above. At 1% entrapment FDR, uno accepted 1448,
-1182, and 1006 human proteins across the three files (@fig:astral). The
-corresponding ms1searchpy medians over ten searches were 45, 47, and 46, with
-per-file ranges of 26–110, 30–105, and 22–91. At 5%, uno accepted 2145, 1685,
-and 1567 proteins, against ms1searchpy medians of 45, 47, and 74.5. Thus the
-separation is not a favorable draw from the comparator's stochastic output.
+Median uno depths were #s("astral.uno_median_1pct_200pg"), #s(
+  "astral.uno_median_1pct_1ng",
+), #s("astral.uno_median_1pct_10ng"), and #s("astral.uno_median_1pct_100ng")
+proteins at 1% entrapment FDR for 200 pg, 1 ng, 10 ng, and 100 ng, respectively.
+Each input-level value summarizes the three file medians after summarizing seeds
+within each file. Corresponding stock ms1searchpy medians ranged from #s(
+  "astral.ms1_level_median_1pct_min",
+) to #s("astral.ms1_level_median_1pct_max") (@fig:astral a). In the original
+serialized searches, uno ran #s("astral.speed_min") to #s("astral.speed_max")
+times faster and used #s("astral.memory_min") to #s("astral.memory_max") times
+less peak memory (@fig:astral b).
 
-The shallow comparator result reflects calibration on this acquisition rather
-than a failed search. ms1searchpy completed every run, but its initial stage
-supported only 5 to 14 proteins in representative runs and its calibrated RT
-standard deviation was 1.7 to 2.3 minutes, a large fraction of the 11.4-minute
-cycle. Removing the two optional isotope-quality columns gave 36 proteins at
-both thresholds on the first file, and using ms1searchpy's default RT model
-instead of DeepLC gave 26. Neither control changed the order of magnitude. uno
-also finished 9.5 to 10.1 times faster and used 2.0 to 2.5 times less peak
-memory. These data establish transfer to this short-cycle, fixed-CV Astral
-workflow; they do not imply the same margin for every Astral acquisition.
+The stock comparator medians measure a retention-time calibration failure rather
+than the engine's search capacity, and the failure is a property of this LC
+method, not of sample amount: it is as complete at 100 ng as at 200 pg
+(@sec:methods-benchmark). With DeepLC calibrated on the external MS/MS list, the
+second-stage sigma fell to #s("astral.ms1pl_rt_sigma_min") to #s(
+  "astral.ms1pl_rt_sigma_max",
+) min and the median depth rose to #s("astral.ms1pl_level_median_1pct_min") to
+#s(
+  "astral.ms1pl_level_median_1pct_max",
+) proteins at 1% and #s("astral.ms1pl_level_median_5pct_min") to #s(
+  "astral.ms1pl_level_median_5pct_max",
+) at 5%, against #s("astral.uno_level_median_5pct_min") to #s(
+  "astral.uno_level_median_5pct_max",
+) for uno at 5%. uno self-calibrated on the same feature tables with no external
+input. This supports transfer to the tested short-cycle, fixed-CV Astral
+workflow, not to all Astral acquisitions.
 
 #figure(
   placement: auto,
   fig("fig.fig-astral-validation", width: 100%),
   caption: [
-    Independent Orbitrap Astral validation on three 10 ng HeLa runs from
-    PXD066701. Both engines received the same biosaur2 feature table, database,
-    and digest. *(a,b)* Human proteins accepted at 1% and 5% two-proteome
-    entrapment FDR. Bars are one deterministic uno search per raw file; open
-    circles are ten serialized ms1searchpy searches and horizontal ticks mark
-    their medians. *(c)* Wall-clock time versus peak resident memory for the
-    same searches. The comparison applies to this short-cycle, fixed-FAIMS-CV
-    workflow and is not a claim about all Orbitrap Astral acquisitions.
+    Independent Orbitrap Astral validation on #s("astral.files") HeLa runs from
+    PXD066701 at 200 pg, 1 ng, 10 ng, and 100 ng. Both engines received the same
+    biosaur2 feature table, database, and digest. *(a)* Human proteins accepted
+    at 1% two-proteome entrapment FDR. Each input level has three acquisition
+    files, ordered by filename within each engine group. Open circles show
+    individual searches, with median ticks and full-range connectors within each
+    file: #s("bench.extension_seed_count") uno seeds, three stock ms1searchpy
+    runs (ten at 10 ng), and three externally calibrated ms1searchpy runs. Lines
+    join the medians of the three file medians per input level. The external
+    calibration uses MS/MS peptides (@sec:methods-benchmark). *(b)* Wall time
+    versus peak resident memory, one marker per serialized search; the 10 ng
+    externally calibrated runs are not shown.
   ],
 ) <fig:astral>
 
-== Reproducibility: uno is byte-identical across runs, ms1searchpy is not
+The input-level medians do not imply that one search is a reliable measurement.
+#s("astral.uno_seed_zero_depth") of the #s(
+  "astral.uno_seed_draws",
+) uno searches on these feature tables returned an empty list at 1% entrapment
+FDR, which is what the recovery behavior in @sec:methods-benchmark is for. It
+does not narrow the spread among searches that already succeed. At 200 pg and 1
+ng the three seeds of a single file span #s(
+  "astral.low_range_pct_min",
+) to #s("astral.low_range_pct_max")% of that file's median depth, against #s(
+  "bench.uno_seed_spread_1pct_pct_min",
+) to #s("bench.uno_seed_spread_1pct_pct_max")% on the primary files. This
+acquisition series therefore tests compatibility and exposes a remaining
+low-input limitation. We retain the six DirectMS1-study files as the primary
+comparison.
 
-Repeating a search on the same file should return the same proteins. It does not
-for the reference engine. Across the six datasets the three ms1searchpy
-replicates spanned ranges from 30 to 600 proteins, equal to 3.6% and 40.5% of
-the respective medians (@fig:headtohead c, @tbl:perdataset, @fig:determinism). // (max-min)/median, benchmark/results/summary.tsv
-On run10, the tuning set, the same three-replicate protocol spanned 1079 to 1220
-at 1% and 1534 to 1941 at 5%. // benchmark/RESULTS.md
-The spread is not a property of the data. Input, database and parameters were
-byte-identical between replicates, and the variability comes from the engine's
-random decoy shuffle and its unseeded hyperparameter search. A single reported
-number from such an engine is a draw, not a measurement, which is why every
-ms1searchpy value in this paper is a median over three runs with its range
-shown.
+== Protein-level agreement <sec:results-overlap>
 
-uno returns the same protein list every time, by construction rather than by
-luck. Every source of run-to-run nondeterminism found in development traced to
-one cause, Rust's process-randomized hash-map iteration order, reaching the
-result through one of two routes. Either a floating-point reduction saw its
-sample in a different order, which is not associative and moves the low bits of
-a threshold, or a first-seen tie-break resolved differently. Each affected path
-was made order-independent by sorting on value before reducing, or on accession
-where a tie genuinely had to be broken; the six affected paths are listed in
-Supporting Information Section S8.
+Protein-list agreement varied across searches from both engines. Across all
+primary draws, uno and ms1searchpy lists shared #s("overlap.jaccard_cross_min")
+to #s("overlap.jaccard_cross_max")% of their union. Within-engine agreement
+ranged from #s("overlap.jaccard_within_uno_min") to #s(
+  "overlap.jaccard_within_uno_max",
+)% for uno and from #s("overlap.jaccard_within_min") to #s(
+  "overlap.jaccard_within_max",
+)% for ms1searchpy (@fig:overlap a). These overlapping ranges do not establish
+that one engine is more stable in protein identity.
 
-One of them is worth stating because it shows what this class of defect looks
-like. Two runs agreed on every one of 3325 proteins, on every score, peptide
-count and q-value, and disagreed on the reported group membership of 38 of them,
-because the protein-group table was keyed on accession alone and uno's decoy
-peptides carry the accessions of the targets they were shuffled from. Depth was
-never affected, so no summary statistic would have exposed it. A byte-diff of
-two runs on one feature file did, and that check is now part of the test suite.
-After these fixes, independent runs on identical input are byte-identical.
-Determinism is thus a guaranteed property of the implementation, not a
-statistical observation, and it is what makes the single-run uno column of
-@fig:headtohead a fair comparator for a median of three.
-
-== Two-proteome entrapment calibrates the reported protein FDR
-
-Target/decoy FDR can be optimistic if the decoys do not faithfully model the
-random-coincidence behavior of real-but-absent peptides. The entrapment probe
-answers two different questions, and we keep them apart throughout. The first is
-depth. Every depth figure in this paper, for both engines, is an entrapment
-depth, taken against the entrapment $q$ as Methods defines it. The second is
-calibration. Take the protein list an engine itself reports at 1% and ask what
-the probe says its false-discovery proportion actually is. The two questions
-have different answers on the same search. On one 5-minute run, uno's own 1%
-list holds 830 human proteins while 1035 clear the entrapment criterion at the
-same threshold (@tbl:entrapreported).
-// paper/figdata/entrapment_curves.tsv, reported_q and entrapment_q at 0.01
-
-On calibration, uno's reported 1% list carried an empirical FDP between 0.00%
-and 2.16%, a median of 0.72% (@tbl:entrapreported, @fig:entrapment). Applying
-the nominal threshold literally, uno is conservative on four of the six
-datasets. It sits at the nominal level on 09778, at 1.03%, and is about twice
-optimistic on 09746, at 2.16%. The reference engine exceeded its nominal 1% in
-12 of its 18 runs, with a worst case of 2.07% and a median across datasets of
-1.20%. No single ms1searchpy run was as optimistic as uno's worst dataset, but
-that is a comparison of extremes. Run for run, ms1searchpy's empirical FDP
-exceeded uno's on 13 of the 18 pairings. The reference engine is therefore the
-more often optimistic of the two, and uno the more severely optimistic in its
-single worst case. At a reported 5% two uno datasets again exceed the threshold,
-09746 at 6.65% and 09766 at 5.17%, and the other four sit between 2.46% and
-3.61%.
-// all values from paper/figdata/entrapment_curves.tsv (cutoff_type =
-// reported_q), the same file that generates @fig:entrapment and @fig:fdpcurves
-
-Replicate spread confounds the reference engine's calibration as much as its
-depth. On one 5-minute run the three ms1searchpy replicates put the empirical
-FDP between 0.39% and 1.62% on identical input, a range as wide as the
-difference between the two engines. The depth axis carries the same warning. On
-run10, ms1searchpy's internal 1% count was 1319 proteins but only 1220 of those
-survive the entrapment criterion. // benchmark/RESULTS.md
-Single-dataset FDP values are quantized and noisy, because an accepted set
-contains only a handful of entrapment proteins (Section S3), so the pooled
-median is the statistic to read rather than any individual panel.
+Across uno seeds, #s("overlap.core_recovery_min") to #s(
+  "overlap.core_recovery_max",
+)% of the proteins accepted by every available ms1searchpy run were recovered
+(@fig:overlap b). Conversely, #s("overlap.uno_confirmed_min") to #s(
+  "overlap.uno_confirmed_max",
+)% of a uno list appeared in at least one comparator run. The remaining proteins
+were accepted under the same entrapment criterion; absence from the comparator
+does not independently validate or invalidate them. The comparator core depends
+on the number of searches, which is reported per dataset.
 
 #figure(
   placement: auto,
-  fig("fig.fig3-entrapment", width: 100%),
+  fig("fig.fig4-overlap", width: 100%),
   caption: [
-    Protein-level FDR calibration under two-proteome entrapment, human sample
-    searched against human plus #emph[S. cerevisiae]. Entrapment FDP is shown
-    for each engine's own reported *(a)* 1% and *(b)* 5% protein list. Diamonds
-    are uno's deterministic result. Open circles are the three ms1searchpy runs
-    and orange ticks are their medians. The dashed horizontal line is the
-    nominal operating point; values above it are optimistic. Full calibration
-    curves are in Figure S1.
+    Protein-level agreement at 1% entrapment FDR on the six primary datasets.
+    *(a)* Every pairwise shared/union fraction within uno, between the engines,
+    and within ms1searchpy. *(b)* Each uno seed's recovery of the intersection
+    of all available ms1searchpy lists for that file. Open circles are
+    individual comparisons in (a) and seeds in (b); ticks and connectors show
+    medians and full ranges. Pairwise comparisons reuse searches and are not
+    independent replicates or confidence intervals. Search counts are in
+    @tbl:variability.
   ],
-) <fig:entrapment>
+) <fig:overlap>
 
-== Entrapment supports the transparent binomial protein score
+== Retention-time predictor benchmark <sec:results-rt-predictor>
 
-In this regime mass and RT cannot separate target from decoy peptides. Among
-matches with near-zero RT deviation ($< 0.01$ min), target and decoy peptides
-occur at approximately 50:50. Most target peptides in a proteome are not
-actually present in a given sample, so a random target match is no more likely
-than a decoy match. Discrimination arises only from multiplicity. Real, present
-proteins accumulate several RT-consistent peptides while decoy proteins remain
-singletons, which is what the binomial protein model exploits.
+When RT prediction was measured independently of the search, the shipped CNN had
+lower normalized mean absolute error (MAE) than calibrated DeepLC on each of the
+three unmodified-peptide test sets. Their sequences were excluded from uno's
+training and validation partitions. The CNN also had higher prediction
+throughput on the same workstation (@fig:rtthroughput). This comparison supports
+the narrow claim that the in-process model is both faster and more accurate for
+the tested unmodified peptides. It does not extend to variable modifications,
+for which DeepLC has an explicit representation and the current uno model does
+not.
 
-The feature finder's quality columns carry little target/decoy information in a
-run10 ablation, because targets and decoys both match real, well-formed features
-by mass coincidence. Retention time is more discriminating, but protein-level
-multiplicity remains the main identification signal (Supporting Information
-Section S6).
+== Run-to-run variability <sec:results-reproducibility>
 
-A protein-level learner was therefore an important negative control. On one
-earlier development configuration, a cross-validated Fisher LDA increased the
-human-only count but accepted seven entrapment proteins where the binomial
-accepted one. Additional regularization did not restore calibration. This result
-does not establish that every learned protein scorer must fail; it shows that
-the tested scorer's apparent gain did not survive external validation. uno
-therefore retains the binomial as its released protein score. The model,
-safeguards, counts, and development-configuration caveat are reported in
-Supporting Information Section S9.
+Both engines are randomized, so both are measured here as a spread over
+independent draws. uno's draws come from its seed, which perturbs the decoy
+shuffle, the calibration sample, the fold assignment and the classifier
+subsampling together; ms1searchpy's come from repeated searches.
 
-== Quantitation tracks a spike-in dilution
+Over #s("bench.uno_seed_count") seeds on each of the #s(
+  "bench.spread_datasets",
+) primary datasets, uno's depth at 1% entrapment FDR spanned #s(
+  "bench.uno_seed_spread_1pct_abs_min",
+) to #s("bench.uno_seed_spread_1pct_abs_max") proteins, or #s(
+  "bench.uno_seed_spread_1pct_pct_min",
+) to #s("bench.uno_seed_spread_1pct_pct_max")% of the respective medians. The
+#s("bench.ms1_draw_min") to #s("bench.ms1_draw_max") ms1searchpy searches per
+file spanned #s(
+  "bench.ms1_spread_1pct_abs_min",
+) to #s("bench.ms1_spread_1pct_abs_max") proteins, #s(
+  "bench.ms1_spread_1pct_pct_min",
+) to #s("bench.ms1_spread_1pct_pct_max")% (@tbl:variability). Sample sizes
+differ and a full range depends on the number of draws, so these ranges do not
+rank the engines by intrinsic stability. uno's byte-identical output reflects a
+fixed default seed rather than an algorithm carrying less randomness, and
+seeding is available to either implementation: pinning ms1searchpy's generator
+makes its decoy database byte-identical across processes.
 
-On the DirectMS1Quant UPS1-into-#emph[E. coli] dilution series, uno identifies
-326 proteins at 1% FDR, at an entrapment FDP of 0.34%, and recovers the designed
-structure of the experiment (@fig:quant).
-// counts and FDP from benchmark/quant/results/analysis_stdout.txt (averagine path)
-Protein abundances are normalized to each protein's value at 50 fmol, so the
-curves share that reference point; missing-cell handling and aggregation are
-specified in Supporting Information Section S7. The primary quantitative result
-is therefore the trend across the remaining concentrations. UPS1 protein
-abundance falls with spike amount at a median Spearman $rho$ of $+0.71$ against
-log spike amount, and 89% of the 18 quantified UPS1 proteins sit above
-$rho = 0.5$. The constant #emph[E. coli] background and the quantified human
-probe stay flat, at median $rho$ of $+0.02$ and $+0.25$ (@tbl:quantdetail). The
-spike and constant background are well separated. The five quantified human
-probe proteins provide only a small negative-control sample and are not treated
-as a general distributional result.
-// benchmark/quant/results/fig5_stdout.txt, panel b
+What a fixed seed buys is auditability, not accuracy. With the seed held, uno's
+output is byte-identical for identical input, so any change in a result is a
+change in the code rather than a new draw. Development-time differences traced
+to unordered reductions and tie-breaking; sorting those paths removed them, and
+a full-file two-run byte comparison now guards the property. Implementation
+details are in Supporting Information @sec:si-reproducibility.
 
-Differential calling at the dilute end trails the reference. On the extreme 50
-against 0.1 fmol contrast, DirectMS1Quant @ivanov2022directms1quant reports 42
-changed UPS proteins with no false positives, while a peptide-fold-change test
-on uno's matrix, scored under a stricter protocol with a human entrapment probe
-present, recovers 22 at 21% precision (Supporting Information Section S7). The
-result does not validate trace-level differential testing. Detection loss at the
-dilute end is a major contributor: short peptide traces are discarded, while
-alignment can fill runs where the peptide was not independently detected.
-Supporting Information Section S7 gives the detection traces, threshold
-ablation, and imputation sensitivity. The experiment supports
-identification-linked dilution tracking only.
+A single search is consequently one draw from a distribution, and the draw a
+fixed default happens to produce need not be a typical one. On #s(
+  "bench.uno_seed0_high_datasets",
+) of the #s("bench.spread_datasets") primary datasets the default uno run from
+the original benchmark exceeded at least #lit("90")% of the other sampled seeds
+(@fig:seedspread). The revised comparisons therefore summarize both engines by
+their medians. These ranks describe the sampled seeds and do not show that the
+default seed was intentionally selected for favorable depth.
+
+== Two-proteome entrapment calibrates the reported protein FDR <sec:results-calibration>
+
+Entrapment also tests each engine's internally reported protein list. Across all
+#s("bench.uno_draw_count") primary uno seed draws, the reported 1% lists had
+empirical FDPs from #s("cal.uno_fdp_1pct_min") to #s("cal.uno_fdp_1pct_max")%,
+with a median of #s("cal.uno_fdp_1pct_median")% (@fig:fdpcurves). The FDP was
+below 1% in #s("cal.uno_conservative_runs_1pct") of those searches, so its
+reported list is optimistic about as often as not. ms1searchpy exceeded its
+nominal 1% level in #s("cal.ms1_optimistic_runs_1pct") of #s(
+  "bench.ms1_draw_count",
+) searches. These pooled counts describe the sampled runs; they are not
+population-level calibration probabilities.
+
+External calibration remains necessary for both engines. Greater identification
+depth does not demonstrate calibrated internal FDR, and changing the seed can
+change both the accepted list and its empirical FDP. The small number of
+accepted yeast proteins quantizes these estimates, so individual values should
+be interpreted as bounds. Per-draw counts and calibration curves are in
+@sec:si-calibration.
+
+== Built-in feature detection <sec:results-raw>
+
+The built-in feature finder and biosaur2 tables were compared on #s(
+  "raw.dataset_count",
+) files, including the primary FAIMS run and #s("astral.files") Astral files.
+Both arms used the same #s("bench.extension_seed_count") seeds per file
+(@fig:rawmode). On the #s("raw.rest_count") files at 10 ng or more, the per-file
+median paired-seed ratio of built-in to biosaur2 depth ranged from #s(
+  "raw.paired_ratio_min_rest",
+) to #s("raw.paired_ratio_max_rest") at 1% entrapment FDR, with a median of #s(
+  "raw.paired_ratio_median_rest",
+). Median paired-seed list agreement on these files ranged from #s(
+  "raw.paired_jaccard_min_rest",
+) to #s("raw.paired_jaccard_max_rest")% of the union. Both depth and identity
+depend on the detected features and search seed.
+
+The #s("raw.low_count") files at 200 pg or 1 ng agree on average and vary far
+more around that average. Their per-file median paired-seed ratios ran from #s(
+  "raw.paired_ratio_min_low",
+) to #s("raw.paired_ratio_max_low"), centered on #s(
+  "raw.paired_ratio_median_low",
+). Among the #s(
+  "raw.low_draws_per_arm",
+) searches per arm there, #s("raw.low_zero_biosaur2") biosaur2-table searches
+and #s("raw.low_zero_raw") built-in search returned zero depth at 1% entrapment
+FDR; that search stays in the figure and contributes a ratio of zero. Feature
+detection ran inside the same process, and the original serialized end-to-end
+searches took at most #s("raw.wall_max") s per file. The concurrent seed
+extension is excluded from that timing claim.
 
 #figure(
   placement: auto,
-  fig("fig.fig4-quant", width: 100%),
+  fig("fig.fig5-raw-mode", width: 100%),
   caption: [
-    Spike-in dilution response on PXD033350, eight UPS1 levels from 0.1 to 50
-    fmol into a constant #emph[E. coli] background, three replicates each, with
-    the human proteome searched as a known-absent probe. *(a)* UPS1 protein
-    abundance against spike amount. *(b)* the distribution of per-protein
-    Spearman correlations against log spike amount, by species. The spike tracks
-    the dilution while the constant background stays flat; only five human probe
-    proteins meet the quantitation filter. The fold-change contrast at the
-    dilute end is limited by detection and is reported in Supporting Information
-    Section S7.
+    Built-in feature detection compared with the biosaur2 feature tables. Each
+    file was searched with #s("bench.extension_seed_count") matched seeds in
+    each arm, using identical FASTA, RT model, and configuration: the biosaur2
+    table (blue) or mzML with `--raw` (light blue). Open circles are seeds,
+    horizontal ticks are medians, and connectors span the full observed range.
+    The primary biosaur2 arm uses the matching three-seed subset of the larger
+    primary sweep. Human proteins at 1% two-proteome entrapment FDR; the six
+    primary files are left of the divider and the #s("astral.files") Astral
+    input-series files right of it. The 05433 run cycles three FAIMS
+    compensation voltages; the built-in finder processes each voltage as a
+    separate feature-detection channel.
   ],
-) <fig:quant>
+) <fig:rawmode>
 
-= Discussion
+= Discussion and limitations <sec:discussion>
 
-The principal result is not identification count alone, but greater depth under
-one external entrapment criterion applied to both engines. This same-input
-design holds feature detection, database, and digest fixed, while entrapment
-prevents an engine's own target/decoy estimate from defining success. Across the
-tested short gradient runs, uno combines that depth with substantially lower
-resource use and exact repeatability.
+The controlled comparison supports a practical, scoped advantage: on identical
+feature input, uno had greater median entrapment-controlled depth on most
+primary files and lower measured resource use. Entrapment is important to that
+statement because neither engine's internal target-decoy estimate defines the
+performance endpoint, and the depth comparison is between distributions rather
+than between single runs, since both engines are randomized.
 
-These findings establish a practical advantage within the benchmarked settings,
-not universal superiority across proteomics workflows. The independent Astral
-set broadens the instrument and laboratory coverage, but all identification
-benchmarks remain short-gradient HeLa acquisitions. uno does not use the FAIMS
-compensation-voltage structure, and the entrapment estimate is quantized by a
-small number of accepted absent-species proteins. The abundance experiment adds
-a narrower conclusion: uno-linked protein abundance follows a designed dilution
-above the trace range, but the present pipeline does not validate differential
-testing at the dilute endpoint.
+The architecture and agreement analyses clarify what that comparison does and
+does not show. Mass-sorted streaming candidate retrieval, in-process RT
+prediction, and protein-level evidence aggregation form one application rather
+than a collection of separately timed components. The end-to-end benchmark is
+therefore relevant to a user choosing an engine, but it cannot identify which
+stage accounts for the runtime difference. Conversely, the overlap analysis
+shows substantial common protein identity, alongside changes in which proteins
+pass the threshold across seeds in both engines.
 
-Determinism matters beyond convenience. A byte-identical result can be audited,
-regression-tested, and compared across software releases without conflating a
-code change with a random draw. Together with external FDR calibration, this is
-the main scientific and operational advance of uno.
+The evidence does not establish universal superiority. All samples are HeLa, all
+gradients are short, and the Astral series represents one fixed-CV acquisition
+method. The built-in feature finder was compared only with biosaur2 and only on
+these files. It is offered as a convenience with measured cost, not as a
+feature-finder benchmark. The primary parameters were tuned on related
+development data, although not on the reported benchmark or Astral files. The
+six primary files are a dataset panel rather than a population sample, so the
+per-dataset ratios and seed or rerun ranges are descriptive; no population-level
+significance is claimed. The Astral and raw-mode extension uses only #s(
+  "bench.extension_seed_count",
+) seeds per file, which provides a limited sample of search variability.
+Acquisition-to-acquisition variation and search-seed variation are displayed
+separately. The patched comparator received additional feature-quality columns,
+which makes the comparison conservative with respect to those inputs but means
+the reported timings and depths do not describe an unmodified public release.
 
-= Limitations
+In addition, the entrapment FDP is quantized by a small number of accepted
+absent-species proteins and depends on exchangeability between the target and
+probe proteomes. The running-minimum $q$ construction can make a single yeast
+hit affect a range of neighboring cutoffs, especially at #lit("0.5")% FDR. A
+size-matched probe, additional absent proteomes, and a wider acquisition panel
+would sharpen both absolute calibration and generalizability. Validation on
+non-HeLa samples and longer gradients is the most important next test.
 
-These limitations delimit where MS1-only search and uno apply. The first is
-inherent to the data rather than to uno. Mass and RT cannot separate target from
-decoy at the single-peptide level (Section 3.4), so identification depends on
-protein-level multiplicity, and any per-peptide discriminant is bounded by that.
+A fixed seed is an operational convenience rather than evidence of a better
+search. It lets a result be regression-tested and compared across releases
+without confusing a code change with a new random draw, and combined with
+external FDR calibration it makes the benchmark auditable. It is not a property
+that distinguishes the engines, since the comparator's randomness is seedable
+too; the distinguishing claims here are depth, resource use and calibration.
 
-Second, on Orbitrap data without ion mobility, peptide-centric extraction from
-raw hills did not add identifications on the earlier development configuration
-where we tested it, because the ($m slash z$, RT) coordinate is too degenerate
-without a third dimension. Ion-mobility data should lift this. A distilled
-collisional-cross-section model is trained and loadable, but it is not yet wired
-into scoring, so uno does not currently use mobility as a discriminant and the
-benchmarks here do not test it. The FAIMS runs are read without their
-compensation-voltage structure, so that dimension is likewise unexploited.
+= Conclusions <sec:conclusions>
 
-Third, for a single enzyme and a single run, expanding search breadth is
-counterproductive. Adding missed cleavages or modifications inflates the
-theoretical count faster than the observed count and raises the decoy
-background, reducing identifications, consistent with the minimal digest of
-DirectMS1 @ivanov2021ms1searchpy. This is a statement about breadth within one
-specificity. Breadth across complementary specificities is a different
-proposition, and multiple enzymes have been shown to help MS/MS-free
-identification @ivanov2017multienzyme.
-
-Related to this, uno currently yields approximately zero identifications on
-TMT-labeled MS1 data. The blocker is uno's own retention-time encoder, which
-takes a stripped sequence and has no channel for a modification, so a
-TMT-labeled peptide is predicted at the retention time of its unlabeled form and
-calibration cannot seed. The difficulty is not specific to uno. Predicted
-retention time for TMT-modified peptides correlates only $r approx 0.71$ with
-observed retention time even for DeepLC, which does model modifications.
-
-Fourth, the entrapment probe bounds the empirical FDR only coarsely. One yeast
-acceptance is worth 0.17 to 0.41 percentage points of estimated FDP at the
-depths reached here, and an accepted set holds at most 8 of them, so a
-single-dataset estimate is quantized (Section S3).
-// 3.4037 divided by the smallest and largest accepted human counts in
-// @tbl:entrapreported (830 and 1959); the yeast maximum is from the same table
-The benchmark is also narrow in acquisition terms: nine primary runs, two
-laboratories, one sample type (HeLa), three instrument models, and short
-gradients throughout. The Astral validation covers one fixed-CV acquisition
-design rather than the full range of Astral methods. Longer gradients are
-off-design for the method and were not benchmarked here.
-
-Fifth, uno's quantitation is validated here for dilution tracking, which is
-robust, and not for differential testing, which is not. On the extreme contrast
-of the spike-in series uno recovers about half as many changed proteins as
-DirectMS1Quant @ivanov2022directms1quant and does so at 21% precision, against a
-reference output with no false positives. Upstream feature detection is one
-identified contributor: trace peptides yield 1 to 2 scan hills that the feature
-finder discards. The aligned matrix compounds this. Alignment transfers a match
-into runs where the precursor was never independently found, so a filled cell at
-the dilute end is weaker evidence than a filled cell at the abundant end
-(Section 3.5). The differential test also runs over the full precursor matrix
-rather than over the FDR-controlled protein set. The scoped remedy is a
-targeted, identification-seeded matched-filter re-extraction rather than a
-global detection threshold, which trades specificity for recall.
-
-Two of these bounds could be tightened directly. A size-matched entrapment
-probe, and the same probe applied across a wider dataset panel, would sharpen
-the absolute FDR estimate beyond the coarse bound above. A formal
-reproducibility experiment, at least ten runs of each engine on each dataset,
-would replace the three-replicate ranges of Section 3.2 with a proper variance
-estimate.
-
-= Conclusions
-
-uno is a fast, deterministic, open-source Rust engine for MS1-only protein
-identification. Given the same single-run feature file that the reference
-implementation takes, it identified more proteins at 1% entrapment FDR on all
-six DirectMS1-paper datasets tested, ran 5.3 to 7.0 times faster, and used
-roughly half the peak memory. Repeating the comparison on the reference method's
-own three FAIMS replicates leaves uno ahead by 8% on average at 1% FDR, with
-ms1searchpy the deeper engine on one replicate of the three. On three
-independent 10 ng Orbitrap Astral runs, uno accepted 1006 to 1448 proteins at 1%
-entrapment FDR against ms1searchpy medians of 45 to 47 and ran approximately 10
-times faster. It returns byte-identical output across repeated runs, while
-ms1searchpy's answer moved by up to 600 proteins. Its retention-time model runs
-in-process in pure Rust, so the Python and deep-learning dependency stack is
-gone. Two-proteome entrapment finds uno's reported protein FDR conservative on
-four of the six datasets, at the nominal level on one and about twice optimistic
-on one. A tested learned protein rescorer raised apparent counts but failed the
-same entrapment check, supporting uno's transparent binomial protein score. On a
-spike-in dilution series, uno-linked abundances track the design above the trace
-range; differential testing at the most dilute contrast remains outside the
-validated scope.
+uno is a fast Rust engine for MS1-only protein identification. It combines
+substantially lower measured computation with higher median
+entrapment-controlled depth on most tested DirectMS1 files and on the
+independent Astral input series. At 200 pg and 1 ng its depth still varies
+strongly with the seed, and one search of the built-in feature-detection arm
+returned nothing. Depth and protein identity vary across seeds, so a fixed seed
+ensures repeatability rather than a uniformly better search. Its internally
+reported FDR is not uniformly calibrated, so the claim is deliberately limited
+to performance under the common entrapment criterion.
 
 // <<< BODY END
 
@@ -818,16 +775,9 @@ validated scope.
 The Supporting Information is available free of charge at #sym.space [ACS
 DOI/URL, to be assigned on acceptance].
 
-Benchmark protocol, software versions, hardware and the exact commands behind
-the identification, FAIMS and quantitation benchmarks; per-dataset and
-per-replicate identification depth, CPU time, wall-clock time and peak resident
-memory; entrapment calibration of each engine's own reported protein list, with
-per-dataset false-discovery-proportion curves; the FAIMS benchmark on all three
-replicate runs; resource scaling against input feature count; the per-feature
-quality-column ablation and per-column target/decoy separation; extended
-quantitation detail, including the differential contrast, per-species dilution
-tracking and the detection-loss traces; run-to-run reproducibility detail; the
-and development-configuration retention-time and rescorer experiments (PDF).
+Software environment and benchmark inputs; complete per-run identification depth
+and resource measurements; two-proteome entrapment counts and calibration
+curves; seeding and repeatability checks (PDF).
 
 #heading(numbering: none)[Author Information]
 
@@ -859,11 +809,10 @@ The authors declare no competing financial interest.
 *Ethics*
 
 This study is a secondary computational analysis of publicly deposited mass
-spectrometry data (PXD015669, PXD023977, PXD033350 and PXD066701). The samples
-are HeLa, an immortalized cell line, and commercial standards, not material
-derived from identifiable human subjects or from any animal procedure. It
-involved no new sample collection and was determined to require no additional
-ethics review.
+spectrometry data (PXD015669, PXD023977 and PXD066701). The samples are HeLa, an
+immortalized cell line, not material derived from identifiable human subjects or
+from any animal procedure. It involved no new sample collection and was
+determined to require no additional ethics review.
 
 #heading(numbering: none)[Acknowledgments]
 
@@ -871,22 +820,22 @@ This work was supported by the U.S. National Institutes of Health (grants R01
 HL165168, R01 AG077046, R01 MH100175, and R01 AG075862 to J.R.Y.; R01 MH132570
 to L. Ye; and U01 AG088679 to S. A. Lipton) and by the Skaggs Graduate School of
 Chemical and Biological Sciences at The Scripps Research Institute (P.G.).
-During the preparation of this work the authors used Anthropic Claude large
-language models (via the Claude Code interface) for manuscript drafting and
-editing, for software-development assistance, and for a pre-submission audit of
-the manuscript against its own source data; no AI tools were used to generate
-figures or to produce, analyze, or alter any experimental data. The authors
-reviewed and edited all content as needed and take full responsibility for the
-content of the publication.
+During the preparation of this work the authors used Anthropic Claude and OpenAI
+Codex for manuscript drafting and editing, software development, and auditing
+the manuscript against its source data. Codex also assisted with benchmark
+execution and the analysis and plotting code for the variability revision.
+Figures and numerical results were computed from archived search outputs with
+reproducible scripts; no experimental observations were generated by a language
+model. The authors reviewed and edited all content as needed and take full
+responsibility for the content of the publication.
 
 #heading(numbering: none)[Data and Software Availability]
 
 *Data.* The mass spectrometry data reanalyzed here are publicly available from
 the ProteomeXchange Consortium via the PRIDE partner repository under accessions
 PXD015669 (5-minute HeLa, Q Exactive HF), PXD023977 (200 ng HeLa, Orbitrap
-Fusion Lumos with FAIMS) and PXD033350 (UPS1-into-#emph[E. coli] dilution
-series, Orbitrap Fusion Lumos with FAIMS Pro), and PXD066701 (10 ng HeLa,
-Orbitrap Astral with FAIMS Pro).
+Fusion Lumos with FAIMS), and PXD066701 (10 ng HeLa, Orbitrap Astral with FAIMS
+Pro).
 
 *Code.* uno is open source (MIT licensed) at #link(
   "https://github.com/",
@@ -895,18 +844,38 @@ paper, together with the benchmark suite, the analysis and figure scripts, the
 configuration files and the manuscript source, will be frozen on a `paper`
 branch so that the figures and tables can be regenerated as published, and
 archived at Zenodo (DOI: #sym.space [10.5281/zenodo.XXXXXXX, to be assigned on
-acceptance]). The retention-time distillation labels and the trained
-retention-time models are included in the same archive. The koth feature finder
-and cross-run aligner, used only by the quantitation path of Section 3.5, is
-archived alongside it.
+acceptance]). The trained retention-time model is included in the same archive.
 
 #bibliography("references.bib", title: [References], style: paper-bib-style)
 
 #pagebreak()
 
+// The SI's visual title block lives HERE, not in si-body.typ: everything in
+// paper.typ outside the BODY markers is dropped or rebuilt by the docx
+// resolver (which synthesizes its own SI title from config.typ), while
+// si-body.typ travels to pandoc verbatim. The docx-mode branch mirrors the
+// scaffold's, so the fallback export keeps a real heading at the boundary.
+#if docx-mode [
+  #heading(level: 1, numbering: none, outlined: false)[Supporting Information]
+
+  #text(13pt)[#paper-title]
+
+  #text(10pt, style: "italic")[#si-authors]
+] else [
+  #align(center)[
+    #text(15pt, weight: "bold")[Supporting Information]
+    #v(2pt)
+    #text(13pt)[#paper-title]
+    #v(2pt)
+    #text(10pt, style: "italic")[#si-authors]
+  ]
+
+  #v(1em)
+]
+
 // The Supporting Information body lives in si-body.typ so that it can be
 // compiled or exported on its own. It is #included here, so the draft build is
-// still a single combined PDF: 11 main-text cross-references point at SI labels
+// still a single combined PDF: main-text cross-references point at SI labels
 // (@tbl:perdataset, @fig:fdpcurves and so on), and Typst cannot resolve those
 // across separate documents. Splitting the OUTPUT is a submission-bundle task,
 // not a source-layout one. See paper/SUBMISSION_TODO.md item B4.

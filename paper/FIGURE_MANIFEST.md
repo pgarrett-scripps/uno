@@ -23,11 +23,9 @@ and the generated PNGs line up.
    the set reads as one system. Colorblind-safe palette, no red/green pairs,
    legible at column width (single column ≈ 3.4 in, full width ≈ 7.0 in).
 5. Scripts must be rerunnable end to end via `just assets` from `paper/`, which
-   delegates to `analysis/` and then stamps `.assets-stamp`. That stamp is what
-   `just check` compares, so a regenerated figure must be committed together with
-   it: `just assets && git add figures .assets-stamp`. Use `just assets-all`
-   after re-running a benchmark, since the data these scripts read lives outside
-   the repo and its mtime is never consulted.
+   delegates to `analysis/`. Every live output is addressed by a semantic id in
+   `assets.json`; the manifest records its output hash, generator, and declared
+   input hashes. `just verify` fails on stale, unclaimed, or missing assets.
 
 ## Output format
 
@@ -42,61 +40,65 @@ item B4 and decision D12.
 
 ## Main-text figures
 
-The 2026-08 restructure (main-text surgery) renumbered these: the old
-`fig3_determinism` moved to the SI as `figS6_determinism` (minus its spread%
-panel, which became fig2 panel c), old `fig4_entrapment` -> `fig3_entrapment`,
-and old `fig5_quant` -> `fig4_quant` (minus its volcano panel, which became
-figS5 panel c).
+The prose references semantic labels and asset ids, so journal figure numbers
+follow order of appearance rather than filenames.
 
 | file | title | panels | data source |
 |---|---|---|---|
 | `fig1_pipeline.png` | uno pipeline & scoring cascade | schematic only | none (drawn) |
-| `fig2_headtohead.png` | uno vs ms1searchpy across six DirectMS1 datasets | (a) depth @1% FDR, (b) depth @5%, (c) ms1 replicate range as % of median (uno 0% baseline), (d) wall-clock s, (e) peak RSS GiB; uno bar + ms1 three replicates as points with median | `benchmark/results/summary.tsv` |
-| `fig3_entrapment.png` | protein FDR calibration under two-proteome entrapment | (a) reported q vs entrapment-corrected FDP (uno vs ms1), (b) accepted human proteins vs entrapment FDP | `benchmark/results/uno_*.tsv`, `benchmark/results/ms1_*/**_proteins_full.tsv`, scoring logic from `benchmark/entrapment.py` |
-| `fig4_quant.png` | spike-in dilution response (PXD033350) | (a) UPS1 protein abundance vs spike fmol, (b) Spearman rho distribution by species (UPS1 / E. coli / human probe) | `/mnt/labdata/pgarrett/PXD033350_DirectMS1Quant/uno_proc/align*/intensity_matrix.tsv` → `uno --matrix` → `benchmark/quant/dilution_track.py` |
+| `fig2_headtohead.png` | uno vs ms1searchpy across six DirectMS1 datasets | (a) depth @1% entrapment FDR, both engines as individual draws, medians and full ranges with sample sizes; (b) original serialized wall-clock versus peak RSS. Depth @5% is in the seed summary table and SI spread figure | `benchmark/results/spread.tsv` (depth), `benchmark/results/summary.tsv` (serialized resources) |
+| `fig_astral_validation.png` | independent Orbitrap Astral validation | (a) seeds/reruns grouped within acquisition files, with per-file medians and ranges; lines join medians of the three file medians at each input; (b) original serialized resources | `benchmark/results/variability_extension/summary.tsv` and `~/Data/PXD066701_Astral/results/input_series_summary.tsv` |
+| `fig4_overlap.png` | protein-level agreement | (a) every within-uno, between-engine and within-ms1searchpy pairwise Jaccard; (b) per-seed recovery of the intersection of available comparator lists; points, medians, full ranges | all primary protein outputs inventoried in `benchmark/results/spread.tsv`, loaded by `seed_data.py`; writes `figdata/overlap_analysis.tsv` |
+| `fig5_raw_mode.png` | built-in feature detection vs biosaur2 tables | depth @1% entrapment FDR, three matched seeds per file/arm on all 18 files, shown as points with medians and ranges | `benchmark/results/variability_extension/summary.tsv`; original resource measurements remain in `benchmark/raw_mode/summary.tsv` |
 
 ## TOC / abstract graphic (SUBMISSION_TODO B7)
 
 | file | contents | data source |
 |---|---|---|
-| `fig_toc_graphic.png` | ACS "For Table of Contents Only" graphic, exactly 3.25 in × 1.75 in at 300 dpi (cropping disabled). Conceptual, not a results plot: an MS1 feature map (seeded random scatter, "no MS/MS") matched by the engine against an in-silico peptide database on mass and predicted RT, out to an FDR-controlled protein list. No numbers shown. | none (drawn) |
+| `fig_toc_graphic.png` | ACS "For Table of Contents Only" graphic, exactly 3.25 in × 1.75 in at 300 dpi (cropping disabled). Left column schematic: an MS1 feature map for one run (the slide's own hand-placed feature blobs, not a random scatter) feeding a binomial protein score with an illustrative 1% FDR cutoff, three feature colours marking the three scored targets. Right column is the one part with numbers: per-dataset median depth at 1% entrapment FDR for both engines, the same medians Figure 2a reports. | `benchmark/results/spread.tsv` (bars); left column drawn |
 
 For this draft it is embedded in `paper.typ` directly under the abstract, so it
 is visible on page 1; at submission ACS takes it as a separate Paragon Plus
 upload (and would place it on a "For Table of Contents Only" page).
 
-The PNG currently in `figures/` is a drawn placeholder from
-`fig_toc_graphic.py`. The **working source is `paper/toc_graphic.pptx`**, an
-editable PowerPoint scaffolded by `analysis/scripts/gen_toc_pptx.py` (one-shot;
-rerunning it overwrites hand edits). The finished slide gets exported over
-`figures/fig_toc_graphic.png`, after which `fig_toc_graphic.py` should be
-deleted so `just assets-all` cannot regenerate the placeholder over it. This is
-a deliberate exception to rule 3 (script-generated figures): the graphic is
-schematic, carries no numbers, and is hand-finished.
+`paper/toc_graphic.pptx` is the **design source**: the editable slide the
+graphic was laid out on, drawn at 2x the ACS box (6.5 in x 3.5 in) with type at
+2x printed size. `analysis/scripts/gen_toc_pptx.py` scaffolded the first version
+of it and is one-shot -- rerunning it overwrites the hand layout.
+
+The committed PNG is **not** an export of that slide: `fig_toc_graphic.py`
+redraws the slide's layout, colours and type sizes in matplotlib, working in
+slide units and halving every length on the way out, so the two stay diffable.
+That keeps the graphic under rule 3 rather than outside it, and it is why the
+script is no longer slated for deletion. The reason for redrawing rather than
+exporting is the bar chart: the slide carried uno's single default-seed depth
+against ms1searchpy's 3-replicate median, which overstated uno on 09746 and
+09766; the script reads `spread.tsv` so the TOC graphic cannot drift from the
+figure it advertises. Edit the slide for layout, then port the change into
+`fig_toc_graphic.py` and rerun it -- and keep the slide's embedded worksheet in
+step if the depths change.
 
 ## SI figures (S-numbered, appended to paper.pdf)
 
-Filenames match the S-number the figure receives from its order of appearance
-in `si-body.typ`; the reproducibility section (S8) deliberately sits after the
-quantitation detail so that `figS6_determinism.png` renders as Figure S6.
+Five SI figures cover calibration, search variability, the RT model, prediction
+accuracy, and throughput. Primary depth distributions and per-draw calibration
+counts are generated tables.
 
 | file | title | data source |
 |---|---|---|
-| `figS1_fdp_curves.png` | per-dataset entrapment FDP curves, all six datasets | as fig3 |
-| `figS2_faims.png` | FAIMS benchmark (PXD023977), uno vs ms1searchpy, 3 replicates | `benchmark/faims/faims_out/` run outputs, scored by `benchmark/faims/score_entrap.py`. (There is no `paper/figdata/faims.tsv` fallback; an earlier revision of this manifest named one that was never created.) |
-| `figS3_resources.png` | wall-clock, user-CPU and peak RSS vs input feature count | `benchmark/results/summary.tsv`, `benchmark/data/*.features.tsv` line counts |
-| `figS4_quality_columns.png` | biosaur2 quality-column ablation and per-column target/decoy AUC | `paper/figdata/quality_columns.tsv` transcribed from `benchmark/RESULTS.md` |
-| `figS5_quant_detail.png` | per-species abundance trajectories, detection-loss trace, and the 50 vs 0.1 fmol volcano | as fig4, plus `benchmark/quant/peptide_fc_de.py` for the volcano |
-| `figS6_determinism.png` | run-to-run reproducibility detail: ms1searchpy replicate spread vs uno's single deterministic value, + run10 close-up | `benchmark/results/summary.tsv`, run10 reps in `benchmark/results/ms1_rep{1,2,3}/`, `benchmark/RESULTS.md` |
-| `fig_astral_validation.png` | independent Orbitrap Astral validation on three 10 ng HeLa runs | (a,b) entrapment depth at 1% and 5% FDR; uno once and all ten ms1searchpy repeats per raw file, (c) wall-clock versus peak RSS | `~/Data/PXD066701_Astral/results/astral_summary.tsv`, generated from primary protein tables by `analysis/astral/summarize.py` |
+| `figS1_fdp_curves.png` | per-draw calibration curves for both engines, with pointwise medians | all primary outputs inventoried in `benchmark/results/spread.tsv`; writes `figdata/entrapment_curves.tsv` |
+| `figS6_determinism.png` | primary 1%/5% depth distributions and archived default-seed ranks | `benchmark/results/spread.tsv`; excludes development run10 |
+| `figS2_rt_model.png` | fixed RT model architecture, training corpus and holdout accuracy | shipped model and Chronologer corpus; no repeated search draws |
+| `figS3_rt_predictor.png` | uno-training-disjoint CNN versus DeepLC accuracy, identical affine calibration for both: (a-c) residual vs observed RT per set (median + 10-90% band), (d-f) cumulative absolute-error distribution with the 95th percentile marked | `benchmark/rt_predictor/results/summary.tsv` and `results/predictions_<set>.tsv` (per-peptide test predictions), both written by `benchmark/rt_predictor/run.py` from the checked-in sets; errors normalized by each set's 5-95% RT range |
+| `figS4_rt_throughput.png` | RT-prediction throughput vs batch size on a synthetic tryptic library: (a) wall time per batch, (b) peptides/s, medians of 5 repeats after warm-up, min-max band | `benchmark/rt_predictor/results/throughput.tsv` written by `benchmark/rt_predictor/throughput.py` (uno via `rt_throughput` Rust bin, DeepLC `make_preds(calibrate=False)`) on `sets/synthetic_tryptic.tsv` from `prepare_library.py` |
 
-`figS6_rt_model.png` (predicted vs observed RT, calibration fit, forward vs
-reverse RT shift) was listed here as optional and was **dropped**: reproducing it
-needs a DeepLC install, and the reverse-sequence artifacts behind the third panel
-did not survive (see `SUBMISSION_TODO.md`, decision D13). No script exists and
-the manuscript does not cite it.
+Retired quantitation, quality-column, duplicate-FAIMS, historical RT, and resource
+graphics remain registered as archival assets but are not referenced by the
+Technical Note. The determinism-detail graphic is now live as the seed-spread
+figure. Schematics and fixed-model prediction plots do not summarize search
+randomness; throughput already shows repeated measurement ranges.
 
-## Removed: the legacy PNGs
+## Removed: the pre-manifest PNGs
 
 `uno_{mass_defect,mass_excess,td_candidates,td_winners,why_peaked}.png` predated
 this manifest, had no generating script, sat at the repository root in `figures/`
@@ -104,3 +106,10 @@ rather than `paper/figures/`, were referenced by nothing, and were **deleted on
 2026-07-31**. They are in git history if wanted (`git log -- figures/`), but a
 figure with no script that reproduces it from on-disk data cannot be cited here
 under rule 1, so they were dead weight.
+
+## Variability tables
+
+`gen_variability_table.py` generates `si/variability_summary.typ` (median and
+full range at 1% and 5%, with n) and `si/entrap_reported.typ` (every primary
+draw). `si/results_per_dataset.typ` remains the original serialized resource
+cohort, explicitly labeled as such in the manuscript.

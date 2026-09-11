@@ -3,25 +3,13 @@
 
 Panels (per FIGURE_MANIFEST.md):
   a  protein depth at 1% entrapment FDR
-  b  protein depth at 5% entrapment FDR
-  c  ms1searchpy's replicate range as a percentage of its own median,
-     (max-min)/median; uno's is 0 by construction (identical reruns are
-     byte-identical), drawn as a zero baseline
-  d  wall-clock (s)
-  e  peak resident set size (GiB)
+  b  wall-clock (s) versus peak resident set size (GiB), one point per search,
+     the same resource view as panel b of fig_astral_validation.py
 
-uno is deterministic -> one bar per dataset. ms1searchpy is not -> all three
-replicates are plotted as open circles with a solid tick at their median, so the
-run-to-run spread is visible rather than hidden behind a summary statistic.
-Panel c is the scale-free form of that spread; the per-dataset absolute view and
-the run10 close-up live in the SI (figS6_determinism.py).
-
-DATA: benchmark/results/summary.tsv, written by benchmark/run.sh
-      (uno --features ... --fasta entrap_human_yeast.fasta --rt-model
-       rt_cnn_chrono_global_v3_ch32.urtc --config uno.toml   vs
-       ms1searchpy <features> -d entrap_human_yeast.fasta -deeplc 1 -ad 1),
-      depths scored by benchmark/entrapment.py (human+yeast entrapment FDP).
-No value in this figure is computed anywhere but that TSV.
+Both engines are shown as individual random draws, full ranges, and medians.
+Depths use benchmark/results/spread.tsv; resources retain the original
+serialized searches in benchmark/results/summary.tsv. Concurrent seed-sweep
+timings are deliberately excluded from the resource comparison.
 """
 
 from __future__ import annotations
@@ -36,6 +24,8 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 import style  # noqa: E402
+import seed_data  # noqa: E402
+from _assets import record  # noqa: E402
 
 SUMMARY = style.BENCH / "results" / "summary.tsv"
 
@@ -51,65 +41,43 @@ LABEL = {
 }
 
 
-def bars_and_reps(ax, df, datasets, col, ylab, scale, letter, first,
-                  rotate=False):
-    """One bar-vs-replicates panel (a, b, d, e)."""
+def depth_panel(ax, datasets):
+    rows = seed_data.rows()
     x = np.arange(len(datasets), dtype=float)
-    bw = 0.34
-    uno = np.array([
-        df[(df.dataset == d) & (df.tool == "uno")][col].astype(float).iloc[0] * scale
-        for d in datasets
-    ])
-    ax.bar(x - bw / 2, uno, bw, color=style.C["uno"], edgecolor="none",
-           label="uno (deterministic)" if first else None, zorder=2)
-    for i, d in enumerate(datasets):
-        reps = df[(df.dataset == d) & (df.tool == "ms1")][col].astype(float) * scale
-        if len(reps) != 3:
-            raise SystemExit(f"{d}: expected 3 ms1 replicates, got {len(reps)}")
-        style.spread_marker(
-            ax, x[i] + bw / 2, reps.to_numpy(), style.C["ms1searchpy"],
-            half_width=bw / 2,
-            label="ms1searchpy replicates" if (first and i == 0) else None,
-            median_label="ms1searchpy median" if (first and i == 0) else None,
-        )
-    ax.set_xticks(x)
-    if rotate:
-        ax.set_xticklabels([LABEL[d].replace("\n", " ") for d in datasets],
-                           fontsize=6, rotation=45, ha="right")
-    else:
-        ax.set_xticklabels([LABEL[d] for d in datasets], fontsize=6.5)
-    ax.set_ylabel(ylab)
-    ax.set_xlim(-0.6, len(datasets) - 0.4)
-    ax.margins(y=0.14)
-    style.panel_label(ax, letter, x=-0.13)
+    for i, ds in enumerate(datasets):
+        for engine, offset in (("uno", -0.19), ("ms1searchpy", 0.19)):
+            values = [int(r["depth_1pct"]) for r in rows
+                      if r["dataset"] == ds and r["engine"] == engine]
+            style.spread_marker(ax, x[i] + offset, values, style.C[engine],
+                                jitter=0.022, half_width=0.13, ms=3,
+                                label=engine if i == 0 else None)
+            ax.text(x[i] + offset, max(values) + 85, f"n={len(values)}",
+                    fontsize=5.7, ha="center", color=style.C[engine])
+    ax.set_xticks(x, [LABEL[d] for d in datasets], fontsize=6.5)
+    ax.set_ylabel("proteins @ 1% entrapment FDR")
+    ax.set_xlim(-0.65, len(datasets) - 0.35)
+    ax.set_ylim(bottom=0)
+    ax.margins(y=0.17)
+    style.panel_label(ax, "a", x=-0.16)
 
 
-def spread_panel(ax, df, datasets, letter):
-    """Panel c: replicate range as % of median, 1% and 5% FDR side by side."""
-    x = np.arange(len(datasets), dtype=float)
-    # FDR threshold is encoded by hatch; the colour stays the engine's, so
-    # nothing here can be mistaken for a second tool.
-    for col, lab, off, hatch in [
-        ("depth_1pct", "@ 1% FDR", -0.19, None),
-        ("depth_5pct", "@ 5% FDR", 0.19, "///"),
-    ]:
-        vals = []
-        for d in datasets:
-            r = df[(df.dataset == d) & (df.tool == "ms1")][col].astype(float).to_numpy()
-            vals.append(100.0 * (r.max() - r.min()) / np.median(r))
-        ax.bar(x + off, vals, 0.34, color=style.C["ms1searchpy"], edgecolor="white",
-               hatch=hatch, linewidth=0.4, label=f"ms1searchpy {lab}", zorder=2)
-    ax.axhline(0, color=style.C["uno"], lw=2.0, zorder=3,
-               label="uno: 0% (byte-identical)")
-    ax.set_xticks(x)
-    ax.set_xticklabels([LABEL[d].replace("\n", " ") for d in datasets],
-                       fontsize=6, rotation=45, ha="right")
-    ax.set_ylabel("replicate range,\n(max − min) / median (%)")
-    ax.set_xlim(-0.6, len(datasets) - 0.4)
-    ax.set_ylim(0, None)
-    ax.margins(y=0.20)
-    ax.legend(loc="upper left", fontsize=6.3)
-    style.panel_label(ax, letter, x=-0.13)
+def resource_panel(ax, df, datasets, letter):
+    """Panel b: wall-clock vs peak RSS, one marker per search (all replicates)."""
+    for tool, engine in [("uno", "uno"), ("ms1", "ms1searchpy")]:
+        block = df[(df.tool == tool) & (df.dataset.isin(datasets))]
+        color, marker = style.ENGINE[engine]
+        ax.scatter(block.wall_s.astype(float),
+                   block.peak_rss_mb.astype(float) / 1024,
+                   s=18 if tool == "uno" else 12, marker=marker,
+                   facecolors=color if tool == "uno" else "white",
+                   edgecolors=color, linewidths=0.8, zorder=3,
+                   label="uno" if tool == "uno" else "ms1searchpy (3 runs each)")
+    ax.set_xlabel("wall-clock (s)")
+    ax.set_ylabel("peak RSS (GiB)")
+    ax.set_xlim(left=0)
+    ax.set_ylim(bottom=0)
+    ax.legend(loc="lower right")
+    style.panel_label(ax, letter, x=-0.15)
 
 
 def main() -> int:
@@ -119,32 +87,23 @@ def main() -> int:
     if missing:
         raise SystemExit(f"summary.tsv has datasets not in LABEL: {missing}")
 
-    fig = plt.figure(figsize=(style.W2, 5.4))
-    gs = fig.add_gridspec(2, 6)
-    ax_a = fig.add_subplot(gs[0, :3])
-    ax_b = fig.add_subplot(gs[0, 3:])
-    ax_c = fig.add_subplot(gs[1, :2])
-    ax_d = fig.add_subplot(gs[1, 2:4])
-    ax_e = fig.add_subplot(gs[1, 4:])
+    fig, (ax_a, ax_b) = plt.subplots(
+        1, 2, figsize=(style.W2, 2.7), gridspec_kw={"width_ratios": [1.45, 1]})
 
-    bars_and_reps(ax_a, df, datasets, "depth_1pct",
-                  "proteins @ 1% entrapment FDR", 1.0, "a", first=True)
-    bars_and_reps(ax_b, df, datasets, "depth_5pct",
-                  "proteins @ 5% entrapment FDR", 1.0, "b", first=False)
-    spread_panel(ax_c, df, datasets, "c")
-    bars_and_reps(ax_d, df, datasets, "wall_s", "wall-clock (s)", 1.0, "d",
-                  first=False, rotate=True)
-    bars_and_reps(ax_e, df, datasets, "peak_rss_mb", "peak RSS (GiB)", 1 / 1024,
-                  "e", first=False, rotate=True)
-
+    depth_panel(ax_a, datasets)
+    ax_a.set_xlabel("dataset")
     ax_a.legend(loc="upper left", ncol=1, fontsize=7,
                 bbox_to_anchor=(0.0, 1.02))
-    for ax in (ax_d, ax_e):
-        ax.set_ylim(bottom=0)
-        ax.set_xlabel("dataset")
-    ax_c.set_xlabel("dataset")
+    resource_panel(ax_b, df, datasets, "b")
 
     style.save(fig, "fig2_headtohead")
+    record("fig.fig2-headtohead", "figures/fig2_headtohead.png", kind="figure",
+           inputs=["../benchmark/results/summary.tsv", "../benchmark/results/spread.tsv"],
+           desc="uno versus ms1searchpy on six DirectMS1 datasets: depth at 1% "
+                "entrapment FDR and wall-clock versus peak memory")
+    record("fig.fig2-headtohead-pdf", "figures/fig2_headtohead.pdf", kind="figure",
+           inputs=["../benchmark/results/summary.tsv", "../benchmark/results/spread.tsv"],
+           desc="Vector twin of the head-to-head figure")
     return 0
 
 

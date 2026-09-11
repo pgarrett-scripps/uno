@@ -1,4 +1,6 @@
 // =============================================================================
+
+#import "stats.typ": lit, s
 // Everything project-specific about the manuscript's identity lives here.
 //
 // Single source of truth: paper.typ imports it for the PDF and for the Word
@@ -7,7 +9,7 @@
 // a title the paper no longer has.
 // =============================================================================
 
-#let paper-title = "uno: A Fast, Reproducible, Dependency-Light Rust Engine for MS1-Only Protein Identification"
+#let paper-title = "uno: A Fast Rust Engine for MS1-Only Protein Identification"
 
 // Short form used on the audiobook cover art. Keep it to a couple of words.
 #let paper-wordmark = "uno"
@@ -37,10 +39,9 @@
   "reproducibility",
   "Rust",
   "open-source software",
-  "label-free quantification",
 )
 
-#let paper-date = "July 2026"
+#let paper-date = "August 2026"
 
 // Shown on the audiobook cover under the author line.
 #let paper-institution = "The Scripps Research Institute"
@@ -53,24 +54,30 @@
 // Word export path, the word counter (JPR caps the abstract at 200 words
 // separately), and the audiobook narrator.
 #let paper-abstract = [
-  MS1-only protein identification (DirectMS1) infers peptide and protein
-  identities from precursor mass and retention time (RT) alone, without MS2
-  fragmentation, enabling short gradients and high throughput. The reference
-  implementation, ms1searchpy, is written in Python with a deep-learning RT
-  predictor. We present uno, an open-source MS1-only search and identification
-  engine in Rust. uno reads the same single-run feature files, so both engines
-  see identical input. On six datasets from the DirectMS1 papers, uno identified
-  more proteins at 1% entrapment false-discovery rate (FDR) than the median of
-  three ms1searchpy replicates, by 3.0 to 39.7%. It ran 5.3 to 7.0 times faster
-  in half the peak memory. On three independent 10 ng HeLa Orbitrap Astral runs,
-  uno returned 1006 to 1448 proteins at 1% entrapment FDR, against ms1searchpy
-  medians of 45 to 47, while running approximately 10 times faster. uno is
-  byte-deterministic. ms1searchpy's depth on identical input varies by up to
-  40.5% of its median. Two-proteome entrapment finds uno's reported 1% protein
-  FDR conservative on four of six datasets and about twice optimistic on one. On
-  the DirectMS1Quant UPS1 dilution series, uno-derived abundances tracked the
-  spike design (median Spearman $rho = +0.71$); trace-level differential testing
-  remains outside the validated scope.
+  MS1-only protein identification uses precursor mass and retention time without
+  MS2 fragmentation. We present uno, an open-source Rust engine that accepts the
+  same feature tables as ms1searchpy. Across #s("bench.dataset_count")
+  DirectMS1-study datasets, uno had greater median depth on #s(
+    "bench.uno_median_wins",
+  ) datasets at 1% two-proteome entrapment FDR and #s(
+    "bench.uno_median_wins_5pct",
+  ) at 5%. Serialized searches ran #s("bench.speed_factor_min") to #s(
+    "bench.speed_factor_max",
+  ) times faster in approximately half the peak memory. Both engines showed
+  search variability. Across #s("bench.uno_seed_count") seeds per primary file,
+  uno's full depth range was #s("bench.uno_seed_spread_1pct_pct_min") to #s(
+    "bench.uno_seed_spread_1pct_pct_max",
+  )% of its median at 1% entrapment FDR. Fixed seeds provided repeatability
+  rather than evidence of lower variability. On #s("astral.files") independent
+  HeLa Orbitrap Astral files, the median of file-median uno depths ranged from
+  #s("astral.uno_seed_level_median_min") to #s(
+    "astral.uno_seed_level_median_max",
+  ) across input levels. Stock ms1searchpy self-calibration failed on that LC
+  method; external MS/MS calibration improved its depth. Some low-input uno
+  seeds still returned no proteins. Protein-list overlap and empirical FDP
+  varied in both engines. uno provides a fast alternative for short-gradient
+  MS1-only identification, with external entrapment calibration defining its
+  present scope.
 ]
 
 // -----------------------------------------------------------------------------

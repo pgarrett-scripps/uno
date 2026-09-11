@@ -15,17 +15,28 @@ that repo already has, it is called out below.
 
 ## The honest summary
 
-The manuscript is in good shape as a *document* and not yet defensible as a
-*result*. Prose, structure, style and scholarship are largely fixed. The evidence
-layer has not moved: every identification and calibration number still comes from
-two different builds, one of which has a since-fixed ~20% order-sensitivity bug.
+**2026-08-31 scope reset:** the manuscript is now a focused JPR Technical Note,
+*uno: A Fast Rust Engine for MS1-Only Protein Identification*.
+The main text retains the identification architecture, matched-input depth and
+resource use, independent Astral validation, protein-level agreement,
+deterministic output, and external entrapment calibration.
+Quantitation, duplicate FAIMS analysis, run10 quality ablations, the
+historical RT/LDA development experiments, and (per 2026-09-01 author decision)
+the CNN-versus-MLP RT-model comparison are no longer manuscript claims. The
+five-section SI contains the environment and inputs, complete primary results,
+the threshold control, calibration detail, and determinism checks. Any older task
+below that refers only to a removed quantitation/development branch is
+historical and does not gate this submission.
 
-There is exactly one expensive thing on the critical path (the re-run, ~half a
-day). Everything else is hours of editing plus tooling that already exists next
-door in `d_noise-paper`.
+**2026-09-11: the evidence layer is now pinned.** Every uno search behind the
+manuscript was re-executed on one build (§C1), every derived summary and table is
+written by a script, and `si/versions.typ` pins that build, its three out-of-tree
+path dependencies and the comparator patch. The comparator was not re-run,
+because it did not change.
 
-**Minimum realistic path: the re-run, then §B, §C and §D below.** Roughly one
-focused week, most of it not compute.
+What is left is not compute. It is the author-blocked material (B2, B3, the
+release decision behind B1 and D5), the submission bundle (B4, B7), and the two
+remaining integrity edits, C2 and C4.
 
 ---
 
@@ -85,9 +96,8 @@ Cannot submit, or will bounce at editorial screening.
       `[repository URL, to be assigned on release]` and
       `[10.5281/zenodo.XXXXXXX]`. JPR requires resolved deposition and access
       links. Blocked on the release decision (D5: "release all three, not yet").
-      → uno public repo, koth archived (at minimum a versioned Zenodo deposit,
-        since it is load-bearing for all of §3.9), and a Zenodo archive carrying
-        the benchmark data, RT distillation labels and trained models.
+      → uno public repo and a Zenodo archive carrying the benchmark data,
+        comparator patch and trained RT model.
       → Note **every benchmark input and result file is currently gitignored**
         (`benchmark/.gitignore`), so a reader cloning the repo today gets none of
         the inputs behind any SI table.
@@ -104,10 +114,8 @@ Cannot submit, or will bounce at editorial screening.
       now lives in `si-body.typ` and is `#include`d by `paper.typ`, matching
       `d_noise-paper`. **The output split is still open**, and it is not a build
       flag: **10 main-text cross-references point at SI labels**
-      (`@tbl:perdataset`, `@tbl:entrapreported`, `@tbl:faims`,
-      `@tbl:qualityablation`, `@tbl:qualityauc`, `@tbl:quantdetail`,
-      `@fig:fdpcurves`, `@fig:faims`, `@fig:resources`, `@fig:determinism`;
-      the set changed in the 2026-08 restructure, see the note in §A), and
+      (`@sec:si-protocol`, `@sec:si-results`, `@tbl:perdataset`,
+      `@sec:si-calibration`, and `@sec:si-reproducibility`), and
       Typst cannot resolve a reference across two documents. Note `d_noise-paper` has not solved this either — it also ships
       one combined PDF. Options at bundle time: (a) convert those 11 to plain text
       ("Table S5"), losing the hyperlinks; (b) compile the SI standalone and
@@ -121,10 +129,10 @@ Cannot submit, or will bounce at editorial screening.
       4.7 MB, 176 paragraphs, **12 tables**, **34 numbered headings**, title block,
       abstract and keywords all present, 65 equations rasterized. `paper.docx` is
       gitignored; `just check` flags it stale by mtime.
-- [x] **B6. Write the cover letter.** DONE — `paper/cover_letter.md`, following the
-      `d_noise-paper` structure. Two placeholders remain: `[PHONE]` (see B3) and
-      the repository/DOI line (see B1), plus a note to confirm the main-text word
-      count against the current guidelines at submission.
+- [x] **B6. Write the cover letter.** DONE — `paper/cover_letter.md` now requests
+      Technical Note consideration and independent editorial handling because a
+      co-author is JPR's Editor-in-Chief. Two placeholders remain: `[PHONE]`
+      (see B3) and the repository/DOI line (see B1).
 - [x] **B7. TOC / abstract graphic.** DONE (2026-08-16) —
       `analysis/scripts/fig_toc_graphic.py` -> `figures/fig_toc_graphic.png`,
       exactly 3.25 in × 1.75 in at 300 dpi (the ACS "For Table of Contents
@@ -159,19 +167,79 @@ re-run.
       at HEAD**. §3.2's determinism paragraph and the Methods sentence were rewritten
       to describe what now holds. Depth moves: `hela5min_09746` 1% 862 -> 876,
       5% 1209 -> 1194 on a single dataset. Details in [`../TODO.md`](../TODO.md) §1.
-- [ ] **C1. The re-run.** *This gates every number in Sections 3.1–3.5 and 3.9,
-      Table 1, Tables S2/S3/S5/S6, and Figures 2/3/4/S1/S3/S4.*
-      Preconditions and full scope are in [`../TODO.md`](../TODO.md) §1–2. In short:
-      land the two determinism sorting fixes and the `score.rs:465` decoy guard
-      first, add a two-run byte-diff test, commit and pin the tree, then run
-      uno once and ms1searchpy three times over all six datasets plus run10, plus
-      the run10 column-stripped arm and the FAIMS replicates. Budget half a day,
-      serialized on an idle host. Do not write results prose before it completes.
-      - Why it is not optional: `si/versions.typ` claims a single commit, but the
-        Table 1 outputs carry an 8-column schema dated 07-22 and the FAIMS
-        outputs a 10-column schema dated 07-28. Two builds, six commits apart.
-        And commit `eccf0b2` reports run10 moving **1309 → 1426** after a
-        row-order fix that landed *after* the six-dataset results were measured.
+- [x] **Determinism claim corrected** (2026-09-09). The manuscript compared one
+      locked uno run against three unlocked ms1searchpy runs, which measures the
+      locking rather than the engines: uno's byte-identical output came from
+      hardcoded constants (booster seed, RANSAC sampling constant, decoy-shuffle
+      salt, fold hash), not from an algorithm with less randomness in it.
+      `uno --seed` now perturbs all four together, seed 0 reproducing every
+      published value byte for byte. Measured over 11 draws per dataset, uno's
+      spread at 1% entrapment FDR is 17-26% of its median against ms1searchpy's
+      4-40%, and on 4 of 6 datasets the published uno run sits at or above the
+      90th percentile of its own seed distribution. Section 3.2 (retitled
+      "Run-to-run variability"), the Methods seeding sentence, the Introduction,
+      the Discussion, SI Section S8 and the cover letter were rewritten;
+      `figS6_determinism.png` now plots both engines as spreads and was
+      re-adopted. **Author decision, 2026-09-09: use seed distributions in the
+      main comparisons.** Figure 2 now shows both engines' draws, medians, and
+      full ranges, and the headline is four of six median wins at 1% entrapment
+      FDR and six of six at 5%. Overlap includes all within-uno, between-engine,
+      and within-ms1searchpy pairs. Calibration includes all 66 uno seeds and
+      19 comparator searches. A generated SI depth summary reports n and ranges;
+      the per-draw calibration table is generated from protein outputs. The
+      seed-spread figure is included in the SI rather than left archival.
+      The original serialized resource cohort remains explicitly labeled.
+      The Astral/raw extension uses prespecified seeds 0, 1, 2 per file/arm;
+      completion and build verification are recorded below.
+
+- [x] **Variability extension and final build** (2026-09-09). Completed all 60
+      missing searches: the archived summary contains 108 searches covering
+      three matched seeds in both feature-source arms on all 18 primary/Astral
+      files. Four of 18 low-input searches returned zero depth in each arm;
+      those failures remain in Figures 3/5 and the limitations. Ratios with
+      zero denominators are excluded explicitly; empty/empty overlap is
+      undefined. An additional seed-zero control reproduced the archived
+      Astral 200 pg rep1 output byte for byte. Commands, input/output hashes,
+      and completion records are in `benchmark/results/variability_extension/`.
+      All dependent statistics and figures were rebuilt. `just verify` and
+      `just check-stats-deep` passed (106 generated statistics independently
+      re-derived); PDF/Word exports were rendered for visual review. Word
+      tables now use readable column widths and intact rows. Existing C1 and
+      release-provenance items below remain separate submission requirements.
+
+
+- [x] **C1. The re-run. DONE 2026-09-11.** The complete uno side of the
+      manuscript, 156 searches, was re-executed on one pinned binary (commit
+      `0710225`, SHA-256 `c376954d`) by `benchmark/publication_rerun.py`: six
+      primary files × biosaur2 × seeds 0-10, six primary files × `--raw` × seeds
+      0-2, twelve Astral files × both feature sources × seeds 0-2. Seed-0
+      searches ran serialized, so the resource panels report real timings; the
+      rest ran two at a time and contribute only depth and list measurements.
+      Superseded tables are archived with their hashes under
+      `benchmark/results/archive_574df1fd/`, and every search carries a
+      provenance stamp naming its command, input hashes, binary hash, commit and
+      output hash.
+
+      **149 of 156 outputs are byte-identical to the superseded build**, all 36
+      seed-0 searches among them, so no reported depth moved. The seven that
+      differ had each returned nothing before and now report proteins; one
+      search (200 pg rep1, `--raw`, seed 1) still returns nothing. Re-measured
+      serialized timings moved by +2 to +13% in wall time and within ±12% in peak
+      RSS, which the resource panels and speed factors now carry.
+
+      ms1searchpy was not re-run, by decision: the comparator did not change.
+      Reconciling the inventory did find 20 comparator replicates on disk that
+      had never entered `spread.tsv` (reps 4-10 on 09746, 09766 and the FAIMS
+      file). They are in now, taking the comparator from 19 draws to 39. The
+      headline is unchanged — uno's median still wins 4 of 6 at 1% and 6 of 6 at
+      5% — and two comparator medians rise, so the fuller inventory is the more
+      conservative one.
+
+      `benchmark/refresh_summaries.py` rebuilt every derived summary, `just
+      assets-all` every figure and generated table, and `analysis/scripts/gen_
+      perdataset_table.py` replaced the last hand-transcribed results table
+      (reproducing its cells exactly).
+
 - [ ] **C2. Disclose the tuned defaults** (decision D2, settled). `top_k = 50`,
       the ensemble inclusion band, `min_child_weight = 80` and `cut_max = 8.0`
       were each selected by maximizing yeast-entrapment depth on run10/deephela —
@@ -180,24 +248,32 @@ re-run.
       paragraph and relabel run10 a **tuning set**, not a benchmark.
       Include the counterweight: the shipped RT model was chosen *against* its
       run10 score, which is evidence of restraint.
-- [ ] **C3. Re-verify the calibration paragraph after the re-run.** §3.3 is now
-      correct for the *current* numbers (four of six conservative, 09778 at
-      1.03%, 09746 at 2.16%, 12 of 18, 13 of 18). It is the most number-dense
-      passage in the paper and every one of those values will move.
+- [x] **C3. Re-verify the calibration paragraph after the re-run. DONE
+      2026-09-11.** Every value in the passage is a `#s()` read and regenerated
+      with the rest: across the 66 uno draws the reported 1% lists carry
+      empirical FDPs of 0.00 to 3.02%, median 1.06%, below 1% in 30 of them, and
+      ms1searchpy exceeds its nominal level in 21 of 39 searches. The sentence
+      about how often uno's list is conservative was rewritten to state its
+      denominator, since 30 of 66 is not the "most searches" reading the old
+      phrasing invited.
 - [ ] **C4. Resolve the FDP-vs-q column** (decision D6: print the raw FDP).
       `si/entrap_reported.typ` is headed "Entrapment FDP (%)" but holds the
       running-minimum entrapment *q*, which Methods defines as a different
       quantity. Six sentences move with it. Fold into the post-re-run pass.
-- [ ] **C5. Disclose the ms1searchpy patch.** The benchmarked comparator is a
-      local uncommitted +45-line patch, not the released 2.8.12 — which **does not
-      exist on PyPI** (latest is 2.8.9). Without the patch, stock ms1searchpy
-      reads none of the five quality columns that §3.5 and S6 depend on. Pin the
-      commit, ship the diff in the SI, and say plainly that the patch gives the
-      comparator *more* information, so uno's margin is conservative.
-- [ ] **C6. Fix `si/versions.typ`.** Per-results-block commits for uno; add the
-      sage, koth and sequoia-boost commits (all out-of-tree path dependencies, so
-      a commit is the only pin); add matplotlib, typst and OS/kernel; correct the
-      NumPy/SciPy role line (the scoring scripts are stdlib-only).
+- [~] **C5. Disclose the ms1searchpy patch.** *Pinned 2026-09-11:* the diff is
+      captured as `benchmark/ms1searchpy_comparator.patch` (SHA-256 `f8d0c455`)
+      against commit `9df4a94` of the installed checkout, which reports itself as
+      2.8.12 — a version that **does not exist on PyPI**. The versions table names
+      both, and the Methods already say the patch gives the comparator *more*
+      information, so uno's margin is conservative. Remaining: ship the diff as an
+      SI file at submission, which is part of the deposit decision (B1/D5).
+- [x] **C6. Fix `si/versions.typ`. DONE 2026-09-11.** One uno commit and binary
+      hash for every reported search; sage-core, sequoia-boost and koth_ff pinned
+      by commit (sage-core carries a local patch, so its diff is hashed too); the
+      comparator pinned by commit plus `benchmark/ms1searchpy_comparator.patch`;
+      Matplotlib, NumPy, pandas, Typst, both Python environments and the OS and
+      kernel added; the NumPy/SciPy row now reads as an ms1searchpy dependency
+      rather than a scoring-script one.
 - [x] **C7. `@tbl:rtdepth`'s "69-d" — resolved by removing the count.** The only
       surviving definition of the set is the initial commit's `rt.rs` header,
       which enumerates 20 AA + 20 N-term-window + 20 C-term-window + length +
@@ -215,11 +291,11 @@ re-run.
 
 Cheap, but a reviewer checks these in seconds.
 
-- [x] **D1. Fix the two "GENERATED … do not edit by hand" labels.** DONE — both
-      relabelled "TRANSCRIBED BY HAND", with the reason and a pointer to the re-run's
-      "re-derive every table by script" step, where the generator belongs (it can be
-      validated against fresh output there, rather than against the numbers it was
-      written from). Superseded text: No generator
+- [x] **D1. Fix the two "GENERATED … do not edit by hand" labels.** DONE, and
+      superseded 2026-09-11: both tables are now genuinely generated.
+      `si/entrap_reported.typ` comes from `gen_variability_table.py` and
+      `si/results_per_dataset.typ` from the new `gen_perdataset_table.py`, which
+      reproduced the hand-transcribed cells exactly before replacing them. Superseded text: No generator
       for `si/results_per_dataset.typ` or `si/entrap_reported.typ` exists anywhere
       on disk. Either write it or relabel them "Transcribed". The label actively
       discourages the only check that would catch drift.

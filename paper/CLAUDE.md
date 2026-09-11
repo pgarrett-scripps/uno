@@ -9,8 +9,10 @@ the migration and the upstream history.
 [`AUDIT.md`](AUDIT.md) when you need the evidence behind an item. They hold a
 pre-submission audit's fix list and 16 settled decisions, each citing `file:line`.
 Most of what looks like an error in this manuscript is already recorded there with
-a decision attached, and every identification number is provisional pending the
-re-run (SUBMISSION_TODO C1). [`../TODO.md`](../TODO.md) is the code-side half.
+a decision attached. Every uno identification number now comes from the pinned
+re-run of 2026-09-11 (`benchmark/publication_rerun.py`); re-run it and then
+`benchmark/refresh_summaries.py` if the engine changes again.
+[`../TODO.md`](../TODO.md) is the code-side half.
 
 ## The contract for generated things
 
@@ -21,12 +23,15 @@ declared file named directly. Numbers the analysis computes are declared in
 `analysis/scripts/gen_stats.py` and read back as `#s("id")`; guards there fail
 the build when a re-run changes a number's meaning under a sentence.
 
-Every current asset is **adopted** (`origin.by = "adopted"` in assets.json):
-committed pre-scaffold outputs that nothing can regenerate until generators call
-`record()`. The C1 re-run is when that flips — each `figN_*.py` gains a
-`record(...)` call, takes its id over from the adoption, and the typed numbers
-in the prose move into gen_stats.py as `#s()` reads (the `unaccounted-number`
-warnings from `just prose-check` are the worklist).
+Every asset the Technical Note references now has a generator that calls
+`record()`. The assets still marked **adopted** (`origin.by = "adopted"` in
+assets.json) are the retired figures and tables kept for the archive, plus the
+three hand-maintained SI tables (`tbl.commands`, `tbl.datasets`,
+`tbl.versions`) — edit those by hand, then `just adopt note="..."`. Result values in the
+prose already use `#s()` reads: `gen_stats.py` derives reproducible values, and
+hand-entered registry entries carry provenance notes when the generating
+analysis is external or no longer retained. Use `#lit("...")` only for deliberate
+protocol constants and identifiers; `just prose-check` reports anything else.
 
 ## Never do these
 

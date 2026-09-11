@@ -1,27 +1,16 @@
 #!/usr/bin/env python3
-"""figS1_fdp_curves.png -- per-dataset protein FDR calibration, all six datasets.
+"""Per-dataset calibration across all primary random draws.
 
-fig4a pooled the six DirectMS1 benchmark datasets; this breaks the same curve
-out one small panel per dataset so a reader can see which dataset drives the
-pooled behaviour. Axes are identical to fig4a:
-
-    x = engine-REPORTED protein q-value (uno's own `q_value` column;
-        ms1searchpy's own pyteomics target/decoy FDR, reproduced exactly)
-    y = entrapment-corrected empirical FDP (yeast entrapment, DB-size
-        corrected, running-min q) -- scoring copied verbatim from
-        benchmark/entrapment.py
-
-A curve above the dashed y = x line means the engine's reported FDR is
-OPTIMISTIC on that dataset.
-
-Data: benchmark/results/uno_*.tsv,
-      benchmark/results/ms1_<dataset>_rep{1,2,3}/*_proteins_full.tsv
-
-Run:  .venv/bin/python paper/scripts/figures/figS1_fdp_curves.py
+Thin step curves show individual uno seeds and ms1searchpy reruns. Bold curves
+are pointwise medians, evaluated only where all runs have a nonempty accepted
+list. Open circles retain every draw at reported 1% and 5%. Inputs are protein
+outputs inventoried by benchmark/results/spread.tsv; seed_data validates their
+depths against that inventory. Writes figdata/entrapment_curves.tsv for stats.
 """
 
 from __future__ import annotations
 
+import os
 import pathlib
 import sys
 
@@ -32,6 +21,8 @@ import matplotlib.pyplot as plt  # noqa: E402
 
 import style  # noqa: E402
 import entrapment_data as ed  # noqa: E402
+import seed_data
+from _assets import record  # noqa: E402
 
 XLIM = (1.5e-3, 0.32)
 # FDP is a count ratio, so it can be exactly 0 (no yeast accepted at all), which
@@ -52,23 +43,35 @@ def draw(ax, ds, runs, show_x, show_y):
     ax.fill_between(diag, diag, YLIM[1] * 1.4, color=style.C["light"],
                     alpha=0.55, lw=0, zorder=0)
     ax.plot(diag, diag, ls=(0, (4, 2)), lw=0.9, color=style.C["neutral"], zorder=2)
-    ax.axvline(0.01, color=style.C["neutral"], lw=0.5, alpha=0.35, zorder=1)
+    for op in (0.01, 0.05):
+        ax.axvline(op, color=style.C["neutral"], lw=0.5, alpha=0.35, zorder=1)
 
     def clamp(v):
         return np.maximum(np.asarray(v, float), FLOOR)
 
-    for i, m in enumerate(runs["ms1"]):
-        xs, ys = m.calibration()
-        ax.plot(xs, clamp(ys), color=style.C["ms1searchpy"], lw=0.85, alpha=0.9,
-                zorder=3, label="ms1searchpy (3 reps)" if i == 0 else None)
-    u = runs["uno"]
-    xs, ys = u.calibration()
-    ax.plot(xs, clamp(ys), color=style.C["uno"], lw=1.6, zorder=5, label="uno")
-
-    # the reported-1% readout for this dataset
-    _, _, e_uno = u.at_reported(0.01)
-    ax.plot([0.01], [max(e_uno, FLOOR)], marker="o", ms=4.6, mfc="white",
-            mec=style.C["uno"], mew=1.3, zorder=7)
+    grid = np.unique(np.r_[np.geomspace(*XLIM, 250), 0.01, 0.05])
+    for engine, label in (("uno", "uno"), ("ms1", "ms1searchpy")):
+        matrix = []
+        for run in runs[engine]:
+            xs, ys = run.calibration()
+            xs, ys = np.asarray(xs), np.asarray(ys)
+            ax.step(xs, clamp(ys), where="post", color=style.C[label], lw=0.6,
+                    alpha=0.25, zorder=3)
+            indices = np.searchsorted(xs, grid, side="right") - 1
+            sampled = np.where(indices >= 0, ys[np.maximum(indices, 0)], np.nan)
+            matrix.append(sampled)
+            for op in (0.01, 0.05):
+                human, _, fdp = run.at_reported(op)
+                if human:
+                    ax.plot(op, max(fdp, FLOOR), "o", ms=2.5, mfc="white",
+                            mec=style.C[label], mew=0.6, zorder=6)
+        matrix = np.asarray(matrix)
+        # Draw medians only where all searches have a nonempty accepted list.
+        valid = np.all(np.isfinite(matrix), axis=0)
+        ax.plot(grid[valid], clamp(np.median(matrix[:, valid], axis=0)),
+                color=style.C[label], lw=1.6, zorder=5, label=label)
+    ax.text(0.97, 0.05, f"n={len(runs['uno'])} / {len(runs['ms1'])}",
+            transform=ax.transAxes, ha="right", fontsize=6)
 
     ax.set_xlim(*XLIM)
     ax.set_ylim(*YLIM)
@@ -86,7 +89,7 @@ def draw(ax, ds, runs, show_x, show_y):
 
 
 def main():
-    data = ed.load_all()
+    data = seed_data.load()
     fig, axes = plt.subplots(2, 3, figsize=(style.W2, 4.7))
     for i, ds in enumerate(ed.DATASETS):
         r, c = divmod(i, 3)
@@ -95,7 +98,7 @@ def main():
                           y=1.08, fontsize=9)
 
     h, lab = axes[0][0].get_legend_handles_labels()
-    order = [lab.index("uno"), lab.index("ms1searchpy (3 reps)")]
+    order = [lab.index("uno"), lab.index("ms1searchpy")]
     fig.legend([h[i] for i in order], [lab[i] for i in order], ncol=2,
                loc="lower center", bbox_to_anchor=(0.5, 0.038), fontsize=8)
     fig.text(0.5, 0.010, "shaded = engine's reported FDR is optimistic "
@@ -105,12 +108,17 @@ def main():
     fig.subplots_adjust(hspace=0.34, wspace=0.14)
     style.save(fig, "figS1_fdp_curves", tight=False)
 
-    for ds in ed.DATASETS:
-        u = data[ds]["uno"]
-        h, y, e = u.at_reported(0.01)
-        ms = [m.at_reported(0.01)[2] for m in data[ds]["ms1"]]
-        print(f"{ed.SHORT[ds]:6s} uno rep-q 1% -> FDP {e * 100:5.2f}%   "
-              f"ms1 reps -> " + ", ".join(f"{v * 100:.2f}%" for v in ms))
+    # The SI table and every cal.* stat read this; it is written here because
+    # this figure is now the only consumer of the same loaded runs.
+    ed.write_table(style.FIGDATA / "entrapment_curves.tsv", data)
+
+    inputs = seed_data.inputs()
+    record("fig.figs1-fdp-curves", "figures/figS1_fdp_curves.png", kind="figure",
+           inputs=inputs,
+           desc="Per-dataset reported q against entrapment FDP, all six primary datasets")
+    record("fig.figs1-fdp-curves-pdf", "figures/figS1_fdp_curves.pdf", kind="figure",
+           inputs=inputs, desc="Vector twin of the per-dataset FDP curve figure")
+
 
 
 if __name__ == "__main__":

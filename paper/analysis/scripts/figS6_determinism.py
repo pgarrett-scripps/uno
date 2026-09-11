@@ -1,34 +1,36 @@
 #!/usr/bin/env python3
-"""Fig S6 -- run-to-run reproducibility: ms1searchpy's replicate spread vs uno's
-single deterministic value. SI detail behind main-text Section 3.2; the
-scale-free spread panel ((max-min)/median) is panel c of main-text Fig 2.
+"""Fig S6 -- randomization spread, measured the same way for both engines.
+
+WHAT CHANGED AND WHY (2026-09-09). This figure used to plot ms1searchpy's three
+replicates against a single uno point labelled "deterministic". That comparison
+was not fair: uno's byte-identical output came from hardcoded constants (booster
+seed 42, a fixed RANSAC LCG constant, a fixed decoy-shuffle salt, a fixed CV
+fold hash), not from an algorithm with less randomness in it. Locking those
+constants is something either engine can do, so a locked run against an unlocked
+one measures the locking, not the engine.
+
+uno now exposes `--seed`, which perturbs all four stages together (seed 0 = the
+shipped constants). Both engines are therefore drawn the same way here: one open
+marker per independent random draw, a connector spanning min..max, and a tick at
+the median. uno's draws are seeds 0..N; ms1searchpy's are reruns.
 
 Panels:
-  a  depth @1% entrapment FDR, per dataset: ms1searchpy's three replicates
-     (open circles + median tick) against uno's one value (filled diamond)
+  a  depth @1% entrapment FDR, per dataset: uno's seed draws vs ms1searchpy's
+     reruns, both as spreads
   b  same at 5% entrapment FDR
-  c  run10 close-up: the three individual ms1searchpy replicates and uno,
-     @1% and @5%
+  c  where the previously published single uno run (seed 0) falls inside uno's
+     own seed distribution, as a percentile per dataset -- the diagnostic for
+     whether a reported single number was a lucky draw
 
 DATA
-  six benchmark datasets : benchmark/results/summary.tsv (written by
-      benchmark/run.sh; depths scored with benchmark/entrapment.py)
-  run10                  : scored HERE, at run time, straight from the protein
-      tables with benchmark/entrapment.py --
-        uno   benchmark/results/uno_proteins.tsv
-        ms1   benchmark/results/ms1_rep{1,2,3}/run10.features_proteins_full.tsv
-      (run10 predates summary.tsv and is not in it. Values are recomputed rather
-      than transcribed from benchmark/RESULTS.md; they agree with that table:
-      uno 1309/1887, ms1 1220/1941, 1155/1651, 1079/1534.)
-
-uno's determinism claim is a property of the implementation (seeded shuffles,
-fixed fold assignment, order-invariant tiebreaks), not a measured spread: only
-one uno run exists per dataset.
+  benchmark/results/spread.tsv, written by benchmark/spread_table.py, which
+  scores every available uno seed run (benchmark/seed_sweep.sh) and every
+  ms1searchpy replicate directory with benchmark/entrapment.py. Regenerate it
+  before rebuilding this figure; this script does not re-score protein tables.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import sys
 from pathlib import Path
 
@@ -39,11 +41,10 @@ import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
 import style  # noqa: E402
+import seed_data
+from _assets import record
 
-SUMMARY = style.BENCH / "results" / "summary.tsv"
-RUN10_UNO = style.BENCH / "results" / "uno_proteins.tsv"
-RUN10_MS1 = [style.BENCH / "results" / f"ms1_rep{i}" / "run10.features_proteins_full.tsv"
-             for i in (1, 2, 3)]
+SPREAD = style.BENCH / "results" / "spread.tsv"
 
 LABEL = {
     "hela5min_09746": "09746",
@@ -55,64 +56,60 @@ LABEL = {
     "run10": "run10",
 }
 
-
-def _entrapment():
-    """Import benchmark/entrapment.py as a module (it is not a package)."""
-    path = style.BENCH / "entrapment.py"
-    spec = importlib.util.spec_from_file_location("entrapment", path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+# A spread is only a spread with more than one draw; a dataset carrying a single
+# run of an engine is plotted as a lone marker and excluded from panel c.
+MIN_DRAWS = 3
 
 
-def score(path: Path) -> dict[float, int]:
-    """Entrapment depth at 1% and 5% for one protein table."""
-    e = _entrapment()
-    out, _, _ = e.curve(e.load(str(path)))
-    return out
+def load() -> pd.DataFrame:
+    if not SPREAD.exists():
+        raise SystemExit(
+            f"missing {SPREAD}\nrun: python3 benchmark/spread_table.py")
+    df = pd.DataFrame(seed_data.rows())
+    for col in ("draw", "depth_1pct", "depth_5pct"):
+        df[col] = df[col].astype(int)
+    missing = set(df["dataset"]) - set(LABEL)
+    if missing:
+        raise SystemExit(f"unlabelled datasets in {SPREAD}: {sorted(missing)}")
+    return df
 
 
-def collect() -> pd.DataFrame:
-    """Long table: dataset, tool, rep, depth_1pct, depth_5pct."""
-    df = pd.read_csv(SUMMARY, sep="\t")[
-        ["dataset", "tool", "rep", "depth_1pct", "depth_5pct"]
-    ]
-    rows = []
-    u = score(RUN10_UNO)
-    rows.append(dict(dataset="run10", tool="uno", rep=1,
-                     depth_1pct=u[0.01], depth_5pct=u[0.05]))
-    for i, p in enumerate(RUN10_MS1, start=1):
-        m = score(p)
-        rows.append(dict(dataset="run10", tool="ms1", rep=i,
-                         depth_1pct=m[0.01], depth_5pct=m[0.05]))
-    return pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
+def draws(df: pd.DataFrame, dataset: str, engine: str, col: str) -> np.ndarray:
+    sel = df[(df.dataset == dataset) & (df.engine == engine)][col]
+    return np.asarray(sel, dtype=float)
 
 
 def main() -> int:
-    df = collect()
+    df = load()
     datasets = [d for d in LABEL if d in set(df["dataset"])]
     x = np.arange(len(datasets), dtype=float)
 
     fig, axes = plt.subplots(1, 3, figsize=(style.W2, 2.9))
 
-    # -- a, b: absolute depth, ms1 spread vs uno's single value ---------------
+    # -- a, b: both engines as spreads over independent draws -----------------
     for pi, (col, ylab) in enumerate([
         ("depth_1pct", "proteins @ 1% entrapment FDR"),
         ("depth_5pct", "proteins @ 5% entrapment FDR"),
     ]):
         ax = axes[pi]
         for i, d in enumerate(datasets):
-            reps = df[(df.dataset == d) & (df.tool == "ms1")][col].astype(float)
-            style.spread_marker(
-                ax, x[i] + 0.16, reps.to_numpy(), style.C["ms1searchpy"],
-                half_width=0.15,
-                label="ms1searchpy replicates" if (pi == 0 and i == 0) else None,
-                median_label="ms1searchpy median" if (pi == 0 and i == 0) else None,
-            )
-            uno = float(df[(df.dataset == d) & (df.tool == "uno")][col].iloc[0])
-            ax.plot(x[i] - 0.16, uno, marker="D", ms=4, color=style.C["uno"],
-                    ls="none", zorder=6,
-                    label="uno (1 run, deterministic)" if (pi == 0 and i == 0) else None)
+            for engine, off, first_label, first_med in [
+                ("uno", -0.16, "uno seeds", "uno median"),
+                ("ms1searchpy", 0.16, "ms1searchpy reruns", "ms1searchpy median"),
+            ]:
+                v = draws(df, d, engine, col)
+                if v.size == 0:
+                    continue
+                lab = first_label if (pi == 0 and i == 0) else None
+                mlab = first_med if (pi == 0 and i == 0) else None
+                if v.size == 1:
+                    ax.plot(x[i] + off, v[0], ls="none", marker="o", mfc="white",
+                            mec=style.C[engine], mew=0.9, ms=3.4, zorder=4,
+                            label=lab)
+                else:
+                    style.spread_marker(ax, x[i] + off, v, style.C[engine],
+                                        half_width=0.12, jitter=0.022, label=lab,
+                                        median_label=mlab)
         ax.set_xticks(x)
         ax.set_xticklabels([LABEL[d].replace("\n", " ") for d in datasets],
                            fontsize=6, rotation=45, ha="right")
@@ -120,35 +117,49 @@ def main() -> int:
         ax.set_xlim(-0.6, len(datasets) - 0.4)
         ax.margins(y=0.18)
         style.panel_label(ax, "abc"[pi], x=-0.19)
-    axes[0].legend(loc="upper left", fontsize=6)
+    axes[0].legend(loc="upper left", fontsize=5.6)
 
-    # -- c: run10 close-up ----------------------------------------------------
+    # -- c: is the published seed-0 run a typical draw? -----------------------
+    # Percentile of the seed-0 depth within uno's own seed distribution. 50 is a
+    # median draw; near 100 means the published single number sat at the top of
+    # the distribution and overstated what a fresh seed would give.
     ax = axes[2]
-    r10 = df[df.dataset == "run10"]
-    cats = ["uno", "rep 1", "rep 2", "rep 3"]
-    xr = np.arange(4, dtype=float)
-    colors = [style.C["uno"]] + [style.C["ms1searchpy"]] * 3
-    for col, off, hatch, lab in [
-        ("depth_1pct", -0.19, None, "@ 1% FDR"),
-        ("depth_5pct", 0.19, "///", "@ 5% FDR"),
-    ]:
-        vals = [float(r10[(r10.tool == "uno")][col].iloc[0])] + [
-            float(r10[(r10.tool == "ms1") & (r10.rep == i)][col].iloc[0]) for i in (1, 2, 3)
-        ]
-        b = ax.bar(xr + off, vals, 0.34, color=colors, edgecolor="white",
-                   hatch=hatch, linewidth=0.4, zorder=2)
-        ax.bar_label(b, fmt="%d", fontsize=5.6, padding=1, rotation=90)
-        ax.bar(np.nan, np.nan, color=style.C["light"], hatch=hatch,
-               edgecolor="white", label=lab)
-    ax.set_xticks(xr)
-    ax.set_xticklabels(cats, fontsize=6.5)
-    ax.set_ylabel("proteins (run10)")
-    ax.set_xlabel("run10: uno vs 3 reruns")
-    ax.set_ylim(0, 2500)
-    ax.legend(loc="upper right", fontsize=6)
+    labels, pcts = [], []
+    for d in datasets:
+        v = draws(df, d, "uno", "depth_1pct")
+        seed0 = df[(df.dataset == d) & (df.engine == "uno") & (df.draw == 0)]
+        if v.size < MIN_DRAWS or seed0.empty:
+            continue
+        s0 = float(seed0["depth_1pct"].iloc[0])
+        labels.append(LABEL[d].replace("\n", " "))
+        pcts.append(100.0 * float((v < s0).sum()) / (v.size - 1))
+    if labels:
+        y = np.arange(len(labels), dtype=float)
+        ax.barh(y, pcts, 0.6, color=style.C["uno"], edgecolor="white",
+                linewidth=0.4, zorder=2)
+        ax.axvline(50, color=style.C["neutral"], lw=0.9, ls="--", zorder=3)
+        ax.set_yticks(y)
+        ax.set_yticklabels(labels, fontsize=6.5)
+        ax.set_xlim(0, 100)
+        ax.set_xlabel("other sampled seeds below\nthe default run (%)",
+                      fontsize=6.5)
+        ax.invert_yaxis()
+        for yi, p in zip(y, pcts):
+            ax.text(p - 2 if p >= 80 else p + 2, yi, f"{p:.0f}", va="center",
+                    ha="right" if p >= 80 else "left", fontsize=5.6,
+                    color="white" if p >= 80 else "black")
+    else:
+        ax.text(0.5, 0.5, "no dataset has enough uno seeds yet",
+                ha="center", va="center", transform=ax.transAxes, fontsize=7)
+        ax.set_xticks([])
+        ax.set_yticks([])
     style.panel_label(ax, "c", x=-0.19)
 
     style.save(fig, "figS6_determinism")
+    for suffix, ext in (("", "png"), ("-pdf", "pdf")):
+        record(f"fig.figs6-determinism{suffix}", f"figures/figS6_determinism.{ext}",
+               kind="figure", inputs=["../benchmark/results/spread.tsv"],
+               desc="Primary seed/rerun depth distributions and default-seed ranks")
     return 0
 
 

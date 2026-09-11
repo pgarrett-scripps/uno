@@ -48,20 +48,21 @@ stats:
 
 # Tables -> ../si/*.typ.
 #
-# There are no table generators yet. The tables in ../si/ are hand-transcribed
-# from the benchmark outputs, and two of them carry a "GENERATED ... do not edit
-# by hand" header that no script on disk produces -- see paper/SUBMISSION_TODO.md
-# item D1, which is either to write the generator or to correct the label. This
-# recipe is the place the generators go when they are written: match
-# `gen_*_table.py` and they are picked up with no further wiring.
+# Every results table is generated: the primary draw summaries and per-draw
+# calibration counts (gen_variability_table.py), the serialized resource cohort
+# (gen_perdataset_table.py) and the RT feature table (gen_rt_features_table.py).
+# The three that remain hand-maintained describe the environment rather than a
+# result -- si/commands.typ, si/datasets.typ and si/versions.typ -- and are
+# adopted assets, edited by hand and re-recorded with `just adopt`. A new
+# generator needs no wiring: match `gen_*_table.py`.
 tables:
   #!/usr/bin/env bash
   set -euo pipefail
   shopt -s nullglob
   gens=(scripts/gen_*_table.py)
   if [ ${#gens[@]} -eq 0 ]; then
-    echo "no table generators yet (../si/*.typ are hand-transcribed; see SUBMISSION_TODO D1)"
-    exit 0
+    echo "no table generators found (expected scripts/gen_*_table.py)"
+    exit 1
   fi
   for s in "${gens[@]}"; do
     echo "-> $s"

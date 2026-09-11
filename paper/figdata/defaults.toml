@@ -1,9 +1,10 @@
 # Every uno setting that has a default, with that default, read from
-# DigestConfig::default(), MatchingConfig::default() and ScoreConfig::default()
-# rather than transcribed from example_config.toml. The identification benchmark
-# overrides only the three [digest] fields listed in the configuration above, two
-# of which differ from the default shown here (max_len 50 -> 30; missed_cleavages
-# is already 0).
+# DigestConfig::default(), MatchConfig::default() and ScoreConfig::default() at
+# the pinned commit rather than transcribed from example_config.toml. The
+# identification benchmark overrides only the three [digest] fields listed in the
+# configuration above, two of which differ from the default shown here
+# (max_len 50 -> 30; missed_cleavages is already 0). Searches at a nonzero seed
+# set decoy_seed and scoring.seed to that value and change nothing else.
 
 [digest]
 # Fully-tryptic with no variable modifications, following the DirectMS1 convention.
@@ -26,6 +27,8 @@ decoy_mass_shift = 11.0
 decoy_shuffle = true
 decoy_method = "shuffle"
 decoy_order = 2
+# The decoy stream's own seed. `--seed N` sets this and `scoring.seed` together.
+decoy_seed = 0
 
 [matching]
 ppm_tolerance = 10.0
@@ -33,6 +36,12 @@ isotope_offsets = [-1, 0, 1]
 min_charge = 1
 
 [scoring]
+# Shared seed for the RANSAC calibration sample, the cross-validation folds and
+# the classifier's subsampling. The three optional per-stage overrides below are
+# absent by default and take precedence over `--seed` when they are set.
+seed = 0
+# rt_seed, cv_seed, classifier_seed: unset
+
 # Candidate peptides kept per feature, targets and decoys each, so up to 2*top_k.
 top_k = 50
 
@@ -44,6 +53,12 @@ calibration_fdr = 0.01
 bootstrap_rounds = 2
 seed_min_runs_frac = 0.5
 rt_calibrated = false
+
+# On-data retention-time refit: the shipped model's embedding is frozen and only
+# its readout is refitted on this run's confident identifications.
+ondata_rt = true
+ondata_rt_finetune = true
+ondata_rt_lambda = 1.0
 
 # Learned per-PFM rescorer (cross-validated gradient-boosted trees, pure-Rust
 # sequoia-boost backend) followed by a cumulative-inclusion protein ensemble.

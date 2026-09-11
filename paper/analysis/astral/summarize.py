@@ -51,7 +51,7 @@ def target_rows(path: Path):
 
 
 def reported_fdp(path: Path, engine: str, threshold: float):
-    step = ms1_reported_q(path) if engine == "ms1searchpy" else None
+    step = ms1_reported_q(path) if engine.startswith("ms1searchpy") else None
     human = yeast = 0
     for row, accession in target_rows(path):
         if engine == "uno":
@@ -105,6 +105,17 @@ def main():
             timing = DATA / "logs" / f"{stem}.ms1.rep{rep:02d}.time"
             if output.exists() and timing.exists():
                 rows.append(one_row(stem, "ms1searchpy", rep, output, timing))
+        # External-RT-calibration arm: ms1searchpy with `-pl` on the DIA-NN
+        # MS/MS list (analysis/astral/RT_CALIBRATION.md). These runs were
+        # launched three-way concurrent, so wall/RSS are recorded but are not
+        # comparable to the serialized production timings.
+        pl_root = DATA / "results" / "rt_calibration" / "pl" / stem
+        for rep_dir in sorted(pl_root.glob("rep*")) if pl_root.exists() else []:
+            rep = int(rep_dir.name.removeprefix("rep"))
+            output = rep_dir / f"{stem}.features_proteins_full.tsv"
+            timing = rep_dir / "stderr.log"
+            if output.exists() and timing.exists():
+                rows.append(one_row(stem, "ms1searchpy-pl", rep, output, timing))
     if not rows:
         raise SystemExit("no completed production results")
     out = DATA / "results" / "astral_summary.tsv"

@@ -34,6 +34,7 @@ from __future__ import annotations
 import re
 import sys
 import zipfile
+from xml.dom import minidom
 from pathlib import Path
 
 # The manuscript root, one level up: this file lives in tools/.
@@ -45,6 +46,99 @@ from typst_prose import CITE  # noqa: E402
 
 SRC = ROOT / "paper.resolved.typ"
 OUT = ROOT / "paper.docx"
+
+
+def format_tables(path: Path) -> None:
+    """Restore readable scientific tables after pandoc drops Typst sizing.
+
+    Use the 6.5-inch Word text area, content-specific column widths, and
+    intact rows. Preserve the XML namespaces and every text/math node.
+    """
+    with zipfile.ZipFile(path) as archive:
+        entries = [(info, archive.read(info.filename)) for info in archive.infolist()]
+    doc = minidom.parseString(dict((i.filename, b) for i, b in entries)[
+        "word/document.xml"])
+    ns = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+
+    def children(parent, name):
+        return [n for n in parent.childNodes if n.nodeType == n.ELEMENT_NODE
+                and n.tagName == "w:" + name]
+
+    def set_child(parent, name, **attrs):
+        found = children(parent, name)
+        node = found[0] if found else doc.createElementNS(ns, "w:" + name)
+        if not found:
+            if name.endswith("Pr"):
+                parent.insertBefore(node, parent.firstChild)
+            else:
+                parent.appendChild(node)
+        for key, value in attrs.items():
+            node.setAttributeNS(ns, "w:" + key, str(value))
+        return node
+
+    for table in doc.getElementsByTagName("w:tbl"):
+        rows = children(table, "tr")
+        header = " ".join(n.firstChild.data for n in
+                          rows[0].getElementsByTagName("w:t") if n.firstChild)
+        if header.startswith("Component"):
+            weights = [20, 35, 45]
+        elif header.startswith("Name in text"):
+            weights = [13, 17, 35, 35]
+        elif "Draws" in header:
+            weights = [12, 20, 8, 30, 30]
+        elif "Features" in header:
+            weights = [10, 12, 17, 10, 10, 14, 13, 14]
+        elif "Entrapment FDP" in header:
+            weights = [12, 23, 12, 10, 25, 18]
+        elif "Definition" in header:
+            weights = [6, 25, 55, 14]
+        else:
+            raise ValueError(f"Set Word column widths for new table: {header}")
+        widths = [round(9360 * w / sum(weights)) for w in weights]
+        widths[-1] += 9360 - sum(widths)
+        props = set_child(table, "tblPr")
+        set_child(props, "tblW", w=9360, type="dxa")
+        set_child(props, "tblLayout", type="fixed")
+        margins = set_child(props, "tblCellMar")
+        for side in ("top", "bottom", "left", "right"):
+            set_child(margins, side, w=60, type="dxa")
+        grid = set_child(table, "tblGrid")
+        for col, width in zip(children(grid, "gridCol"), widths, strict=True):
+            col.setAttributeNS(ns, "w:w", str(width))
+        for index, row in enumerate(rows):
+            row_props = set_child(row, "trPr")
+            set_child(row_props, "cantSplit")
+            if index == 0:
+                set_child(row_props, "tblHeader")
+            for cell, width in zip(children(row, "tc"), widths, strict=True):
+                cell_props = set_child(cell, "tcPr")
+                set_child(cell_props, "tcW", w=width, type="dxa")
+                set_child(cell_props, "vAlign", val="center")
+                for paragraph in cell.getElementsByTagName("w:p"):
+                    pp = set_child(paragraph, "pPr")
+                    set_child(pp, "spacing", before=0, after=0, line=240,
+                              lineRule="auto")
+                for run in cell.getElementsByTagName("w:r"):
+                    rp = set_child(run, "rPr")
+                    set_child(rp, "sz", val=20)
+                    set_child(rp, "szCs", val=20)
+    # Typst block spacing becomes empty Word paragraphs. Keep those with the
+    # following content so a heading cannot be stranded before a figure.
+    body = doc.getElementsByTagName("w:body")[0]
+    for paragraph in children(body, "p"):
+        pp = set_child(paragraph, "pPr")
+        styles = children(pp, "pStyle")
+        style = styles[0].getAttribute("w:val") if styles else ""
+        drawings = paragraph.getElementsByTagName("w:drawing")
+        empty = not paragraph.getElementsByTagName("w:t") and not drawings
+        if style.startswith("Heading") or drawings or empty:
+            set_child(pp, "keepNext", val=1)
+        if style == "ImageCaption":
+            set_child(pp, "keepLines", val=1)
+    xml = doc.toxml(encoding="utf-8")
+    with zipfile.ZipFile(path, "w") as archive:
+        for info, data in entries:
+            archive.writestr(info, xml if info.filename == "word/document.xml" else data)
 
 
 def split_bibliography(src: str) -> tuple[str, list[str], str | None]:
@@ -131,6 +225,7 @@ def main() -> int:
     import pypandoc
     pypandoc.convert_text(src, "docx", format="typst",
                           outputfile=str(OUT), extra_args=args)
+    format_tables(OUT)
 
     # Trust, then verify: count what actually landed in the file.
     with zipfile.ZipFile(OUT) as z:

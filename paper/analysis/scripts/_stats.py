@@ -253,7 +253,8 @@ class Stats:
                 f"  Usually a unit error or a changed denominator. Widen the "
                 f"band in stats.json if the new value is genuinely right.")
 
-    def write(self, out: Path | None = None, *, inputs: list[str] = ()) -> int:
+    def write(self, out: Path | None = None, *, inputs: list[str] = (),
+              keep_hand_ids: set[str] | None = None) -> int:
         """Merge these values into stats.json and report what is unguarded.
 
         MERGES rather than overwrites, twice over. Entries whose `origin.by`
@@ -265,7 +266,10 @@ class Stats:
         value.
 
         Top-level blocks this script does not own (`pinned` above all) are
-        carried through unchanged.
+        carried through unchanged. By default all hand-entered values are also
+        retained. A manuscript that deliberately removes a branch may pass
+        `keep_hand_ids` to prune retired hand values while preserving the named
+        live set.
         """
         # PAPER_STATS_OUT redirects the write, which is how tools/check_stats.py
         # re-derives the generated values into a scratch file and diffs them
@@ -315,6 +319,8 @@ class Stats:
                 # script that declares it now, which is what makes upgrading
                 # an existing stats.json a no-op rather than a conflict.
                 prior[id] = rec
+            elif by == "hand" and keep_hand_ids is not None and id not in keep_hand_ids:
+                continue
             else:
                 kept[id] = rec
 

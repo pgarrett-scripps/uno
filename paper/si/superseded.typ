@@ -10,23 +10,23 @@
   table.header([Measurement], [Value], [Superseded by]),
   [ms1searchpy protein count, six repeats on one koth feature set],
   [152, 153, 155, 188, 203, 303],
-  [Reproducibility (Section 3.2)],
+  [Current reproducibility benchmark],
 
   [uno protein count on the same feature set],
   [175--179],
-  [Reproducibility (Section 3.2)],
+  [Current reproducibility benchmark],
 
   [Frozen RT model with monotone calibration, koth-aligned matrix],
   [39 proteins at 1%],
-  [Head-to-head benchmark (Section 3.1)],
+  [Current head-to-head benchmark],
 
   [Fresh composition-feature ridge refit on the same matrix],
   [9 proteins at 1%],
-  [Head-to-head benchmark (Section 3.1)],
+  [Current head-to-head benchmark],
 
   [Readout fine-tune over the frozen embedding, same matrix],
   [59 proteins at 1%],
-  [Head-to-head benchmark (Section 3.1)],
+  [Current head-to-head benchmark],
 
   [Ridge-penalty sweep of the readout fine-tune],
   [$lambda = 1 -> 59$, $10 -> 56$, $100 -> 19$, $1000 -> 4$],
@@ -34,5 +34,5 @@
 
   [Entrapment of the frozen and fine-tuned RT paths],
   [34 and 38 real proteins, 0 yeast in both],
-  [Entrapment calibration (Section 3.3)],
+  [Current entrapment-calibration analysis],
 )
