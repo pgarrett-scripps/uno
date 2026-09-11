@@ -1,5 +1,10 @@
 # URTC retention-time CNN
 
+For the supported CLI/API workflow, see [Custom RT models](../docs/rt-models.md).
+`uno rt train` adapts this CNN and exports a self-describing URTC v3 artifact;
+search embeds the shipped model and needs no Python. Historical benchmarks below
+use earlier scoring configurations and should not be treated as current results.
+
 A sequence-aware RT model for uno, trained on **experimental iRT** (not distilled
 from DeepLC): learned AA embedding → residual dilated Conv1d stack → masked
 mean+max pool → MLP head. Pure-Rust inference in [`crates/uno-core/src/rt_cnn.rs`](../crates/uno-core/src/rt_cnn.rs)
@@ -16,17 +21,16 @@ better than absolute-position one-hot. AA-only — C is implicitly carbamidometh
   N_GLOBAL=11). Best in-domain val MAE (0.447). ⚠️ On the run10 honest benchmark it
   scores 248 @1% — LOWER than the 5-feature variant (401) and the no-global baseline
   (259); shipped by explicit product decision (val-MAE / broader-generalization
-  rationale), not because it wins run10. The build expects N_GLOBAL=11, so this is
-  the only global model it loads. See "Global features" below.
+  rationale), not because it wins run10. The build computes 11 global features and also loads the historical
+  5-feature prefix models. See "Global features" below.
 - `rt_cnn_chrono_global_ch32.urtc` — 5-feature variant (URTC v2, N_GLOBAL=5). Best
   run10 depth of any model tested: **401 @1%** (+55% over baseline). Superseded as
-  default by v3 above; **does NOT load with the current N_GLOBAL=11 build** (kept for
-  the record / rebuild if reverting to 5 features).
+  default by v3 above; loads with the current build through the supported 5-feature prefix.
 - `rt_cnn_chrono_ch32.urtc` — original plain ch32, no global feats (URTC v1, still
   loadable): Chronologer corpus, 259 @1% on run10. ~40k params, 60k pred/s.
 - `rt_cnn_chrono_global_ch64.urtc` — ch64 + 5 global feats. Best val MAE among the
   v2 set (0.423) but REGRESSES in-search (229 @1%): ch64 overfits, loses under domain
-  shift. Do NOT use; also N_GLOBAL=5 so won't load with the current build.
+  shift. Do NOT use; uses the supported N_GLOBAL=5 feature prefix.
 - `rt_cnn_chrono_ch64.urtc` — plain ch64: +12% depth (760 vs 670) under the OLD config below, 4x slower.
 - `rt_cnn_chrono_ch16.urtc` — same data, ch=16: fastest (205k pred/s) but loses depth.
 - `rt_cnn_ch32.urtc` / `rt_cnn_ch64.urtc` — OLD, Prosit-iRT-only. Do NOT use: they
@@ -90,7 +94,7 @@ Full A/B (run10, same config; honest yeast-entrapment FDR):
 **v3 (11 global) is the SHIPPED default** by product decision despite the lower run10
 depth — it has the best in-domain val MAE and its features are domain-invariant
 physics (rationale: broader-dataset generalization). If optimizing run10 depth
-specifically, rebuild with N_GLOBAL=5 and use `rt_cnn_chrono_global_ch32.urtc` (401).
+specifically, use `rt_cnn_chrono_global_ch32.urtc` (401).
 To push RT further, don't pile on global scalars — ablate + add order-aware/atom
 encoding one change at a time.
 

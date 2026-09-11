@@ -1,0 +1,6 @@
+hela5min_09766 QEHF1_09766_JB.raw 221181261 ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD015669/QEHF1_09766_JB.raw
+hela5min_09778 QEHF1_09778_JB.raw 197824799 ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD015669/QEHF1_09778_JB.raw
+hela5min_09950 QEHF1_09950_JB.raw 165415028 ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD015669/QEHF1_09950_JB.raw
+hela5min_09734 QEHF1_09734_JB.raw 212029570 ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD015669/QEHF1_09734_JB.raw
+hela5min_09746 QEHF1_09746_JB.raw 97234823 ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2020/02/PXD015669/QEHF1_09746_JB.raw
+faims_LUM2_05433_VG LUM2_05433_VG.raw 122485758 ftp://ftp.pride.ebi.ac.uk/pride/data/archive/2021/03/PXD023977/LUM2_05433_VG.raw

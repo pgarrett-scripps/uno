@@ -186,6 +186,7 @@ pub struct RtCnn {
     head0: Linear,
     head2: Linear,
     n_global: usize, // 0 for URTC v1; N_GLOBAL for v2
+    info: serde_json::Value,
 }
 
 struct Cur<'a> {
@@ -206,10 +207,14 @@ impl<'a> Cur<'a> {
         Ok(f32::from_le_bytes(v.try_into().unwrap()))
     }
     fn f32s(&mut self, n: usize) -> Result<Vec<f32>> {
-        let e = self.p + 4 * n;
+        let e = n.checked_mul(4).and_then(|n| self.p.checked_add(n)).context("URTC array size overflow")?;
         let v = self.b.get(self.p..e).context("truncated (f32 array)")?;
         self.p = e;
-        Ok(v.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
+        let values: Vec<f32> = v.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+        if values.iter().any(|x| !x.is_finite()) {
+            bail!("URTC contains nonfinite weights");
+        }
+        Ok(values)
     }
 }
 
@@ -234,32 +239,68 @@ impl RtCnn {
         let path = path.as_ref();
         let bytes = std::fs::read(path)
             .with_context(|| format!("reading rt cnn model {}", path.display()))?;
-        let mut c = Cur { b: &bytes, p: 0 };
+        Self::from_bytes(&bytes)
+    }
+
+    /// Load a CNN without a filesystem dependency (including the bundled model).
+    pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        let mut c = Cur { b: bytes, p: 0 };
         if c.b.get(0..4) != Some(&MAGIC[..]) {
-            bail!("{}: not a URTC model", path.display());
+            bail!("not a URTC CNN model");
         }
         c.p = 4;
         let version = c.u32()?;
-        if version != 1 && version != 2 {
+        if !matches!(version, 1..=3) {
             bail!("URTC version {version} unsupported");
         }
         let y_mean = c.f32()?;
         let y_std = c.f32()?;
+        if !y_mean.is_finite() || !y_std.is_finite() || y_std <= 0.0 {
+            bail!("invalid URTC normalization");
+        }
         let emb = c.u32()?;
         let ch = c.u32()?;
         let k = c.u32()?;
         let n_blocks = c.u32()?;
+        if !(1..=1024).contains(&emb) || !(1..=1024).contains(&ch)
+            || !(1..=31).contains(&k) || k % 2 == 0 || n_blocks > 32 {
+            bail!("invalid or unsupported CNN dimensions");
+        }
         let dils: Vec<usize> = (0..n_blocks).map(|_| c.u32()).collect::<Result<_>>()?;
         let head = c.u32()?;
+        if !(1..=4096).contains(&head) || dils.iter().any(|d| !(1..=1024).contains(d)) {
+            bail!("invalid CNN head or dilations");
+        }
         // v2 stores the count of appended global features right after `head`.
         let n_global = if version >= 2 { c.u32()? } else { 0 };
         // `global_feats` computes the full N_GLOBAL-length vector; the 5-feature
         // (v2) set is a strict PREFIX of the 11-feature (v3) set (same order/
         // formulas), so any model with n_global <= N_GLOBAL loads by slicing the
         // computed features to the header's declared count (see `pool`).
-        if n_global > N_GLOBAL {
+        if !matches!(n_global, 0 | 5 | N_GLOBAL) {
             bail!("URTC declares {n_global} global features, this build computes at most {N_GLOBAL}");
         }
+        let metadata = if version == 3 {
+            let len = c.u32()?;
+            if len > 64 * 1024 * 1024 {
+                bail!("URTC metadata exceeds 64 MiB");
+            }
+            let end = c.p.checked_add(len).context("URTC metadata length overflow")?;
+            let metadata: serde_json::Value = serde_json::from_slice(
+                bytes.get(c.p..end).context("truncated URTC metadata")?
+            ).context("invalid URTC metadata JSON")?;
+            c.p = end;
+            if metadata["feature_schema"] != "uno-aa-global-v1"
+                || metadata["sequence_encoding"] != "canonical-aa-fixed-cam" {
+                bail!("unsupported URTC feature schema or sequence encoding");
+            }
+            metadata
+        } else { serde_json::json!({}) };
+        let info = serde_json::json!({
+            "format": "URTC", "version": version,
+            "architecture": {"emb": emb, "ch": ch, "k": k, "blocks": dils, "head": head, "n_global": n_global},
+            "normalization": {"mean": y_mean, "std": y_std}, "metadata": metadata
+        });
         let head_in = 2 * ch + n_global;
 
         let emb_w = c.f32s((NAA + 1) * emb)?;
@@ -275,8 +316,11 @@ impl RtCnn {
         if c.p != bytes.len() {
             bail!("URTC: {} trailing bytes", bytes.len() - c.p);
         }
-        Ok(RtCnn { y_mean, y_std, emb, ch, emb_w, stem, blocks, head0, head2, n_global })
+        Ok(RtCnn { y_mean, y_std, emb, ch, emb_w, stem, blocks, head0, head2, n_global, info })
     }
+
+    /// Architecture, normalization and recorded training provenance.
+    pub fn info(&self) -> &serde_json::Value { &self.info }
 
     /// Pooled 2*ch feature vector for a sequence (masked mean ++ masked max),
     /// written into `buf.pooled`.

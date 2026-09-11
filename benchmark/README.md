@@ -27,8 +27,17 @@ scored by **yeast entrapment** on **depth and time**.
   `/usr/bin/time -v`.
 
 **Fairness controls**
-- ms1searchpy is **non-deterministic** (random decoy shuffle + random HP search),
-  so it is run **N=3 replicates** (median + range); uno is byte-deterministic → 1 run.
+- **Both engines are randomized, and both are measured as spreads.** uno's
+  byte-identical output is a property of its default seed, not of the algorithm:
+  `uno --seed N` perturbs the decoy shuffle, RANSAC sampling, CV folds and
+  booster subsampling together (seed 0 = the shipped constants, so published
+  numbers still reproduce). `seed_sweep.sh` runs uno over N seeds,
+  `ms1_extra_reps.sh` runs ms1searchpy over N replicates, and
+  `spread_table.py` scores both into `results/spread.tsv`. Comparing one locked
+  uno run against three unlocked ms1searchpy runs measures the locking, not the
+  engines. `ms1_seeded.py` shows the converse: ms1searchpy also becomes
+  reproducible once its generator, its hyperparameter search, LightGBM, and
+  `PYTHONHASHSEED` are all pinned.
 - Runs are **serialized** — no concurrent load corrupting the timings.
 
 ## Datasets
@@ -89,3 +98,45 @@ logs under `results/`.
 Drop `data/<name>.features.tsv` (biosaur2, HeLa, with quality columns) into `data/`.
 `run.sh` auto-discovers every `data/*.features.tsv`; the FASTA and everything else stay
 the same.
+
+### Variability in the manuscript
+
+The six primary files use the complete draw inventory in `results/spread.tsv`
+(11 uno seeds per file, 3–4 comparator runs). The inventory drives depth,
+protein-list overlap, and per-run calibration. Resource plots retain only the
+original serialized searches in `results/summary.tsv`.
+
+`variability_extension.py` measures seeds 0, 1, 2 for both feature sources on
+all 18 primary/Astral files. It reuses archived seed-zero outputs and the
+primary biosaur2 sweep, then runs the 60 missing searches two at a time. Run
+from `paper/analysis` with `uv run ../../benchmark/variability_extension.py`.
+Successful outputs carry command and SHA-256 provenance; `--summarize` validates
+and re-scores them. New outputs stay in `results/variability_extension/`.
+Concurrent timings are excluded from resource claims. Within-file seeds and
+between-file acquisition variation are kept separate in the Astral figure.
+
+### Engine stability study
+
+`stability_study.py` compares two frozen binaries on matched feature files and
+seeds, records commands and SHA-256 hashes, and resumes only matching outputs.
+It writes per-run depth, reported-list entrapment FDP, paired differences, and
+within-file protein overlap. Empty lists and undefined FDP stay distinct.
+
+```sh
+python3 benchmark/stability_study.py \
+  --baseline /path/to/baseline/uno --candidate /path/to/candidate/uno \
+  --output benchmark/results/new-study/lowinput \
+  --datasets lowinput --seeds 0-4 --jobs 2 --threads 4 \
+  --env UNO_RT_CACHE_DIR=/tmp/uno-rt-cache
+```
+
+Run `--datasets primary --seeds 0-2` in a separate output directory for the
+primary guard panel. Optional `--baseline-study DIR` copies only verified matching
+baseline results; missing seeds run afresh and every candidate search stays fresh.
+For the accepted V3 validation, specify `--seeds 0-8 --held-out-seeds 7-8` and pass
+`--lowinput-seed-count 9 --protect-discoveries` to the report.
+`stability_report.py --studies DIR/lowinput DIR/primary
+--protocol PATH/TO/FROZEN-PLAN.md --output DIR/report` verifies completed
+outputs and evaluates the documented acceptance checks. `plot_stability.py`
+renders every low-input seed in standalone figures using the paper analysis
+environment. See [the study protocol and findings](../docs/stability-study.md).

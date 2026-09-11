@@ -27,6 +27,8 @@ decoy_mass_shift = 11.0
 decoy_shuffle = true
 decoy_method = "shuffle"
 decoy_order = 2
+# Independent decoy stream; --seed overrides this and scoring.seed together.
+decoy_seed = 0
 
 [matching]
 ppm_tolerance = 10.0
@@ -34,6 +36,16 @@ isotope_offsets = [-1, 0, 1]
 min_charge = 1
 
 [scoring]
+# Shared scoring fallback seed. With no overrides, --seed N perturbs decoys,
+# RANSAC, CV folds, and classifier sampling together, as in earlier versions.
+seed = 0
+# Optional stage overrides take precedence even when --seed is provided. Leave
+# them absent to preserve the shared-seed behavior. Explicit 0 pins a stage to
+# its historical stream while other stages vary; useful for controlled ablations.
+# rt_seed = 0          # RANSAC RT-calibration sampling
+# cv_seed = 0          # cross-validation fold assignment
+# classifier_seed = 0  # Sequoia/LightGBM sampling and LightGBM parameter search
+
 # Candidate peptides kept per feature (targets and decoys each, so up to 2*top_k
 # candidates per feature) before the discriminant. Too low silently drops real
 # peptides before RT can rescue them: entrapment (human+yeast, single-run HeLa)

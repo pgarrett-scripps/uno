@@ -910,6 +910,8 @@ dependencies = [
 [[package]]
 name = "dnoise"
 version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ff774606904d2ff8481e0247bc0ce271fca2caaa83851a588af59dcbf37a016a"
 dependencies = [
  "rayon",
  "rusqlite",
@@ -1503,7 +1505,7 @@ dependencies = [
 
 [[package]]
 name = "koth_ff"
-version = "0.1.0"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arrow",
@@ -2839,10 +2841,14 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "csv",
  "env_logger",
  "koth_ff",
  "log",
  "serde",
+ "serde_json",
+ "sha2",
+ "tempfile",
  "toml",
  "uno-core",
 ]
@@ -2860,6 +2866,7 @@ dependencies = [
  "sage-core",
  "sequoia-boost",
  "serde",
+ "serde_json",
  "uno-lightgbm-sys",
 ]
 

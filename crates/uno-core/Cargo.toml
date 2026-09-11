@@ -7,6 +7,7 @@ authors.workspace = true
 
 [dependencies]
 serde.workspace = true
+serde_json.workspace = true
 csv.workspace = true
 rayon.workspace = true
 rustc-hash.workspace = true

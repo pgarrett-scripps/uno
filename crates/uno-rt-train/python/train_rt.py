@@ -222,39 +222,16 @@ def export_urtc(path, model, y_mean, y_std, cfg):
 
 
 def load_urtc_weights(model, path):
-    """Load weights from a URTC binary into an RTCnn (for warm-start fine-tune)."""
-    b = open(path, "rb").read()
-    p = [0]
-    def u32():
-        v = struct.unpack_from("<I", b, p[0])[0]; p[0] += 4; return v
-    def f32():
-        v = struct.unpack_from("<f", b, p[0])[0]; p[0] += 4; return v
-    def arr(n):
-        v = np.frombuffer(b, "<f4", n, p[0]).copy(); p[0] += 4 * n; return v
-    assert b[:4] == b"URTC"; p[0] = 4
-    u32(); f32(); f32()                       # version, y_mean, y_std
-    emb = u32(); ch = u32(); k = u32(); nb = u32()
-    dils = [u32() for _ in range(nb)]; head = u32()
-    nglobal = u32()                           # v2: count of appended global feats (MUST be read)
-    with torch.no_grad():
-        model.emb.weight.copy_(torch.from_numpy(arr((NAA + 1) * emb).reshape(NAA + 1, emb)))
-        model.stem.weight.copy_(torch.from_numpy(arr(ch * emb * k).reshape(ch, emb, k)))
-        model.stem.bias.copy_(torch.from_numpy(arr(ch)))
-        for blk in model.blocks:
-            blk.c1.weight.copy_(torch.from_numpy(arr(ch * ch * k).reshape(ch, ch, k)))
-            blk.c1.bias.copy_(torch.from_numpy(arr(ch)))
-            blk.c2.weight.copy_(torch.from_numpy(arr(ch * ch * k).reshape(ch, ch, k)))
-            blk.c2.bias.copy_(torch.from_numpy(arr(ch)))
-        h = list(model.head)
-        hin = 2 * ch + nglobal            # head input = pooled(2ch) + global feats
-        h[0].weight.copy_(torch.from_numpy(arr(head * hin).reshape(head, hin)))
-        h[0].bias.copy_(torch.from_numpy(arr(head)))
-        h[2].weight.copy_(torch.from_numpy(arr(head).reshape(1, head)))
-        h[2].bias.copy_(torch.from_numpy(arr(1)))
+    """Legacy adapter; use uno_rt.train to infer architecture and RT normalization."""
+    from uno_rt.artifact import load_model
+    loaded, info, _ = load_model(path)
+    model.load_state_dict(loaded.state_dict())
+    return info
 
 
 # ---------- train ----------
 def main():
+    print("DEPRECATED research trainer: use `uno rt train` for validated CNN training and fine-tuning.", file=sys.stderr)
     ap = argparse.ArgumentParser()
     ap.add_argument("--arch", choices=["posmlp", "cnn"], default="cnn")
     ap.add_argument("--train", required=True)
@@ -298,7 +275,11 @@ def main():
         va_inputs = (torch.from_numpy(Tva), torch.from_numpy(Lva), torch.from_numpy(feat_global(va_seq)))
         model = RTCnn(emb=args.emb, ch=args.ch, blocks=blocks, k=args.k, head=args.head)
         if args.init:
-            load_urtc_weights(model, args.init)
+            info = load_urtc_weights(model, args.init)
+            # Preserve physical predictions when changing target normalization.
+            with torch.no_grad():
+                model.head[-1].weight.mul_(info["y_std"] / y_std)
+                model.head[-1].bias.mul_(info["y_std"] / y_std).add_((info["y_mean"] - y_mean) / y_std)
             print(f"warm-started from {args.init}")
     model = model.to(dev)
     tr_inputs = tuple(t.to(dev) for t in tr_inputs)
