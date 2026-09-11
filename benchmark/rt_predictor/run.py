@@ -55,6 +55,19 @@ def read_set(path: Path) -> tuple[list[str], np.ndarray]:
     return seqs, np.asarray(labels, dtype=float)
 
 
+def labeled(path: Path) -> bool:
+    """True when the set carries observed RTs, i.e. a second column."""
+    with path.open() as handle:
+        for line in handle:
+            if line.startswith("#"):
+                continue
+            fields = line.rstrip("\n").split("\t")
+            if fields and fields[0] == "sequence":
+                return len(fields) > 1
+            return len(fields) > 1
+    return False
+
+
 def calibration_mask(seqs: list[str]) -> np.ndarray:
     return np.asarray([
         int.from_bytes(hashlib.sha256(f"uno-rt-cal-v1\0{seq}".encode()).digest()[:8], "big") % 5 == 0
@@ -152,9 +165,12 @@ def result_row(dataset: str, model: str, n: int, n_cal: int, n_test: int,
 
 def main() -> None:
     RESULTS.mkdir(parents=True, exist_ok=True)
-    set_paths = sorted(SETS.glob("*.tsv"))
+    # Only the labeled accuracy sets. sets/ also holds the unlabeled synthetic
+    # library that throughput.py times, and a bare glob picks it up and dies on
+    # its missing RT column.
+    set_paths = [p for p in sorted(SETS.glob("*.tsv")) if labeled(p)]
     if not set_paths:
-        raise SystemExit(f"no benchmark sets under {SETS}; run prepare_sets.py")
+        raise SystemExit(f"no labeled benchmark sets under {SETS}; run prepare_sets.py")
 
     rows: list[dict[str, object]] = []
     for set_path in set_paths:

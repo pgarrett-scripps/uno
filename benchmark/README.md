@@ -140,3 +140,35 @@ For the accepted V3 validation, specify `--seeds 0-8 --held-out-seeds 7-8` and p
 outputs and evaluates the documented acceptance checks. `plot_stability.py`
 renders every low-input seed in standalone figures using the paper analysis
 environment. See [the study protocol and findings](../docs/stability-study.md).
+
+### The publication re-run
+
+`publication_rerun.py` re-executes the complete uno side of the manuscript --
+156 searches: six primary files x biosaur2 x seeds 0-10, six primary files x
+`--raw` x seeds 0-2, and twelve PXD066701 Astral files x both feature sources x
+seeds 0-2 -- against one pinned binary, so every reported uno number comes from
+a single commit. Seed-0 searches run serialized, because their `/usr/bin/time -v`
+output is what the resource panels report; the remaining seeds run two at a
+time and their timings are recorded but not reported.
+
+Outputs go to the canonical paths the figure scripts already read. The
+superseded tables are copied first into `results/archive_<old build>/` with
+their hashes and depths, and `results/publication_rerun/cases.tsv` then reports,
+per search, the new depths beside the old ones and whether the protein table is
+byte-identical to the superseded build's.
+
+```sh
+python3 benchmark/publication_rerun.py --plan   # inventory, no searching
+python3 benchmark/publication_rerun.py          # run it (restartable)
+python3 benchmark/refresh_summaries.py          # rebuild every derived summary
+```
+
+`refresh_summaries.py` re-scores what is on disk -- `results/spread.tsv`, the
+seed-sweep and variability-extension summaries, the uno rows of the serialized
+resource cohort, `raw_mode/summary.tsv` and the Astral input-series summary. It
+never recomputes a comparator number from a new search: ms1searchpy did not
+change, so its rows are carried through unchanged.
+
+The comparator itself is pinned by `ms1searchpy_comparator.patch`, the diff
+between the installed ms1searchpy checkout and its last commit; it is what gives
+ms1searchpy the per-feature quality columns uno reads.
