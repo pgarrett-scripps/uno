@@ -1036,3 +1036,29 @@ pub(crate) fn score_proteins_feature_compete(
     }
     proteins
 }
+
+#[cfg(test)]
+mod joint_alternative_tests {
+    use super::*;
+    #[test]
+    fn alternative_peak_preserves_one_peptide_after_primary_peak_is_claimed() {
+        let observed: FxHashMap<(bool, &str), FxHashSet<usize>> = [
+            ((false, "A"), [0, 1, 2].into_iter().collect()),
+            ((false, "B"), [3, 4].into_iter().collect()),
+            ((true, "D"), [5, 6].into_iter().collect()),
+        ].into_iter().collect();
+        let theo = [((false, "A"), 10), ((false, "B"), 20), ((true, "D"), 1000)]
+            .into_iter().collect();
+        let mut peaks: FxHashMap<usize, Vec<usize>> =
+            [(0, vec![0]), (1, vec![1]), (2, vec![2]), (3, vec![0]),
+             (4, vec![4]), (5, vec![5]), (6, vec![6])].into_iter().collect();
+        let single = score_proteins_feature_compete(observed.clone(), &peaks, &theo, 1000, 0.01);
+        peaks.insert(3, vec![0, 7, 8]);
+        let multiple = score_proteins_feature_compete(observed, &peaks, &theo, 1000, 0.01);
+        assert_eq!(single[0].accession, "A");
+        assert_eq!(multiple[0].accession, "A");
+        assert_eq!(single.iter().find(|p| p.accession == "B").unwrap().observed_peptides, 1);
+        // Two alternate peaks preserve ONE peptide, not two extra observations.
+        assert_eq!(multiple.iter().find(|p| p.accession == "B").unwrap().observed_peptides, 2);
+    }
+}

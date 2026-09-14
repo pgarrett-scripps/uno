@@ -17,3 +17,5 @@ sage-core.workspace = true
 gbdt.workspace = true
 uno-lightgbm-sys.workspace = true
 sequoia-boost.workspace = true
+
+sha2 = "0.10"

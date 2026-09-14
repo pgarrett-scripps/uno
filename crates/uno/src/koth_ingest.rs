@@ -4,9 +4,10 @@
 //! This is the same three-stage koth pipeline the standalone `koth_ff` binary
 //! runs (hills -> features -> scoring), but we keep the scored features in
 //! memory and convert them straight into uno's single-run `Feature` rows instead
-//! of serialising to TSV and re-parsing. The field mapping mirrors koth's
-//! biosaur2-compatible TSV writer exactly, so `--raw` and a `--features` file
-//! produced by `koth_ff` on the same run yield byte-identical feature tables.
+//! of serialising to TSV and re-parsing. The fields match koth's biosaur2-style
+//! TSV schema, but the TSV writer sorts by summed intensity and rounds numeric
+//! values. In-process rows retain pipeline order and full precision. Equal
+//! feature membership therefore does not guarantee identical search outputs.
 //!
 //! Input routing (mzML / Bruker `.d` / Thermo `.raw`) is handled inside
 //! `koth_ff::run_hills_streaming` by file extension. `.raw` needs uno built with
@@ -30,9 +31,31 @@ use uno_core::{Feature, FeatureMatrix};
 /// table. See module docs for why these particular values.
 pub const DEFAULT_KOTH_CONFIG: &str = include_str!("koth_default.toml");
 
+/// The Bruker `.d` profile. The biosaur2-matching default above is tuned for
+/// Orbitrap and is wrong on timsTOF (singly-charged background, ~3 ppm mass
+/// accuracy); see the file header for the specific deltas and their evidence.
+pub const BRUKER_KOTH_CONFIG: &str = include_str!("koth_bruker.toml");
+
 /// Parse the bundled default koth config.
 pub fn default_config() -> Result<KothConfig> {
     toml::from_str(DEFAULT_KOTH_CONFIG).context("parsing bundled default koth config")
+}
+
+/// Parse the bundled Bruker koth config.
+pub fn bruker_config() -> Result<KothConfig> {
+    toml::from_str(BRUKER_KOTH_CONFIG).context("parsing bundled Bruker koth config")
+}
+
+/// Is this raw input a Bruker `.d` directory? koth routes by extension, so match
+/// on the same thing rather than probing the filesystem.
+pub fn is_bruker(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("d"))
+}
+
+/// The bundled config for `path`: the Bruker profile for `.d`, the
+/// biosaur2-matching default for mzML and Thermo `.raw`.
+pub fn default_config_for(path: &Path) -> Result<KothConfig> {
+    if is_bruker(path) { bruker_config() } else { default_config() }
 }
 
 /// Run koth's feature finder in-process on `path` (mzML / `.d` / `.raw`) and
@@ -44,9 +67,9 @@ pub fn features_from_raw(path: &Path, config: &KothConfig) -> Result<FeatureMatr
     cfg.file.decoy_mode = false;
 
     // One call into koth's library seam: `run_pipeline` runs the exact staged
-    // functions the `koth_ff` binary uses (hills -> features -> scoring), so
-    // `--raw` stays byte-identical to a `--features` file that `koth_ff` produced
-    // on the same run. Scoring on: uno's search reads the cosine/isotope/combined
+    // functions the `koth_ff` binary uses (hills -> features -> scoring).
+    // Serialization order and precision still differ from external TSV input.
+    // Scoring on: uno's search reads the cosine/isotope/combined
     // scores. Going through this single entry point keeps uno off koth's internal
     // stage functions, which change shape more often than the pipeline seam.
     let t = Instant::now();
@@ -80,7 +103,9 @@ pub fn features_from_raw(path: &Path, config: &KothConfig) -> Result<FeatureMatr
             let f = &sf.feature;
             // Charge-0 / mass-less features carry no usable precursor mass; koth's
             // TSV writer leaves massCalib blank for them, so drop them here too.
-            let mass = sf.monoisotopic_neutral_mass()?;
+            // koth 0.4.0 made ion polarity explicit; take it from the run config so
+            // `--raw` matches koth_ff's own TSV writer rather than assuming positive.
+            let mass = sf.monoisotopic_neutral_mass(cfg.file.polarity)?;
             let im = f.im_apex();
             Some(Feature {
                 mass,
@@ -113,5 +138,8 @@ pub fn features_from_raw(path: &Path, config: &KothConfig) -> Result<FeatureMatr
     Ok(FeatureMatrix {
         run_names: vec![run_name],
         features,
+        matrix_evidence: None,
+        joint_evidence: None,
+            joint_cell_evidence: None,
     })
 }

@@ -33,38 +33,66 @@ pub fn predict_many_cached(model: &RtModel, seqs: &[&str]) -> Vec<f64> {
         None => return model.predict_many(seqs),
     };
 
-    let cached = load_cache(&cache_path);
+    BATCH_CACHE.with(|state| {
+        let mut state = state.borrow_mut();
+        if let Some(models) = state.as_mut() {
+            let cached = models
+                .entry(model.fingerprint())
+                .or_insert_with(|| load_cache(&cache_path));
+            predict_into(model, seqs, &cache_path, cached)
+        } else {
+            predict_into(model, seqs, &cache_path, &mut load_cache(&cache_path))
+        }
+    })
+}
 
-    // Unique misses, in first-seen order (stable, independent of dedup impl).
-    let mut miss_seqs: Vec<&str> = Vec::new();
-    let mut miss_seen: HashMap<&str, ()> = HashMap::new();
+thread_local! {
+    static BATCH_CACHE: std::cell::RefCell<Option<HashMap<u64,HashMap<String,f64>>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Retain prediction maps across sequential per-run searches on this thread.
+/// The guard restores the previous scope even on early return or panic.
+pub fn with_memory_cache<T>(work: impl FnOnce() -> T) -> T {
+    struct Restore(Option<HashMap<u64, HashMap<String, f64>>>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            BATCH_CACHE.with(|s| *s.borrow_mut() = self.0.take());
+        }
+    }
+    let previous = BATCH_CACHE.with(|s| s.replace(Some(HashMap::new())));
+    let _guard = Restore(previous);
+    work()
+}
+
+fn predict_into(
+    model: &RtModel,
+    seqs: &[&str],
+    path: &std::path::Path,
+    cached: &mut HashMap<String, f64>,
+) -> Vec<f64> {
+    let mut miss_seqs = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for &s in seqs {
-        if !cached.contains_key(s) && miss_seen.insert(s, ()).is_none() {
+        if !cached.contains_key(s) && seen.insert(s) {
             miss_seqs.push(s);
         }
     }
-
-    let hits = seqs.len() - seqs.iter().filter(|s| !cached.contains_key(**s)).count();
     log::info!(
-        "RT cache {}: {} unique misses of {} requested ({} rows already cached)",
-        cache_path.display(),
+        "RT cache {}: {} unique misses of {} requested ({} rows cached)",
+        path.display(),
         miss_seqs.len(),
         seqs.len(),
-        cached.len(),
+        cached.len()
     );
-
-    let mut cached = cached;
     if !miss_seqs.is_empty() {
-        let preds = model.predict_many(&miss_seqs);
-        if let Err(e) = append_cache(&cache_path, &miss_seqs, &preds) {
-            log::warn!("RT cache: failed to write {}: {e}", cache_path.display());
+        let predictions = model.predict_many(&miss_seqs);
+        if let Err(e) = append_cache(path, &miss_seqs, &predictions) {
+            log::warn!("RT cache write {}: {}", path.display(), e);
         }
-        for (s, p) in miss_seqs.iter().zip(preds) {
-            cached.insert((*s).to_string(), p);
+        for (s, p) in miss_seqs.into_iter().zip(predictions) {
+            cached.insert(s.to_owned(), p);
         }
     }
-    let _ = hits;
-
     seqs.iter().map(|s| cached[*s]).collect()
 }
 
@@ -114,11 +142,14 @@ fn load_cache(path: &PathBuf) -> HashMap<String, f64> {
 /// Append newly predicted `(seq, rt)` pairs to the cache, creating the directory
 /// and file on first use. Append-only, so concurrent searches can both add
 /// entries without clobbering each other's rows.
-fn append_cache(path: &PathBuf, seqs: &[&str], preds: &[f64]) -> std::io::Result<()> {
+fn append_cache(path: &std::path::Path, seqs: &[&str], preds: &[f64]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }
-    let f = std::fs::OpenOptions::new().create(true).append(true).open(path)?;
+    let f = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?;
     let mut w = BufWriter::new(f);
     for (s, p) in seqs.iter().zip(preds) {
         // Rust's default f64 formatting is the shortest round-trippable decimal,
@@ -126,4 +157,48 @@ fn append_cache(path: &PathBuf, seqs: &[&str], preds: &[f64]) -> std::io::Result
         writeln!(w, "{s}\t{p}")?;
     }
     w.flush()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn warm_predictions_are_bit_exact_and_append_only_misses() {
+        let dir = std::env::temp_dir().join(format!(
+            "uno-cache-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let path = dir.join("model.tsv");
+        let model = RtModel::bundled().unwrap();
+        let seqs = ["PEPTIDEK", "AAAAAAAR", "PEPTIDEK"];
+        let expected = model.predict_many(&seqs);
+        let mut map = HashMap::new();
+        let first = predict_into(&model, &seqs, &path, &mut map);
+        let before = std::fs::read(&path).unwrap();
+        let second = predict_into(&model, &seqs, &path, &mut map);
+        assert_eq!(first, expected);
+        assert_eq!(second, expected);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        let disk = load_cache(&path);
+        assert_eq!(disk.len(), 2);
+        assert_eq!(disk["PEPTIDEK"].to_bits(), expected[0].to_bits());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+    #[test]
+    fn batch_cache_scope_restores_previous_state() {
+        with_memory_cache(|| {
+            BATCH_CACHE.with(|s| {
+                s.borrow_mut().as_mut().unwrap().insert(42, HashMap::new());
+            });
+            with_memory_cache(|| {
+                assert!(BATCH_CACHE.with(|s| s.borrow().as_ref().unwrap().is_empty()))
+            });
+            assert!(BATCH_CACHE.with(|s| s.borrow().as_ref().unwrap().contains_key(&42)));
+        });
+        assert!(BATCH_CACHE.with(|s| s.borrow().is_none()));
+    }
 }
