@@ -1,0 +1,40 @@
+{
+  "source": "/home/patrick-garrett/Repos/pepboost/benchmarks/data/ccs_features/combined_sm.zip",
+  "source_sha256": "097f84e3ffc4edd9a88d5dc0fc858069a90a72c050a59bc6bfbc74258ac7dd91",
+  "counts": {
+    "raw": 718917
+  },
+  "training_rows": 518569,
+  "validation_rows": 58213,
+  "training_sequences": 420435,
+  "validation_sequences": 47101,
+  "split": "SHA256 uno-im-public-v1:sequence modulo 10; bucket 0 external validation; group by sequence, all charge states together.",
+  "label": "CCS * sqrt(mass * 28.0134 / (mass + 28.0134)) / charge / 1000; proportional inverse mobility; dataset-specific multiplicative calibration is required.",
+  "chemistry": "Unmodified sequences with fixed carbamidomethyl C; measured mass within 0.02 Da of that chemistry; lengths 7-30, charges 2-4; replicate medians.",
+  "parameters": {
+    "backend": "sequoia",
+    "max_depth": 5,
+    "iterations": 300,
+    "shrinkage": 0.1,
+    "seed": 42
+  },
+  "hashes": {
+    "validation_predict.tsv": "323e3c903f1b46723ec240145de721f3516b9e93d4affa1cc0bf6eec4f39acf9",
+    "validation.csv": "9920ed1da3277ffd96ae3dcaa1f4ec24b97fd3555879c4082d60326ff988386a",
+    "train.csv": "e2df644ae7284e21f3a225a800f3a23b30006b60bcba43a77347dcfd4ccc9dea"
+  },
+  "model_sha256": "893cf231fe7a9997a7a7030e8d0027da967249137e506ef7e9ca35dab1464bf1",
+  "feature_width": 100,
+  "feature_encoder_sha256": "bd9113033387ae1cd1bce0d81c290ea43b084aca04e6dd26b9cd5dccc018619c",
+  "validation": {
+    "rows": 58213,
+    "sequence_disjoint": true,
+    "r2": 0.9686066531704892,
+    "median_absolute_relative_error": 0.013162027174450313,
+    "relative_error_68": 0.020702126225489413,
+    "model_sha256": "893cf231fe7a9997a7a7030e8d0027da967249137e506ef7e9ca35dab1464bf1"
+  },
+  "training_command": "RAYON_NUM_THREADS=8 OMP_NUM_THREADS=8 uno-rt-train --labels model/train.csv --im-labels model/train.csv --out model/im_public.sequoia --sequoia --max-depth 5 --iterations 300 --shrinkage 0.1",
+  "actual_training_rows": 466716,
+  "internal_validation_rows": 51853
+}
