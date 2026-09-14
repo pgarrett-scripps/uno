@@ -13,8 +13,9 @@ a decision attached. Main single-run identification numbers come from the pinned
 re-run of 2026-09-11 (`benchmark/publication_rerun.py`); re-run it and then
 `benchmark/refresh_summaries.py` if the engine changes again.
 The fresh matrix extension is separate: `figdata/koth_matrix_study.json` records
-the complete KOTH 0.5.0 three-seed rerun: 144 searches, separately serialized
-timing controls, verified outputs, source snapshots, and runtime-library hashes.
+the KOTH 0.6.0 LFQ update: 48 repeated matrix searches, 96 reused separate
+searches, eight regenerated bundles, and new serialized timing controls. Detection
+and UNO are unchanged; reused outputs, source snapshots, and runtime hashes are verified.
 [`../TODO.md`](../TODO.md) is the code-side half.
 
 ## The contract for generated things

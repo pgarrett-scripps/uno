@@ -717,19 +717,17 @@ extension is excluded from that timing claim.
   ],
 ) <fig:rawmode>
 
-Aligned koth LFQ bundles also support one joint search over the original
-observations from several runs. In the fresh three-seed Astral #lit("100") ng
-comparison (@sec:si-matrix), median human-accession recovery was #s(
-  "matrix.astral_joint_median",
-) for joint searching, #s("matrix.astral_joint_cell_median") with added
-extraction-confidence summaries, and #s("matrix.astral_union_median") for the
-separate-search union, at matched empirical entrapment cutoffs. This gain did
-not generalize to the #lit("20")-run IonStar matrix: joint searching recovered
-#s("matrix.ionstar_joint_median") present-species accessions, compared with #s(
+Aligned koth LFQ bundles support one joint search over observations from several
+runs. With koth #lit("0.6.0") LFQ extraction, the Astral #lit("100") ng
+comparison recovered a median #s("matrix.astral_joint_median") human accessions
+across three seeds, versus #s("matrix.astral_union_median") for the
+separate-search union at matched empirical entrapment cutoffs. The #lit(
+  "20",
+)-run IonStar comparison instead favored separate searching: #s(
   "matrix.ionstar_union_median",
-) for the union. The complete Astral series and nested IonStar cohorts therefore
-delimit the conditions where pooling helps. Pooled identification does not
-establish detection in every sample.
+) versus #s("matrix.ionstar_joint_median") accessions. Complete cohort results,
+extraction-confidence scoring, and quantitative checks are reported in
+@sec:si-matrix.
 
 = Discussion and limitations <sec:discussion>
 

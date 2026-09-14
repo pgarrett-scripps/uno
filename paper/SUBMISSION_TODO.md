@@ -34,16 +34,13 @@ written by a script, and `si/versions.typ` pins that build, its three out-of-tre
 path dependencies and the comparator patch. The comparator was not re-run,
 because it did not change.
 
-**2026-09-13 matrix rerun:** the SI replaces the incomplete September 12
-extension with 144 searches over three seeds, 32 fresh KOTH 0.5.0 feature tables,
-and eight LFQ bundles. Astral is presented first, including all input levels and
-the all-file pool; IonStar retains all balanced nested cohorts. Comparisons use
-matched empirical entrapment accession cutoffs, while internal-list calibration
-and quantitative evaluation remain separately labeled. Four additional searches
-provide a dedicated serialized warm-cache timing comparison. Source snapshots,
-runtime dependencies, input/output hashes, and execution-only concurrency
-amendments are archived with the study. The primary single-run evidence remains
-on its separately pinned build.
+**KOTH 0.6.0 LFQ update:** all eight LFQ bundles and 48 matrix searches are
+regenerated with the narrower release extraction windows. The 32 0.5.0 feature
+tables and 96 separate searches are reused because detection and UNO are
+unchanged. Four new serialized searches update the timing comparison. All
+cohorts, arms and seeds remain represented, and source/output hashes and
+coordinate parity are audited. The LFQ prose is shortened while the generated
+SI tables retain full results. Primary single-run evidence remains unchanged.
 
 What remains for the main single-run study is not compute. It is the author-blocked material (B2, B3, the
 release decision behind B1 and D5), the submission bundle (B4, B7), and the two

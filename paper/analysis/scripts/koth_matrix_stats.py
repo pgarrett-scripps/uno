@@ -1,4 +1,4 @@
-"""Traceable prose statistics for the complete KOTH 0.5.0 matrix rerun."""
+"""Traceable prose statistics for the audited KOTH LFQ update."""
 import json
 from statistics import median
 from pathlib import Path
