@@ -29,6 +29,20 @@ mod rt_command_tests {
     }
 
     #[test]
+    fn long_and_batch_inputs_are_explicit_and_exclusive() {
+        for args in [vec!["uno","--matrix-long","bundle","--fasta","db"],vec!["uno","--matrix-long","bundle","--fasta","db","--matrix-batch-out","out"]] {assert!(Cli::try_parse_from(args).is_ok());}
+        assert!(Cli::try_parse_from(["uno","--matrix-long","bundle","--features","f","--fasta","db"]).is_err());
+        assert!(Cli::try_parse_from(["uno","--matrix-long","bundle","--matrix-batch-out","out","--out-proteins","p","--fasta","db"]).is_err());
+    }
+
+    #[test]
+    fn joint_mode_requires_long_input_and_cannot_be_a_batch_search() {
+        assert!(Cli::try_parse_from(["uno", "--matrix-long", "b", "--matrix-joint", "--fasta", "db"]).is_ok());
+        assert!(Cli::try_parse_from(["uno", "--matrix", "b", "--matrix-joint", "--fasta", "db"]).is_err());
+        assert!(Cli::try_parse_from(["uno", "--matrix-long", "b", "--matrix-joint", "--matrix-batch-out", "o", "--fasta", "db"]).is_err());
+    }
+
+    #[test]
     fn rt_sources_are_mutually_exclusive_and_default_needs_no_flag() {
         assert!(Cli::try_parse_from(["uno", "--features", "run.tsv", "--fasta", "db.fasta"]).is_ok());
         assert!(Cli::try_parse_from(["uno", "--features", "run.tsv", "--fasta", "db.fasta", "--rt-model", "a", "--rt-library", "b"]).is_err());
@@ -42,11 +56,9 @@ mod rt_command_tests {
 struct Cli {
     #[command(subcommand)]
     command: Option<rt_cli::Command>,
-    /// Single-run biosaur2 feature file (`*.features.tsv`) — the same single-run
-    /// input ms1searchpy consumes. Aligned/consensus matrices are NOT accepted:
-    /// alignment drops the per-feature quality columns that separate target from
-    /// decoy. Mutually exclusive with `--raw`; exactly one is required.
-    #[arg(long, required_unless_present_any = ["raw", "matrix"], conflicts_with_all = ["raw", "matrix"])]
+    /// Single-run feature table. Use --matrix for wide consensus input or
+    /// --matrix-long for an evidence bundle. Select exactly one input route.
+    #[arg(long, required_unless_present_any = ["raw", "matrix", "matrix_long"], conflicts_with_all = ["raw", "matrix", "matrix_long"])]
     features: Option<PathBuf>,
 
     /// Raw run to find features from in-process, with no intermediate biosaur2
@@ -64,12 +76,30 @@ struct Cli {
     #[arg(long, conflicts_with_all = ["features", "raw"])]
     matrix: Option<PathBuf>,
 
-    /// Drop consensus features detected in fewer than this many runs (only with
-    /// `--matrix`). Required floor: alignment drops the per-feature isotope quality
-    /// uno uses to reject junk, so without a reproducibility gate the random-match
-    /// background swamps the search. Default 2.
-    #[arg(long, default_value_t = 2)]
-    matrix_min_runs: u32,
+    /// Versioned KOTH long bundle manifest (or its directory).
+    #[arg(long, conflicts_with_all = ["features", "raw", "matrix"])]
+    matrix_long: Option<PathBuf>,
+    /// Experimental: one joint search using all original aligned matrix members.
+    #[arg(long, requires="matrix_long", conflicts_with_all=["features","raw","matrix","matrix_batch_out","matrix_no_feature_quality","matrix_legacy_values","matrix_prefer_isotope_support","dump_candidate_peptides"])]
+    matrix_joint: bool,
+    /// Search every original run in one process with a shared database/prediction cache.
+    #[arg(long, requires="matrix_long", conflicts_with_all=["out_proteins","out_peptides","out_lfq","out_abundance","dump_candidate_peptides","matrix_no_feature_quality","matrix_legacy_values"])]
+    matrix_batch_out: Option<PathBuf>,
+    /// Diagnostic: disable original feature-quality descriptors on long input.
+    #[arg(long, requires = "matrix_long")]
+    matrix_no_feature_quality: bool,
+    /// Diagnostic: reproduce legacy wide TSV coordinate/intensity rounding.
+    #[arg(long, requires = "matrix_long")]
+    matrix_legacy_values: bool,
+    /// Diagnostic: use the best original member with >=3 isotopes when available.
+    #[arg(long, requires="matrix_long", conflicts_with_all=["matrix_no_feature_quality","matrix_batch_out"])]
+    matrix_prefer_isotope_support: bool,
+
+
+    /// Minimum original-run support: defaults to 1 for --matrix-joint, 2 for
+    /// representative matrix search. MBR-filled cells never count as support.
+    #[arg(long)]
+    matrix_min_runs: Option<u32>,
 
     /// Protein FASTA database.
     #[arg(long, required = true)]
@@ -182,33 +212,62 @@ fn main() -> Result<()> {
     };
     config.apply_cli_seed(cli.seed);
 
+    if let Some(out)=&cli.matrix_batch_out { return search_batch(&cli,&config,out); }
+
+    let matrix_min_runs = cli.matrix_min_runs.unwrap_or(if cli.matrix_joint { 1 } else { 2 });
     let t = Instant::now();
-    let matrix = match (&cli.features, &cli.raw, &cli.matrix) {
+    let mut matrix = if let Some(path) = &cli.matrix_long {
+        let bundle = uno_core::long_input::Bundle::open(path)?;
+        if cli.matrix_joint { bundle.load_joint(matrix_min_runs)? }
+        else { bundle.load_consensus_with_representative(matrix_min_runs, !cli.matrix_no_feature_quality, cli.matrix_legacy_values, cli.matrix_prefer_isotope_support)? }
+    } else { match (&cli.features, &cli.raw, &cli.matrix) {
         (Some(features), None, None) => FeatureMatrix::load(features)?,
         (None, Some(raw), None) => {
             let koth_cfg = match &config.koth {
                 Some(c) => c.clone(),
-                None => koth_ingest::default_config()?,
+                None => koth_ingest::default_config_for(raw)?,
             };
+            // A Bruker run needs BOTH halves: koth's timsTOF profile and uno's
+            // feature-quality gate. Without the gate the search is not merely
+            // shallower, it reports nothing at all (114,659 features -> background
+            // p 0.554 -> 0 proteins; gated -> 17,587 -> p 0.206 -> ~300 proteins),
+            // so defaulting it is the difference between `--raw sample.d` working
+            // and silently returning an empty result. Only applied when BOTH knobs
+            // are untouched: set either one explicitly to take full control (and
+            // note that means `min_isotopes = 0` alone cannot express "gate off on
+            // Bruker" — pair it with a nonzero `min_combined_score`, or vice versa).
+            if koth_ingest::is_bruker(raw) {
+                log::info!("raw input is a Bruker .d: using the bundled timsTOF koth profile");
+                if config.matching.min_isotopes == 0 && config.matching.min_combined_score == 0.0 {
+                    config.matching.min_isotopes = 4;
+                    config.matching.min_combined_score = 0.85;
+                    log::info!(
+                        "Bruker defaults: matching.min_isotopes=4, matching.min_combined_score=0.85 \
+                         (timsTOF mass accuracy is ~3 ppm, so the search must be restricted to \
+                         well-characterised features; override in [matching])"
+                    );
+                }
+            }
             koth_ingest::features_from_raw(raw, &koth_cfg)
                 .with_context(|| format!("finding features in {}", raw.display()))?
         }
         (None, None, Some(mp)) => {
-            let m = FeatureMatrix::load_matrix(mp, cli.matrix_min_runs)
+            let m = FeatureMatrix::load_matrix(mp, matrix_min_runs)
                 .with_context(|| format!("reading aligned matrix {}", mp.display()))?;
             log::info!(
                 "aligned matrix: {} runs, {} consensus features (min_runs={})",
                 m.n_samples(),
                 m.len(),
-                cli.matrix_min_runs
+                matrix_min_runs
             );
             m
         }
         // clap's required_unless_present/conflicts_with guarantees exactly one.
         _ => bail!("provide exactly one of --features, --raw, or --matrix"),
-    };
+    } };
+    uno_core::joint::restrict_observations(&mut matrix, &config.matching);
     log::info!(
-        "loaded {} features from single run ({:.1}s)",
+        "loaded {} features from input ({:.1}s)",
         matrix.len(),
         t.elapsed().as_secs_f64()
     );
@@ -222,6 +281,81 @@ fn main() -> Result<()> {
         t.elapsed().as_secs_f64()
     );
 
+    let models=load_models(&cli)?;
+    search_loaded(&cli,&config,&matrix,&db,&models,None)
+}
+
+struct Models {
+    rt: Option<RtModel>,
+    im: Option<ImModel>,
+    library: Option<HashMap<String, f64>>,
+}
+fn load_models(cli: &Cli) -> Result<Models> {
+    if cli.dump_candidate_peptides.is_some() {
+        return Ok(Models {
+            rt: None,
+            im: None,
+            library: None,
+        });
+    }
+    // Optional precomputed RT library (DeepLC). peptide<TAB>rt per line.
+    let rt_library: Option<HashMap<String, f64>> = match &cli.rt_library {
+        Some(p) => {
+            let s =
+                std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
+            let mut map = HashMap::new();
+            for line in s.lines() {
+                let mut it = line.split('\t');
+                if let (Some(seq), Some(rt)) = (it.next(), it.next()) {
+                    if let Ok(rt) = rt.parse::<f64>() {
+                        map.insert(seq.to_string(), rt);
+                    }
+                }
+            }
+            log::info!(
+                "loaded RT library with {} peptides from {}",
+                map.len(),
+                p.display()
+            );
+            Some(map)
+        }
+        None => None,
+    };
+
+    let rt_model = match &cli.rt_model {
+        Some(p) => {
+            let m = RtModel::load(p)?;
+            log::info!("loaded RT model from {}", p.display());
+            Some(m)
+        }
+        None if rt_library.is_none() => {
+            log::info!("using bundled RT CNN");
+            Some(RtModel::bundled()?)
+        }
+        None => None,
+    };
+
+    let im_model = match &cli.im_model {
+        Some(p) => {
+            let m = ImModel::load(p)?;
+            log::info!("loaded IM model from {}", p.display());
+            Some(m)
+        }
+        None => None,
+    };
+
+    Ok(Models {
+        rt: rt_model,
+        im: im_model,
+        library: rt_library,
+    })
+}
+
+fn search_loaded(cli:&Cli,config:&Config,matrix:&FeatureMatrix,db:&PeptideDb,models:&Models,dir:Option<&std::path::Path>)->Result<()> {
+    let out_proteins=dir.map(|p|p.join("proteins.tsv")).or_else(||cli.out_proteins.clone());
+    let out_peptides=dir.map(|p|p.join("peptides.tsv")).or_else(||cli.out_peptides.clone());
+    let out_lfq=dir.map(|p|p.join("lfq.tsv")).or_else(||cli.out_lfq.clone());
+    let out_abundance=dir.map(|p|p.join("abundance.tsv")).or_else(||cli.out_abundance.clone());
     // The candidate-peptide dump needs the full (unreduced) PFM set so the RT
     // library covers every match; the scoring path only ever consumes the top-k
     // per feature, so we stream that reduction during generation and never
@@ -267,55 +401,14 @@ fn main() -> Result<()> {
         t.elapsed().as_secs_f64()
     );
 
-    // Optional precomputed RT library (DeepLC). peptide<TAB>rt per line.
-    let rt_library: Option<HashMap<String, f64>> = match &cli.rt_library {
-        Some(p) => {
-            let s = std::fs::read_to_string(p).with_context(|| format!("reading {}", p.display()))?;
-            let mut map = HashMap::new();
-            for line in s.lines() {
-                let mut it = line.split('\t');
-                if let (Some(seq), Some(rt)) = (it.next(), it.next()) {
-                    if let Ok(rt) = rt.parse::<f64>() {
-                        map.insert(seq.to_string(), rt);
-                    }
-                }
-            }
-            log::info!("loaded RT library with {} peptides from {}", map.len(), p.display());
-            Some(map)
-        }
-        None => None,
-    };
-
-    let rt_model = match &cli.rt_model {
-        Some(p) => {
-            let m = RtModel::load(p)?;
-            log::info!("loaded RT model from {}", p.display());
-            Some(m)
-        }
-        None if rt_library.is_none() => {
-            log::info!("using bundled RT CNN");
-            Some(RtModel::bundled()?)
-        }
-        None => None,
-    };
-
-    let im_model = match &cli.im_model {
-        Some(p) => {
-            let m = ImModel::load(p)?;
-            log::info!("loaded IM model from {}", p.display());
-            Some(m)
-        }
-        None => None,
-    };
-
     let t = Instant::now();
     let result = score(
         &matrix,
         &db,
         &pfms,
-        rt_model.as_ref(),
-        im_model.as_ref(),
-        rt_library.as_ref(),
+        models.rt.as_ref(),
+        models.im.as_ref(),
+        models.library.as_ref(),
         &config.scoring,
     );
     log::info!("scored in {:.1}s", t.elapsed().as_secs_f64());
@@ -335,7 +428,7 @@ fn main() -> Result<()> {
         n_prot_decoy_1pct
     );
 
-    if let Some(path) = &cli.out_proteins {
+    if let Some(path) = &out_proteins {
         use std::io::Write;
         // Group indistinguishable proteins so the output shows the leading protein
         // AND its indistinguishable twins, instead of silently reporting one.
@@ -375,7 +468,7 @@ fn main() -> Result<()> {
     // NOT the best-mass feature — a mass-coincident contaminant would corrupt the
     // per-run intensity profile and flatten real fold changes. Targets + decoys
     // (the decoys are the DE test's null).
-    if let Some(path) = &cli.out_peptides {
+    if let Some(path) = &out_peptides {
         use std::io::Write;
         let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
         write!(w, "peptide\tdecoy\tproteins\tcharge\tmass\trt")?;
@@ -418,7 +511,7 @@ fn main() -> Result<()> {
     // competition + optional profile reassignment), then emit the precursor LFQ
     // matrix and/or the protein-group rollup. Both are raw intensities: no design,
     // no differential testing — that's downstream stats' job.
-    if cli.out_lfq.is_some() || cli.out_abundance.is_some() {
+    if out_lfq.is_some() || out_abundance.is_some() {
         use std::io::Write;
         // Feature-level competition (parsimony): one feature quantifies for only
         // its best-scoring protein, so a minority peptide can't measure a
@@ -457,7 +550,7 @@ fn main() -> Result<()> {
 
         // Precursor × sample LFQ matrix (Sage-lfq style): one row per assigned
         // precursor (peptide + charge), no rollup.
-        if let Some(path) = &cli.out_lfq {
+        if let Some(path) = &out_lfq {
             let mut w = std::io::BufWriter::new(std::fs::File::create(path)?);
             write!(w, "peptide\tcharge\tdecoy\tproteins\tmass\trt")?;
             for rn in &matrix.run_names {
@@ -482,7 +575,7 @@ fn main() -> Result<()> {
         }
 
         // Optional protein-group rollup.
-        if let Some(path) = &cli.out_abundance {
+        if let Some(path) = &out_abundance {
             let id_confident: std::collections::HashSet<String> = proteins
                 .iter()
                 .filter(|p| !p.decoy && p.q_value <= 0.01)
@@ -558,4 +651,68 @@ mod seed_config_tests {
         assert_eq!(cfg.scoring.effective_cv_seed(), 5);
         assert_eq!(cfg.scoring.effective_classifier_seed(), 3);
     }
+}
+
+fn search_batch(cli: &Cli, config: &Config, out: &std::path::Path) -> Result<()> {
+    use std::io::Write;
+    let bundle = uno_core::long_input::Bundle::open(cli.matrix_long.as_ref().unwrap())?;
+    std::fs::create_dir_all(out)?;
+    anyhow::ensure!(
+        !out.join("batch_manifest.json").exists(),
+        "batch output already complete; select a new output directory"
+    );
+    let db = PeptideDb::build(cli.fasta.as_ref().unwrap(), &config.digest)?;
+    let models = load_models(cli)?;
+    let mut runs = Vec::new();
+    let mut union: std::collections::BTreeMap<String, Vec<usize>> =
+        std::collections::BTreeMap::new();
+    uno_core::rt_cache::with_memory_cache(|| -> Result<()> {
+        for r in &bundle.runs {
+            let started = Instant::now();
+            let matrix = bundle.load_run(r.run_id)?;
+            let dir = out.join(format!("run{:03}", r.run_id));
+            std::fs::create_dir_all(&dir)?;
+            search_loaded(cli, config, &matrix, &db, &models, Some(&dir))?;
+            let mut reader = csv::ReaderBuilder::new()
+                .delimiter(b'\t')
+                .from_path(dir.join("proteins.tsv"))?;
+            let header = reader.headers()?.clone();
+            let col = |name| header.iter().position(|h| h == name).unwrap();
+            for row in reader.records() {
+                let row = row?;
+                if &row[col("decoy")] == "0" && row[col("q_value")].parse::<f64>()? <= 0.01 {
+                    for acc in row[col("group_members")].split(';') {
+                        let ids = union.entry(acc.to_owned()).or_default();
+                        if !ids.contains(&r.run_id) {
+                            ids.push(r.run_id);
+                        }
+                    }
+                }
+            }
+            runs.push(serde_json::json!({"run_id":r.run_id,"name":r.name,"seconds":started.elapsed().as_secs_f64(),"n_features":matrix.len(),"directory":dir}));
+        }
+        Ok(())
+    })?;
+    let mut writer =
+        std::io::BufWriter::new(std::fs::File::create(out.join("accession_union.tsv"))?);
+    writeln!(writer, "accession\trun_ids")?;
+    for (acc, ids) in &union {
+        writeln!(
+            writer,
+            "{}\t{}",
+            acc,
+            ids.iter()
+                .map(|i| i.to_string())
+                .collect::<Vec<_>>()
+                .join(";")
+        )?;
+    }
+    writer.flush()?;
+    std::fs::write(
+        out.join("batch_manifest.json"),
+        serde_json::to_vec_pretty(
+            &serde_json::json!({"runs":runs,"union_accessions":union.len(),"interpretation":"Union of per-run calls at q <= 0.01; no calibrated cohort q-value is claimed."}),
+        )?,
+    )?;
+    Ok(())
 }

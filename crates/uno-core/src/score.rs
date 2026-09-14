@@ -48,6 +48,21 @@ fn feature_cmp(a: &Feature, b: &Feature) -> Ordering {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(default)]
 pub struct ScoreConfig {
+    /// Joint-input ablation: use candidate-specific observations but disable
+    /// cross-run agreement descriptors in the discriminant.
+    pub matrix_joint_agreement: bool,
+    /// Experimental row-level MBR/extraction-q descriptors in joint searches.
+    pub matrix_joint_cell_quality: bool,
+    /// Keep fill-count descriptors when cell-quality scoring is enabled.
+    pub matrix_joint_cell_counts: bool,
+    /// Keep q-derived descriptors when cell-quality scoring is enabled.
+    pub matrix_joint_cell_q: bool,
+    /// Let coherent alternate matrix rows preserve a peptide during competition.
+    pub matrix_joint_alternative_groups: bool,
+    /// Optional diagnostic export from the selected calibration only.
+    pub diagnostic_peptides_path: Option<String>,
+    /// Ablate only run-recurrence classifier columns; preserve quantities and rows.
+    pub matrix_recurrence: bool,
     /// Keep this many best-mass-error targets and decoys per feature. This caps
     /// the candidate set the discriminant sees, so setting it too low silently
     /// drops real peptides before RT can rescue them. Entrapment (human+yeast on
@@ -137,6 +152,13 @@ pub struct ScoreConfig {
 impl Default for ScoreConfig {
     fn default() -> Self {
         ScoreConfig {
+            matrix_joint_agreement: true,
+            matrix_joint_cell_quality: false,
+            matrix_joint_cell_counts: true,
+            matrix_joint_cell_q: true,
+            matrix_joint_alternative_groups: false,
+            diagnostic_peptides_path: None,
+            matrix_recurrence: true,
             top_k: 50,
             n_folds: 3,
             calibration_fdr: 0.01,
@@ -213,7 +235,7 @@ fn featurize(
     let p = &db.peptides[pfm.peptide_idx as usize];
     let n_detected = f.intensities.iter().filter(|&&x| x > 0.0).count();
     let sum_int: f64 = f.intensities.iter().sum();
-    vec![
+    let mut values = vec![
         pfm.mass_error_ppm.abs() as f32,
         pfm.mass_error_ppm as f32,
         pfm.isotope_offset.unsigned_abs() as f32,
@@ -240,7 +262,11 @@ fn featurize(
         f.isotope_score.unwrap_or(0.0) as f32,
         f.ppm_error.unwrap_or(0.0) as f32,
         f.neutron_offset.unwrap_or(0.0) as f32,
-    ]
+    ];
+    if let Some(evidence) = &matrix.matrix_evidence {
+        values.extend_from_slice(&evidence[pfm.feature_idx as usize]);
+    }
+    values
 }
 
 /// Stable fold assignment for a feature index.
@@ -334,6 +360,9 @@ struct FinalizedCandidate {
     proteins: Vec<ProteinId>,
     n_confident: usize,
     peptides: Vec<(u32, u32, bool)>,
+    // pi, feature, decoy, ML score, deviation, rank fraction, included in any pass
+    diagnostic: Option<Vec<(usize, usize, bool, f64, f64, f64, bool)>>,
+    ml_selected: bool,
 }
 
 fn soft_depth(proteins: &[ProteinId]) -> f64 {
@@ -454,6 +483,10 @@ fn mass_anchor_calibration(
         if pfms[i].isotope_offset != 0 {
             continue;
         }
+        if matrix.joint_evidence.as_ref().is_some_and(|groups|
+            !groups[pfms[i].feature_idx as usize].first().is_some_and(|o| o.bootstrap_eligible)) {
+            continue;
+        }
         if has_iso && matrix.features[pfms[i].feature_idx as usize].n_isotopes.unwrap_or(0.0) < MIN_ISOTOPES {
             continue;
         }
@@ -540,6 +573,12 @@ fn mass_anchor_calibration(
     // of assuming the final round is the best one.
     #[allow(clippy::type_complexity)]
     let mut best_round: Option<(usize, f64, f64, Vec<usize>, f64, HashSet<(bool, &str)>)> = None;
+    // Both calibrations below (mass shift/sigma, RANSAC RT) need at least this
+    // many anchor peptides; a bootstrap ending under it produces no calibration.
+    const MIN_CALIB_ANCHORS: usize = 50;
+    #[allow(clippy::type_complexity)]
+    let mut rescue: Option<(usize, HashSet<(bool, &str)>, Vec<usize>, Vec<f64>, f64)> = None;
+    let mut rescued_bootstrap = false;
     for round in 0..5 {
         let tol = if round == 0 { cfg.mass_anchor_ppm } else { (3.0 * sigma).min(cfg.mass_anchor_ppm) };
         // Matched peptides -> per-protein positions.
@@ -579,35 +618,87 @@ fn mass_anchor_calibration(
             }
         }
         // Anchors + recalibration set = matched peptides of confident proteins.
-        anchor_pos.clear();
-        let mut cerr: Vec<f64> = Vec::new();
         // Sorted key order: `best` is a HashMap, and `cerr` is reduced by
         // `clipped_sigma` below, which is a float reduction.
         let mut best_keys: Vec<usize> = best.keys().copied().collect();
         best_keys.sort_unstable();
-        for pi in best_keys {
-            let (err, pos) = best[&pi];
-            if (err - shift).abs() > tol {
-                continue;
+        let collect_anchors = |confident: &HashSet<(bool, &str)>| -> (Vec<usize>, Vec<f64>) {
+            let mut anchor_pos: Vec<usize> = Vec::new();
+            let mut cerr: Vec<f64> = Vec::new();
+            for &pi in &best_keys {
+                let (err, pos) = best[&pi];
+                if (err - shift).abs() > tol {
+                    continue;
+                }
+                let pep = &db.peptides[pi];
+                // DECOY GUARD. `confident` is keyed (is_decoy, accession) and this
+                // asks only for the TARGET entry, but a decoy peptide carries the
+                // same parent accessions as the target it was shuffled from, so
+                // without this check a decoy peptide of a confident target protein
+                // is admitted as a mass anchor and into the recalibration sample.
+                // The RT path (`est_rt_sig`) has always guarded this; the mass path
+                // did not, which is the asymmetry that gave it away.
+                if pep.decoy {
+                    continue;
+                }
+                if pep.proteins.iter().any(|pr| confident.contains(&(false, pr.as_ref()))) {
+                    anchor_pos.push(pos);
+                    cerr.push(err);
+                }
             }
-            let pep = &db.peptides[pi];
-            // DECOY GUARD. `confident` is keyed (is_decoy, accession) and this
-            // asks only for the TARGET entry, but a decoy peptide carries the
-            // same parent accessions as the target it was shuffled from, so
-            // without this check a decoy peptide of a confident target protein
-            // is admitted as a mass anchor and into the recalibration sample.
-            // The RT path (`est_rt_sig`) has always guarded this; the mass path
-            // did not, which is the asymmetry that gave it away.
-            if pep.decoy {
-                continue;
+            (anchor_pos, cerr)
+        };
+        let (ap, cerr) = collect_anchors(&confident);
+        // ANCHOR-STARVATION RESCUE (candidate only; applied after the loop). The
+        // walk above uses the INSTANTANEOUS d/t, so the confident set is
+        // essentially "the targets ranked above the first decoy protein" (after
+        // the first decoy, d/t stays > 0.05 until t >= 20d). Where the first
+        // decoy lands is a property of the decoy draw, not of the data: on timsTOF
+        // Ultra 2 at p~0.22 the same run gives 21 targets above the first decoy
+        // with one seed and 7 with another. 7 proteins carry ~35 anchor peptides,
+        // below the 50 both calibrations need; when no round does better, mass
+        // stays at the 3.5 ppm default, RT calibration is skipped, and the run
+        // reports 0 proteins (5 of 20 seeds, 2026-09-11). A proper (suffix-min)
+        // q-value does not help: at p~0.22 the mass-only binomial separates only
+        // ~20 proteins from the decoys and below that the two interleave, so a
+        // q-controlled set is intrinsically tiny and seed-dependent. The anchors
+        // are a CALIBRATION sample, not a result: they feed median / clipped-sigma
+        // / RANSAC, all of which tolerate contamination (a healthy seed's 258
+        // anchors were themselves 59% RANSAC outliers). So take the top-scored
+        // target proteins regardless of q until the sample is big enough — but
+        // only as a fallback for a bootstrap that ends uncalibrated. Applying it
+        // to any starved ROUND is too eager: seeds whose round 0 starves but whose
+        // later rounds recover on their own lose depth to the contaminated set
+        // (302->124, 301->200, 277->137, 221->170), while the post-loop fallback
+        // leaves every run that calibrates at all byte-identical.
+        const RESCUE_ANCHOR_PEPTIDES: usize = 250;
+        const RESCUE_MAX_PROTEINS: usize = 150;
+        if cerr.len() < MIN_CALIB_ANCHORS {
+            let (mut t, mut d) = (0usize, 0usize);
+            let mut rescued: HashSet<(bool, &str)> = HashSet::new();
+            // Unique matched positions, so shared peptides are not double-counted.
+            let mut est: HashSet<usize> = HashSet::new();
+            let mut q_last = 0.0f64;
+            for (_, decoy, key) in &scored {
+                if *decoy { d += 1; continue; }
+                t += 1;
+                rescued.insert(*key);
+                if let Some(v) = prot_peps.get(key) { est.extend(v.iter().copied()); }
+                q_last = d as f64 / t as f64;
+                if est.len() >= RESCUE_ANCHOR_PEPTIDES || rescued.len() >= RESCUE_MAX_PROTEINS { break; }
             }
-            if pep.proteins.iter().any(|pr| confident.contains(&(false, pr.as_ref()))) {
-                anchor_pos.push(pos);
-                cerr.push(err);
+            let (rap, rcerr) = collect_anchors(&rescued);
+            log::info!(
+                "mass-anchor round {}: strict walk left {} proteins / {} anchor peptides (< {}); top-score rescue candidate: {} proteins / {} anchor peptides (d/t at cut {:.2})",
+                round, confident.len(), cerr.len(), MIN_CALIB_ANCHORS, rescued.len(), rcerr.len(), q_last
+            );
+            if rescue.as_ref().map_or(true, |(_, _, ra, _, _)| rap.len() > ra.len()) {
+                rescue = Some((round, rescued, rap, rcerr, p));
             }
         }
+        anchor_pos = ap;
         // Recalibrate mass shift + Gaussian-core sigma on the confident peptides.
-        if cerr.len() >= 50 {
+        if cerr.len() >= MIN_CALIB_ANCHORS {
             shift = median(&mut cerr.clone());
             sigma = clipped_sigma(cerr.iter().map(|&e| e - shift)).max(0.1);
         }
@@ -633,6 +724,23 @@ fn mass_anchor_calibration(
         anchor_pos = banchor;
         last_p = bp;
         mass_confident = bconf;
+    }
+    if anchor_pos.len() < MIN_CALIB_ANCHORS {
+        if let Some((rr, rconf, rap, rcerr, rp)) = rescue.take() {
+            if rap.len() >= MIN_CALIB_ANCHORS {
+                shift = median(&mut rcerr.clone());
+                sigma = clipped_sigma(rcerr.iter().map(|&e| e - shift)).max(0.1);
+                log::info!(
+                    "mass-anchor bootstrap starved ({} anchor peptides < {}): using round {} top-score rescue, {} proteins / {} anchor peptides, mass shift={:.3} ppm sigma={:.3} ppm",
+                    anchor_pos.len(), MIN_CALIB_ANCHORS, rr, rconf.len(), rap.len(), shift, sigma
+                );
+                last_nt = rconf.len();
+                mass_confident = rconf;
+                anchor_pos = rap;
+                last_p = rp;
+                rescued_bootstrap = true;
+            }
+        }
     }
     anchor_pos.sort_unstable();
     anchor_pos.dedup();
@@ -710,6 +818,14 @@ fn mass_anchor_calibration(
     let rt_diff_at = |cal: &Calibration, pos: usize| -> Option<f64> {
         abstract_rt[pos].map(|a| matrix.features[pfms[reduced[pos]].feature_idx as usize].rt - cal.apply(a))
     };
+    let calibration_observation = |cal: &Calibration, pos: usize, mass_shift: f64, mass_gate: f64| -> Option<f64> {
+        let p = &pfms[reduced[pos]];
+        if let Some(groups) = &matrix.joint_evidence {
+            let predicted = cal.apply(abstract_rt[pos]?);
+            crate::joint::calibration_rt(&groups[p.feature_idx as usize], db.peptides[p.peptide_idx as usize].mass,
+                predicted, mass_shift, mass_gate)
+        } else { Some(matrix.features[p.feature_idx as usize].rt) }
+    };
     let mass_gate = (3.0_f64 * sigma).min(cfg.mass_anchor_ppm);
 
     // RT accuracy from confident-protein peptides' best-RT (real-feature) residuals,
@@ -759,8 +875,12 @@ fn mass_anchor_calibration(
             }
             let mut best_rd: Option<f64> = None;
             for &(err, pos) in pfm_list {
-                if (err - m_shift).abs() > m_gate { continue; }
-                if let Some(rd) = rt_diff_at(cal, pos) {
+                if matrix.joint_evidence.is_none() && (err - m_shift).abs() > m_gate { continue; }
+                let rd = if matrix.joint_evidence.is_some() {
+                    calibration_observation(cal, pos, m_shift, m_gate)
+                        .zip(abstract_rt[pos]).map(|(rt, a)| rt - cal.apply(a))
+                } else { rt_diff_at(cal, pos) };
+                if let Some(rd) = rd {
                     all_rd.push(rd);
                     if best_rd.map_or(true, |b: f64| rd.abs() < b.abs()) { best_rd = Some(rd); }
                 }
@@ -786,6 +906,14 @@ fn mass_anchor_calibration(
         if std::env::var("UNO_RT_NOISYGAUS").is_ok() {
             let (_shift, s) = noisygaus_fit(&rr, 15.0, 300);
             return s.clamp(0.3, 5.0);
+        }
+        // A rescued bootstrap set is contaminated by construction, and clipped_sigma
+        // is biased up by a flat background it cannot clip away (timsTOF Ultra 2,
+        // seed 7: clipped 1.02 min on the rescued 20 proteins vs 0.50 on a healthy
+        // seed's 28, while the Gaussian-core peak reads 0.38 on both; with 1.02 the
+        // deviation stage finds nothing). Read the peak instead on that path only.
+        if rescued_bootstrap {
+            return gaussian_core_sigma(rr.into_iter(), 15.0).clamp(0.3, 3.5).max(rt_sig_floor.get()) * rt_sig_mult.get();
         }
         clipped_sigma(rr.into_iter()).clamp(0.3, 3.5).max(rt_sig_floor.get()) * rt_sig_mult.get()
     };
@@ -862,11 +990,15 @@ fn mass_anchor_calibration(
                 let pred = pfm_list.first().and_then(|&(_, pos)| abstract_rt[pos]).map(|a| cal.apply(a));
                 for &(err, pos) in pfm_list {
                     let mz = (err - m_shift) / m_sigma;
-                    if mz.abs() > m_gate / m_sigma { continue; }
+                    if matrix.joint_evidence.is_none() && mz.abs() > m_gate / m_sigma { continue; }
                     if cs_gate > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx as usize].combined_score < cs_gate { continue; }
                     if let Some(pr) = pred {
                         let rd = matrix.features[pfms[reduced[pos]].feature_idx as usize].rt - pr;
-                        let dev = mz * mz + (rd / rt_sig).powi(2);
+                        let dev = if let Some(groups) = &matrix.joint_evidence {
+                            let Some(d) = crate::joint::best_deviation(&groups[pfms[reduced[pos]].feature_idx as usize],
+                                db.peptides[pi].mass, pr, m_shift, m_sigma, rt_sig, m_gate) else { continue; };
+                            d
+                        } else { mz * mz + (rd / rt_sig).powi(2) };
                         if best.map_or(true, |(b, _)| dev < b) { best = Some((dev, pos)); }
                         if want_feats { feats.push((dev, pfms[reduced[pos]].feature_idx as usize)); }
                     }
@@ -1125,6 +1257,25 @@ fn mass_anchor_calibration(
         (best_n, best_cut, best_proteins, conf)
     };
 
+    // A rescued (top-score, q-unconstrained) bootstrap set is contaminated by
+    // construction. That is fine for the median / RANSAC calibrators above, but
+    // NOT for `est_rt_sig`, which reads the RT spread of the confident proteins'
+    // peptides: the random proteins contribute the population spread and the
+    // estimate inflates (1.60 min vs 0.21 from a clean set on the same run), the
+    // deviation stage under-gates and collapses. Keep only the rescued proteins
+    // that own at least one RANSAC-inlier anchor — the RT-consistent ones.
+    if rescued_bootstrap && !clean.is_empty() {
+        let inlier_accs: HashSet<&str> = clean
+            .iter()
+            .flat_map(|&pos| db.peptides[pfms[reduced[pos]].peptide_idx as usize].proteins.iter().map(|p| p.as_ref()))
+            .collect();
+        let before = mass_confident.len();
+        mass_confident.retain(|(_, acc)| inlier_accs.contains(acc));
+        log::info!(
+            "mass-anchor rescue: {} of {} rescued proteins own an RT-inlier anchor; using those as the stage-1 confident set",
+            mass_confident.len(), before
+        );
+    }
     // Stage 1: deviation on the mass-bootstrap calibration.
     let mass_conf_accs: HashSet<String> =
         mass_confident.iter().filter(|(d, _)| !d).map(|(_, a)| a.to_string()).collect();
@@ -1134,16 +1285,17 @@ fn mass_anchor_calibration(
         for (&pi, pfm_list) in &pep_pfms {
             let pep = &db.peptides[pi];
             if pep.decoy || !pep.proteins.iter().any(|pr| conf.contains(pr.as_ref())) { continue; }
-            let mut best: Option<(f64, usize)> = None;
+            let mut best: Option<(f64, usize, f64)> = None;
             for &(err, pos) in pfm_list {
-                if (err - m_shift).abs() > m_gate { continue; }
-                if let Some(rd) = rt_diff_at(cal, pos) {
-                    if best.map_or(true, |(b, _): (f64, usize)| rd.abs() < b.abs()) { best = Some((rd, pos)); }
+                if matrix.joint_evidence.is_none() && (err - m_shift).abs() > m_gate { continue; }
+                if let (Some(observed), Some(a)) = (calibration_observation(cal, pos, m_shift, m_gate), abstract_rt[pos]) {
+                    let rd = observed - cal.apply(a);
+                    if best.map_or(true, |(b, _, _)| rd.abs() < b.abs()) { best = Some((rd, pos, observed)); }
                 }
             }
-            if let Some((_, pos)) = best {
+            if let Some((_, pos, observed)) = best {
                 if let Some(a) = abstract_rt[pos] {
-                    cp.push((a, matrix.features[pfms[reduced[pos]].feature_idx as usize].rt));
+                    cp.push((a, observed));
                 }
             }
         }
@@ -1205,6 +1357,22 @@ fn mass_anchor_calibration(
     let empty: HashSet<String> = HashSet::new();
     let mut cands: Vec<(f64, f64)> = vec![(0.0, 1.0)];
     if multi_cand { cands.push((0.0, 1.5)); }
+    // Make the grid symmetric in log-sigma, but ONLY when the anchor set that
+    // `est_rt_sig` is fitted on is too small to trust. est_rt_sig is a clipped_sigma
+    // over the mass-anchor confident proteins; from a handful of them a few RT
+    // outliers OVER-estimate it, and an over-wide gate admits enough random matches
+    // to collapse the run to zero. With only 1.0x/1.5x there is no way back — every
+    // candidate is at least as wide as the bad estimate. Measured on timsTOF Ultra 2
+    // (17.9k features, anchor set 18 proteins, auto rt_sig 1.51): forced rt_sig
+    // 1.5 -> 0 proteins, 1.2 -> 226, 0.9 -> 243, 0.6 -> 155; 2 of 12 Bruker runs
+    // collapsed this way and the tightening candidate recovers all of them.
+    // Gated because the extra candidate is not free above the threshold: Orbitrap
+    // anchors 76+ proteins, est_rt_sig is well determined, and letting x0.67 compete
+    // there is ~35% more scoring time for a wash on honest entrapment depth
+    // (09734 946->975, 09746 876->889, but 09778 1202->1165; run10/09950/deephela/
+    // faims unchanged) — it can win on uno's own decoy count while LOSING honest
+    // depth. 40 sits between the two regimes (Bruker 14-18, Orbitrap 76+).
+    if multi_cand && mass_conf_accs.len() < 40 { cands.push((0.0, 1.0 / 1.5)); }
     let mut runs: Vec<(StageRun, f64, f64)> = Vec::new();
     for &(fl, mu) in &cands {
         let r = run_stages(fl, mu, &empty);
@@ -1258,16 +1426,21 @@ fn mass_anchor_calibration(
             for (&pi, pfm_list) in &pep_pfms {
                 let decoy = db.peptides[pi].decoy;
                 let mut best: Option<(f64, usize)> = None;
+                let predicted_rt = pfm_list.first().and_then(|&(_, pos)| abstract_rt[pos]).map(|a| best_cal.apply(a));
                 for &(err, pos) in pfm_list {
                     let mz = (err - best_shift) / best_sigma;
-                    if mz.abs() > best_gate / best_sigma {
+                    if matrix.joint_evidence.is_none() && mz.abs() > best_gate / best_sigma {
                         continue;
                     }
                     if cs_gate_ml > 0.0 && matrix.features[pfms[reduced[pos]].feature_idx as usize].combined_score < cs_gate_ml {
                         continue;
                     }
                     if let Some(rd) = rt_diff_at(&best_cal, pos) {
-                        let dev = mz * mz + (rd / rt_sig_ml).powi(2);
+                        let dev = if let Some(groups) = &matrix.joint_evidence {
+                            let Some(d) = crate::joint::best_deviation(&groups[pfms[reduced[pos]].feature_idx as usize],
+                                db.peptides[pi].mass, predicted_rt.unwrap(), best_shift, best_sigma, rt_sig_ml, best_gate) else { continue; };
+                            d
+                        } else { mz * mz + (rd / rt_sig_ml).powi(2) };
                         if best.map_or(true, |(b, _)| dev < b) {
                             best = Some((dev, pos));
                         }
@@ -1309,13 +1482,13 @@ fn mass_anchor_calibration(
             // normalization): a real peptide recurs across charges / scans with a
             // CONSISTENT mass+RT; random coincidences do not. This multi-feature
             // evidence is exactly what the single-best-PFM deviation score discards.
-            let group_stats: HashMap<usize, (f64, f64, f64, f64, f32, f32)> = {
+            let group_stats: HashMap<usize, (f64, f64, f64, f64, f32, f32, usize)> = {
                 let med = |v: &mut Vec<f64>| -> f64 {
                     if v.is_empty() { return 0.0; }
                     v.sort_by(|a, b| a.partial_cmp(b).unwrap());
                     v[v.len() / 2]
                 };
-                let mut m: HashMap<usize, (f64, f64, f64, f64, f32, f32)> = HashMap::new();
+                let mut m: HashMap<usize, (f64, f64, f64, f64, f32, f32, usize)> = HashMap::new();
                 for &(pi, _, _, _) in &items {
                     if m.contains_key(&pi) { continue; }
                     let (mut rtds, mut mzs) = (Vec::new(), Vec::new());
@@ -1323,15 +1496,27 @@ fn mass_anchor_calibration(
                     let mut ims: HashSet<i64> = HashSet::new();
                     if let Some(list) = pep_pfms.get(&pi) {
                         for &(err, pos) in list {
-                            mzs.push(((err - shift) / sigma).abs());
-                            if let Some(rd) = rt_diff_at(&best_cal, pos) { rtds.push(rd.abs()); }
                             let f = &matrix.features[pfms[reduced[pos]].feature_idx as usize];
+                            if let Some(groups) = &matrix.joint_evidence {
+                                let Some(pr) = abstract_rt[pos].map(|a| best_cal.apply(a)) else { continue; };
+                                let Some(e) = crate::joint::best_match(&groups[pfms[reduced[pos]].feature_idx as usize],
+                                    db.peptides[pi].mass, pr, best_shift, best_sigma, rt_sig_ml, best_gate) else { continue; };
+                                // Coherent matches only. Off-RT mass coincidences must
+                                // not define this peptide's consistency statistics.
+                                if e.deviation > 9.0 { continue; }
+                                mzs.push(((e.mass_error - best_shift) / best_sigma).abs());
+                                rtds.push(e.rt_error.abs());
+                            } else {
+                                mzs.push(((err - shift) / sigma).abs());
+                                if let Some(rd) = rt_diff_at(&best_cal, pos) { rtds.push(rd.abs()); }
+                            }
                             chs.insert(f.charge);
                             ims.insert((f.im.unwrap_or(0.0) * 100.0) as i64);
                         }
                     }
                     let (rtd_sum, mz_sum): (f64, f64) = (rtds.iter().sum(), mzs.iter().sum());
-                    m.insert(pi, (med(&mut rtds), rtd_sum, med(&mut mzs), mz_sum, chs.len() as f32, ims.len() as f32));
+                    let count = mzs.len();
+                    m.insert(pi, (med(&mut rtds), rtd_sum, med(&mut mzs), mz_sum, chs.len() as f32, ims.len() as f32, count));
                 }
                 m
             };
@@ -1341,6 +1526,7 @@ fn mass_anchor_calibration(
             const AAS: &[u8] = b"GASPVTCLINDQKEMHFRYW";
             let featurize_ml = |pos: usize, pi: usize| -> Vec<f32> {
                 let mut v = featurize(&pfms[reduced[pos]], matrix, db, rt_diff_at(&best_cal, pos), None);
+                if !cfg.matrix_recurrence && matrix.n_samples() > 1 { v[5] = 0.0; v[10] = 0.0; }
                 let seq = db.peptides[pfms[reduced[pos]].peptide_idx as usize].sequence.as_bytes();
                 let mut comp = [0f32; 20];
                 let len = seq.len().max(1) as f32;
@@ -1355,9 +1541,10 @@ fn mass_anchor_calibration(
                 v.push(dp);
                 v.push(kp);
                 v.push(rp);
-                let (rtd_med, rtd_sum, mz_med, mz_sum, n_ch, n_im) =
-                    group_stats.get(&pi).copied().unwrap_or((0.0, 0.0, 0.0, 0.0, 1.0, 1.0));
-                let id_count = pep_pfms.get(&pi).map_or(1, |l| l.len());
+                let (rtd_med, rtd_sum, mz_med, mz_sum, n_ch, n_im, coherent_count) =
+                    group_stats.get(&pi).copied().unwrap_or((0.0, 0.0, 0.0, 0.0, 1.0, 1.0, 0));
+                let id_count = if matrix.joint_evidence.is_some() { coherent_count }
+                    else { pep_pfms.get(&pi).map_or(1, |l| l.len()) };
                 let rtd_abs = rt_diff_at(&best_cal, pos).map(|x| x.abs()).unwrap_or(0.0);
                 let mz_abs = ((pfms[reduced[pos]].mass_error_ppm - shift) / sigma).abs();
                 v.push((1.0 + id_count as f64).ln() as f32);
@@ -1375,6 +1562,49 @@ fn mass_anchor_calibration(
                 v.push(f.isoerror.map(|x| x.abs()).unwrap_or(0.0) as f32);
                 v.push(f.isoerror2.unwrap_or(0.0) as f32);
                 v.push(f.rt_width.unwrap_or(0.0) as f32);
+                if let Some(groups) = &matrix.joint_evidence {
+                    let group = &groups[pfms[reduced[pos]].feature_idx as usize];
+                    let pr = best_cal.apply(abstract_rt[pos].expect("joint candidate requires RT"));
+                    let e = crate::joint::evidence(group, db.peptides[pi].mass, pr,
+                        best_shift, best_sigma, rt_sig_ml, best_gate).expect("selected joint candidate must have evidence");
+                    let f = &group[e.best].feature;
+                    // All original-quality columns come from ONE actual candidate
+                    // observation. Cross-run summaries are separate learned features.
+                    v[0] = e.mass_error.abs() as f32; v[1] = e.mass_error as f32;
+                    v[3] = e.rt_error.abs() as f32; v[4] = f.combined_score as f32;
+                    v[5] = if cfg.matrix_joint_agreement && cfg.matrix_recurrence { e.values[0] } else { 0.0 };
+                    v[7] = (1.0 + f.intensities[0]).log10() as f32;
+                    v[10] = if cfg.matrix_joint_agreement && cfg.matrix_recurrence { e.values[1] } else { 0.0 };
+                    v[12] = f.n_isotopes.unwrap_or(0.0).ln_1p() as f32;
+                    v[13] = f.n_scans.unwrap_or(0.0).ln_1p() as f32;
+                    v[14] = f.cosine_score.unwrap_or(0.0) as f32;
+                    v[15] = f.isotope_score.unwrap_or(0.0) as f32;
+                    v[16] = f.ppm_error.unwrap_or(0.0) as f32;
+                    v[17] = f.neutron_offset.unwrap_or(0.0) as f32;
+                    let base = 18 + matrix.matrix_evidence.as_ref().map_or(0, |_| 9);
+                    v[base + 24] = (e.rt_error.abs() - rtd_med) as f32;
+                    v[base + 25] = (e.rt_error.abs() / (rtd_sum + 0.01)) as f32;
+                    let mass_z = ((e.mass_error - best_shift) / best_sigma).abs();
+                    v[base + 26] = (mass_z - mz_med) as f32;
+                    v[base + 27] = (mass_z / (mz_sum + 0.01)) as f32;
+                    // Original shape values stay attached to the selected observation.
+                    let n = v.len();
+                    v[n-4] = f.isoerror.unwrap_or(0.0) as f32;
+                    v[n-3] = f.isoerror.unwrap_or(0.0).abs() as f32;
+                    v[n-2] = f.isoerror2.unwrap_or(0.0) as f32;
+                    v[n-1] = f.rt_width.unwrap_or(0.0) as f32;
+                    if cfg.matrix_joint_agreement { v.extend_from_slice(&e.values); }
+                    else { v.extend_from_slice(&[0.0; 14]); }
+                    if cfg.matrix_joint_cell_quality {
+                        let cells = matrix.joint_cell_evidence.as_ref()
+                            .expect("joint cell quality requires long-bundle extraction summaries");
+                        // The same row summary is used for every target or decoy
+                        // peptide candidate; MBR does not create peptide observations.
+                        v.extend_from_slice(&crate::cell_evidence::select(
+                            cells[pfms[reduced[pos]].feature_idx as usize],
+                            cfg.matrix_joint_cell_counts, cfg.matrix_joint_cell_q));
+                    }
+                }
                 v
             };
             let feats: Vec<Vec<f32>> = items.iter().map(|&(pi, _, pos, _)| featurize_ml(pos, pi)).collect();
@@ -1462,7 +1692,27 @@ fn mass_anchor_calibration(
             // ensemble, ported to Rust.
             let pep_feat_ml: rustc_hash::FxHashMap<usize, Vec<usize>> = items
                 .iter()
-                .map(|&(pi, _, pos, _)| (pi, vec![pfms[reduced[pos]].feature_idx as usize]))
+                .map(|&(pi, _, pos, _)| {
+                    let best_fi = pfms[reduced[pos]].feature_idx as usize;
+                    let mut features = vec![best_fi];
+                    if cfg.matrix_joint_alternative_groups {
+                        if let Some(groups) = &matrix.joint_evidence {
+                            let pr = best_cal.apply(abstract_rt[pos].expect("joint candidate requires RT"));
+                            for &(_, other) in &pep_pfms[&pi] {
+                                let fi = pfms[reduced[other]].feature_idx as usize;
+                                if fi == best_fi { continue; }
+                                if crate::joint::best_deviation(&groups[fi], db.peptides[pi].mass,
+                                    pr, best_shift, best_sigma, rt_sig_ml, best_gate)
+                                    .is_some_and(|d| d <= 9.0) {
+                                    features.push(fi);
+                                }
+                            }
+                            features.sort_unstable();
+                            features.dedup();
+                        }
+                    }
+                    (pi, features)
+                })
                 .collect();
             // One row per peptide, ranked best-first. Default: ML score desc.
             // UNO_ENS_BY=dev ranks by mass+RT DEVIATION ascending instead -- this
@@ -1549,6 +1799,16 @@ fn mass_anchor_calibration(
             } else {
                 (lo..=hi).map(|step| (n * step / n_steps).max(1).min(n)).collect()
             };
+            let diagnostic = cfg.diagnostic_peptides_path.as_ref().map(|_| {
+                let rank_by: HashMap<usize, usize> = rows.iter().enumerate()
+                    .map(|(i, &(_, _, pi))| (pi, i)).collect();
+                let max_keep = steps.iter().copied().max().unwrap_or(0);
+                items.iter().enumerate().map(|(i, &(pi, decoy, pos, dev))| {
+                    let rank = rank_by[&pi];
+                    (pi, pfms[reduced[pos]].feature_idx as usize, decoy,
+                     ml[i], dev, (rank + 1) as f64 / n as f64, rank < max_keep)
+                }).collect()
+            });
             // The inclusion steps are INDEPENDENT protein-inference passes -> run them
             // in parallel (each the dominant per-pass greedy cost). Results collect in
             // `steps` order, and the `acc` accumulation is then done SERIALLY in that
@@ -1618,7 +1878,7 @@ fn mass_anchor_calibration(
             // If a feature file lacks the quality columns (isoerror/isoerror2 etc.)
             // the gbdt has no real signal over decoys (dim_mean ~= DECOY_mean) and
             // this correctly no-ops.
-            return Some(FinalizedCandidate { proteins: ensembled, n_confident: ml_n, peptides });
+            return Some(FinalizedCandidate { proteins: ensembled, n_confident: ml_n, peptides, diagnostic, ml_selected: true });
         }
         None
     };
@@ -1634,12 +1894,13 @@ fn mass_anchor_calibration(
                 if !take {
                     // Preserve the deviation list and this same calibration's
                     // peptide evidence when its ML rescore does not improve it.
+                    result.ml_selected = false;
                     result.proteins = r.2.clone();
                     result.n_confident = r.0;
                 }
                 result
             }
-            None => FinalizedCandidate { proteins: r.2.clone(), n_confident: r.0, peptides: Vec::new() },
+            None => FinalizedCandidate { proteins: r.2.clone(), n_confident: r.0, peptides: Vec::new(), diagnostic: None, ml_selected: false },
         }
     };
     let chosen_idx = if multi_cand {
@@ -1660,11 +1921,28 @@ fn mass_anchor_calibration(
     set_rt_floor(fl);
     rt_sig_mult.set(mu);
     let (best_n, best_cut, best_proteins, best_cal, best_shift, best_sigma, best_gate, conf1, _rt_sig1, _best_soft) = best;
-    let FinalizedCandidate { proteins: best_proteins, n_confident: best_n, peptides } = match chosen_idx.1 { Some(f) => f, None => finalize(&(best_n, best_cut, best_proteins.clone(), best_cal.clone(), best_shift, best_sigma, best_gate, conf1.clone(), _rt_sig1, _best_soft), fl, mu) };
+    let FinalizedCandidate { proteins: best_proteins, n_confident: best_n, peptides, diagnostic, ml_selected } = match chosen_idx.1 { Some(f) => f, None => finalize(&(best_n, best_cut, best_proteins.clone(), best_cal.clone(), best_shift, best_sigma, best_gate, conf1.clone(), _rt_sig1, _best_soft), fl, mu) };
     log::info!(
         "mass-anchor: {} confident target proteins (q<=1%, min-deviation any-feature, dev_cut={:.0})",
         best_n, best_cut
     );
+    if let Some(path) = &cfg.diagnostic_peptides_path {
+        use std::io::Write;
+        let mut w = std::io::BufWriter::new(std::fs::File::create(path)
+            .expect("cannot create selected-peptide diagnostic"));
+        writeln!(w, "peptide\tdecoy\tproteins\tfeature_idx\tml\tdeviation\trank_fraction\tin_ensemble\tml_selected\tgroup_anchor_run\tgroup_anchor_observation").unwrap();
+        for (pi, fi, decoy, ml, dev, rank, included) in diagnostic.into_iter().flatten() {
+            let pep = &db.peptides[pi];
+            let prots = pep.proteins.iter().map(|p| p.as_ref()).collect::<Vec<_>>().join(";");
+            let anchor = matrix.joint_evidence.as_ref().map(|g| &g[fi][0]);
+            writeln!(w, "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                pep.sequence, u8::from(decoy), prots, fi, ml, dev, rank,
+                u8::from(included), u8::from(ml_selected),
+                anchor.map(|o| o.run_id.to_string()).unwrap_or_default(),
+                anchor.map(|o| o.observation_id.to_string()).unwrap_or_default()).unwrap();
+        }
+        w.flush().expect("cannot flush selected-peptide diagnostic");
+    }
     // Publish only the selected candidate's evidence. Evaluated losers must not
     // change protein grouping, peptide intensities, or LFQ feature assignments.
     MASS_ANCHOR_PEPTIDES.with(|c| *c.borrow_mut() = peptides);
@@ -2287,6 +2565,7 @@ mod determinism_tests {
             }).collect(),
             n_confident: if q <= 0.01 { n } else { 0 },
             peptides: vec![(7, feature, false)],
+            diagnostic: None, ml_selected: false,
         }
     }
 

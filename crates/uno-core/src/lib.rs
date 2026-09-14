@@ -1,9 +1,8 @@
 //! uno-core: MS1-only protein identification.
 //!
-//! Consumes a SINGLE-RUN biosaur2 feature file (the same input ms1searchpy uses),
-//! assigns peptide/protein identities, and controls FDR. Single-run input is
-//! required: it carries the per-feature quality columns that separate target from
-//! decoy, which cross-run alignment drops.
+//! Assigns peptide/protein identities from single-run feature files or KOTH
+//! consensus matrices. Long-format bundles retain original feature quality and
+//! per-run observations for shared-database batch search.
 
 pub mod calibrate;
 mod broad_rt;
@@ -12,6 +11,9 @@ pub mod decoy;
 pub mod group;
 pub mod im;
 pub mod input;
+pub mod joint;
+pub mod cell_evidence;
+pub mod long_input;
 pub mod mass;
 pub mod matching;
 pub mod protein;

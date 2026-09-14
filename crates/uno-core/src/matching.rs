@@ -22,6 +22,20 @@ pub struct MatchConfig {
     /// Skip features below this charge. Singly-charged features are usually
     /// non-peptide contaminants (and CCS predictors don't model them).
     pub min_charge: u8,
+    /// Skip features built from fewer than this many isotopic peaks (0 = off).
+    /// The binomial background `p` is set by FEATURE density x mass window, not
+    /// by database size, so on an instrument with poor mass accuracy the only way
+    /// to keep `p` in range is to search fewer, better-characterised features.
+    /// On timsTOF (mass sigma ~3 ppm vs ~0.55 on Orbitrap) this is the difference
+    /// between 0 and ~300 proteins: 114,659 features -> p 0.554 -> 0 proteins;
+    /// gating to `min_isotopes = 4` + `min_combined_score = 0.85` leaves 17,587
+    /// -> p 0.206 -> 199-368 proteins at 1% honest entrapment FDP. The isotope
+    /// count is the load-bearing half — `min_combined_score` alone (36,753
+    /// features) still yields 0. Default 0 keeps Orbitrap byte-identical.
+    pub min_isotopes: u32,
+    /// Skip features whose `combined_score` (isotope x coelution) is below this
+    /// (0 = off). Use with `min_isotopes`; see that field for the measurements.
+    pub min_combined_score: f64,
 }
 
 impl Default for MatchConfig {
@@ -30,6 +44,8 @@ impl Default for MatchConfig {
             ppm_tolerance: 10.0,
             isotope_offsets: vec![-1, 0, 1],
             min_charge: 1,
+            min_isotopes: 0,
+            min_combined_score: 0.0,
         }
     }
 }
@@ -52,6 +68,45 @@ pub struct Pfm {
     pub decoy: bool,
 }
 
+/// Feature-quality gate shared by both match paths.
+pub(crate) fn passes(feature: &crate::input::Feature, cfg: &MatchConfig) -> bool {
+    feature.charge >= cfg.min_charge
+        && feature.combined_score >= cfg.min_combined_score
+        && (cfg.min_isotopes == 0
+            || feature.n_isotopes.is_none_or(|n| n >= cfg.min_isotopes as f64))
+}
+
+/// Search the union of member mass windows once per aligned group. Overlapping
+/// windows are merged, so a peptide/offset appears once regardless of run count.
+fn joint_matches(matrix: &FeatureMatrix, fi: usize, db: &PeptideDb, cfg: &MatchConfig) -> Vec<Pfm> {
+    let group = &matrix.joint_evidence.as_ref().unwrap()[fi];
+    let feature = &matrix.features[fi];
+    let mut out = Vec::new();
+    for &offset in &cfg.isotope_offsets {
+        let mut windows: Vec<(f64, f64)> = group.iter().filter(|o| passes(&o.feature, cfg))
+            .filter_map(|o| {
+                let c = o.feature.mass - offset as f64 * NEUTRON;
+                (c > 0.0).then(|| (c * (1.0 - cfg.ppm_tolerance * 1e-6), c * (1.0 + cfg.ppm_tolerance * 1e-6)))
+            }).collect();
+        windows.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let mut merged: Vec<(f64, f64)> = Vec::new();
+        for (lo, hi) in windows {
+            if let Some(last) = merged.last_mut().filter(|p| p.1 >= lo) { last.1 = last.1.max(hi); }
+            else { merged.push((lo, hi)); }
+        }
+        let center = feature.mass - offset as f64 * NEUTRON;
+        for (lo, hi) in merged {
+            let start = db.peptides.partition_point(|p| p.mass < lo);
+            for (j, pep) in db.peptides[start..].iter().enumerate() {
+                if pep.mass > hi { break; }
+                out.push(Pfm { feature_idx: fi as u32, peptide_idx: (start + j) as u32,
+                    isotope_offset: offset, mass_error_ppm: (pep.mass - center) / center * 1e6, decoy: pep.decoy });
+            }
+        }
+    }
+    out
+}
+
 /// Generate all PFMs for the feature matrix against the database.
 ///
 /// `db.peptides` must be mass-sorted (it is, after [`PeptideDb::build`]); we use
@@ -63,8 +118,9 @@ pub fn match_features(matrix: &FeatureMatrix, db: &PeptideDb, cfg: &MatchConfig)
         .par_iter()
         .enumerate()
         .flat_map_iter(|(fi, feature)| {
+            if matrix.joint_evidence.is_some() { return joint_matches(matrix, fi, db, cfg).into_iter(); }
             let mut out = Vec::new();
-            if feature.charge < cfg.min_charge {
+            if !passes(feature, cfg) {
                 return out.into_iter();
             }
             for &offset in &cfg.isotope_offsets {
@@ -118,7 +174,11 @@ pub fn match_features_topk(
         .flat_map_iter(|(fi, feature)| {
             let mut targets: Vec<Pfm> = Vec::new();
             let mut decoys: Vec<Pfm> = Vec::new();
-            if feature.charge >= cfg.min_charge {
+            if matrix.joint_evidence.is_some() {
+                for pfm in joint_matches(matrix, fi, db, cfg) {
+                    if pfm.decoy { decoys.push(pfm); } else { targets.push(pfm); }
+                }
+            } else if passes(feature, cfg) {
                 for &offset in &cfg.isotope_offsets {
                     let center = feature.mass - (offset as f64) * NEUTRON;
                     if center <= 0.0 {
@@ -220,7 +280,7 @@ mod tests {
         // Charges below the floor are skipped as non-peptide contaminants.
         assert!(pfms
             .iter()
-            .all(|p| matrix.features[p.feature_idx as usize].charge >= cfg.min_charge));
+            .all(|p| passes(&matrix.features[p.feature_idx as usize], &cfg)));
 
         // A real search matches a substantial fraction of features, not a handful.
         assert!(

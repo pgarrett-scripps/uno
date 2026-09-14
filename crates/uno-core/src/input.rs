@@ -1,16 +1,10 @@
-//! Input contract: read a SINGLE-RUN biosaur2 feature file (`*.features.tsv`).
+//! Read single-run biosaur2/KOTH feature TSVs or aligned KOTH intensity matrices.
 //!
-//! This module reads a pre-computed feature table; it does not touch raw data.
-//! (uno can also find features from raw data itself via the built-in koth
-//! finder — see `uno::koth_ingest` / `--raw` — which produces the same
-//! `FeatureMatrix` this loader does.) Its input is one run's biosaur2 feature
-//! table (optionally normalized by koth's per-run pass) — the SAME single-run
-//! input ms1searchpy consumes. This is deliberate: a single-run
-//! feature file carries the per-feature quality columns (`cosine_score`,
-//! `isotope_score`, `ppm_error`, `neutron_offset`, `isoerror`, `nScans`, ...)
-//! that separate real peptides from random mass coincidences (and shuffled
-//! decoys) in the PFM ML step. Those columns are the whole point of MS1 search;
-//! uno must be fed a single run, never a cross-run summary that drops them.
+//! Single-run tables retain feature-finding quality descriptors. Aligned
+//! matrices retain cross-run contributions and intensities, but omit several
+//! individual-feature descriptors. Optional matrix evidence columns supply
+//! validated summaries of KOTH's LFQ extraction diagnostics. Raw-file feature
+//! finding is handled separately by `uno::koth_ingest`.
 //!
 //! Columns are located BY NAME (order-independent). Required: `massCalib`, `mz`,
 //! `charge`, `rtApex`. Everything else is optional and read if present, with
@@ -19,9 +13,24 @@
 use anyhow::{anyhow, Context, Result};
 use std::path::Path;
 
+/// Optional, label-independent summaries derived from KOTH's LFQ details.
+/// All columns must precede `n_contributing_runs`; partial schemas are rejected.
+/// These describe extraction confidence, not peptide identification confidence.
+pub const MATRIX_EVIDENCE_COLUMNS: [&str; 9] = [
+    "matrix_confident_fraction",
+    "matrix_confident_direct_fraction",
+    "matrix_confident_mbr_fraction",
+    "matrix_median_log_confidence",
+    "matrix_median_isotope_pattern",
+    "matrix_median_coelution",
+    "matrix_median_isotopes",
+    "matrix_median_abs_ppm",
+    "matrix_median_abs_rt",
+];
+
 /// One LC-MS feature from a single run: a deisotoped, charge-resolved precursor
 /// mass at an apex RT, that we try to assign a peptide to.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Feature {
     /// Monoisotopic neutral mass (Da).
     pub mass: f64,
@@ -35,8 +44,8 @@ pub struct Feature {
     /// Feature-quality score (isotope x coelution), in [0, 1]. Defaults to 1.0
     /// when the input has no `combined_score` column.
     pub combined_score: f64,
-    /// Retained inert (always 1 for single-run input) so the ML featurizer that
-    /// reads it stays stable; carries no cross-run meaning.
+    /// Number of original runs contributing to a consensus feature; always 1
+    /// for single-run input. Does not count MBR-filled intensity cells.
     pub n_contributing_runs: u32,
     /// Per-feature shape descriptors: number of isotopic peaks and number of
     /// scans the feature spans (biosaur2 `nIsotopes`/`nScans`). `None` if absent.
@@ -55,17 +64,26 @@ pub struct Feature {
     pub isotope_score: Option<f64>,
     pub ppm_error: Option<f64>,
     pub neutron_offset: Option<f64>,
-    /// Integrated feature intensity (single value). Kept as a 1-element vector so
-    /// the intensity-derived ML features are computed identically.
+    /// One apex intensity for single-run input, or per-run integrated LFQ
+    /// intensities for matrix input. The estimators are not interchangeable.
     pub intensities: Vec<f64>,
 }
 
-/// The single-run feature set.
+/// A single-run or aligned multi-run feature set.
 #[derive(Debug, Clone)]
 pub struct FeatureMatrix {
-    /// Name of the one intensity column (for logging only).
+    /// Run intensity column names in vector order.
     pub run_names: Vec<String>,
     pub features: Vec<Feature>,
+    /// Optional LFQ evidence, one vector per retained consensus feature.
+    /// Absent for ordinary matrices and single-run inputs: their classifier
+    /// vectors keep the exact original dimensions and column order.
+    pub matrix_evidence: Option<Vec<[f32; 9]>>,
+    /// Original, aligned observations per consensus row for one joint search.
+    /// Quantitative cells remain on `features`; observations never duplicate them.
+    pub joint_evidence: Option<Vec<Vec<crate::joint::Observation>>>,
+    /// Extraction summaries per joint row, independent of candidate identity.
+    pub joint_cell_evidence: Option<Vec<[f32; 12]>>,
 }
 
 impl FeatureMatrix {
@@ -75,7 +93,7 @@ impl FeatureMatrix {
     pub fn is_empty(&self) -> bool {
         self.features.is_empty()
     }
-    /// Number of runs — always 1 (single-run input).
+    /// Number of runs; 1 for single-run input.
     pub fn n_samples(&self) -> usize {
         self.run_names.len()
     }
@@ -91,6 +109,9 @@ impl FeatureMatrix {
         Ok(FeatureMatrix {
             run_names: vec![intensity_name],
             features,
+            matrix_evidence: None,
+            joint_evidence: None,
+            joint_cell_evidence: None,
         })
     }
 
@@ -132,6 +153,13 @@ impl FeatureMatrix {
         let c_im = header.iter().position(|h| h == "im");
         let c_cs = header.iter().position(|h| h == "combined_score");
         let c_ncr = col("n_contributing_runs")?;
+        let evidence_cols: Vec<Option<usize>> = MATRIX_EVIDENCE_COLUMNS.iter()
+            .map(|name| header.iter().position(|h| h == *name)).collect();
+        let has_evidence = evidence_cols.iter().any(Option::is_some);
+        if has_evidence && evidence_cols.iter().any(|c| c.is_none_or(|c| c >= c_ncr)) {
+            return Err(anyhow!("matrix evidence requires all nine named columns before n_contributing_runs"));
+        }
+        let mut matrix_evidence = has_evidence.then(Vec::new);
         // Run intensity columns are everything after `n_contributing_runs`.
         let first_run = c_ncr + 1;
         if first_run >= header.len() {
@@ -149,6 +177,17 @@ impl FeatureMatrix {
         for (n, rec) in rdr.records().enumerate() {
             let line = n + 2;
             let rec = rec.with_context(|| format!("reading record at line {line}"))?;
+            let mut evidence = [0.0f32; 9];
+            if has_evidence {
+                for (i, c) in evidence_cols.iter().enumerate() {
+                    let value = parse(&rec, c.unwrap(), MATRIX_EVIDENCE_COLUMNS[i], line)?;
+                    if !value.is_finite() || value < 0.0 || value > f32::MAX as f64
+                        || (matches!(i, 0 | 1 | 2 | 4 | 5) && value > 1.0) {
+                        return Err(anyhow!("line {line}: invalid matrix evidence {}", MATRIX_EVIDENCE_COLUMNS[i]));
+                    }
+                    evidence[i] = value as f32;
+                }
+            }
             let intensities: Vec<f64> = (first_run..header.len())
                 .map(|c| rec.get(c).unwrap_or("0").trim().parse::<f64>().unwrap_or(0.0))
                 .collect();
@@ -164,6 +203,9 @@ impl FeatureMatrix {
                 .unwrap_or_else(|| intensities.iter().filter(|&&x| x > 0.0).count() as u32);
             if n_detected < min_runs {
                 continue;
+            }
+            if let Some(values) = &mut matrix_evidence {
+                values.push(evidence);
             }
             let im = c_im
                 .and_then(|c| rec.get(c))
@@ -194,7 +236,7 @@ impl FeatureMatrix {
                 intensities,
             });
         }
-        Ok(FeatureMatrix { run_names, features })
+        Ok(FeatureMatrix { run_names, features, matrix_evidence, joint_evidence: None, joint_cell_evidence: None })
     }
 }
 
@@ -366,6 +408,62 @@ fn read_features(path: &Path) -> Result<(String, Vec<MatrixRow>)> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn matrix_fixture(evidence: bool, invalid: bool) -> std::path::PathBuf {
+        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
+        let path = std::env::temp_dir().join(format!("uno-matrix-{}-{stamp}.tsv", std::process::id()));
+        let extra = if evidence { format!("{}\t", MATRIX_EVIDENCE_COLUMNS.join("\t")) } else { String::new() };
+        let values = if evidence {
+            if invalid { "NaN\t0\t0\t0\t0\t0\t0\t0\t0\t" } else { "0.5\t0.25\t0.25\t2\t0.8\t0.9\t3\t1.2\t0.1\t" }
+        } else { "" };
+        std::fs::write(&path, format!(
+            "massCalib\tmz\tcharge\trtApex\t{extra}n_contributing_runs\tA\tB\n\
+             1000\t501\t2\t10\t{values}1\t100\t0\n\
+             1100\t551\t2\t12\t{values}2\t200\t300\n"
+        )).unwrap();
+        path
+    }
+
+    #[test]
+    fn ordinary_matrix_keeps_original_classifier_schema() {
+        let path = matrix_fixture(false, false);
+        let m = FeatureMatrix::load_matrix(&path, 2).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(m.run_names, ["A", "B"]);
+        assert_eq!(m.len(), 1);
+        assert_eq!(m.features[0].intensities, [200.0, 300.0]);
+        assert!(m.matrix_evidence.is_none());
+    }
+
+    #[test]
+    fn matrix_evidence_tracks_filtered_feature_rows() {
+        let path = matrix_fixture(true, false);
+        let m = FeatureMatrix::load_matrix(&path, 2).unwrap();
+        std::fs::remove_file(path).unwrap();
+        assert_eq!(m.run_names, ["A", "B"]);
+        assert_eq!(m.features[0].mass, 1100.0);
+        let values = m.matrix_evidence.unwrap();
+        assert_eq!(values.len(), 1);
+        assert_eq!(values[0], [0.5, 0.25, 0.25, 2.0, 0.8, 0.9, 3.0, 1.2, 0.1]);
+    }
+
+    #[test]
+    fn matrix_evidence_rejects_nonfinite_values_even_in_filtered_rows() {
+        let path = matrix_fixture(true, true);
+        let error = FeatureMatrix::load_matrix(&path, 2).unwrap_err();
+        std::fs::remove_file(path).unwrap();
+        assert!(error.to_string().contains("invalid matrix evidence"));
+    }
+
+    #[test]
+    fn matrix_evidence_rejects_partial_schema() {
+        let path = matrix_fixture(true, false);
+        let text = std::fs::read_to_string(&path).unwrap().replace("matrix_median_abs_rt", "unexpected");
+        std::fs::write(&path, text).unwrap();
+        let error = FeatureMatrix::load_matrix(&path, 2).unwrap_err();
+        std::fs::remove_file(path).unwrap();
+        assert!(error.to_string().contains("all nine named columns"));
+    }
 
     #[test]
     fn loads_single_run_features() {

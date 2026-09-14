@@ -1,12 +1,14 @@
 # uno — MS1-only search engine (Rust)
 
 A Rust MS1-only protein identification engine, in the spirit of DirectMS1 /
-ms1searchpy. `uno` does **not** read raw data or find features — it consumes a
-**single-run biosaur2 feature file** (`*.features.tsv`), the same input
-ms1searchpy uses, assigns peptide/protein identities, and controls FDR with
-target/decoy competition. Single-run input is required: it carries the
-per-feature quality columns that separate target from decoy, which cross-run
-alignment strips out.
+ms1searchpy. `uno` accepts a single-run biosaur2 or KOTH feature TSV (`--features`),
+finds features with embedded KOTH (`--raw`), or searches a KOTH aligned intensity
+matrix across several runs (`--matrix`). It assigns peptide/protein identities
+and estimates FDR with target/decoy competition.
+
+See [matrix input](docs/matrix-input.md) for multi-run searching and the
+experimental confidence-aware matrix schema. Matrix input retains cross-run
+intensities but omits some quality descriptors from individual feature tables.
 
 Digestion is reused from [sage-core](../sage); retention-time prediction is a
 pure-Rust learned model, with an on-data calibration step per run.
