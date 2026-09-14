@@ -36,5 +36,7 @@
   },
   "training_command": "RAYON_NUM_THREADS=8 OMP_NUM_THREADS=8 uno-rt-train --labels model/train.csv --im-labels model/train.csv --out model/im_public.sequoia --sequoia --max-depth 5 --iterations 300 --shrinkage 0.1",
   "actual_training_rows": 466716,
-  "internal_validation_rows": 51853
+  "internal_validation_rows": 51853,
+  "dataset_url": "https://proteomicsml.org/datasets/ionmobility/Meier_TIMS.html",
+  "dataset_repository_commit": "4d880356ab963893de1c8b1e3cd80f4f35ed63d3"
 }

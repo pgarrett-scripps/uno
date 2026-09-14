@@ -52,11 +52,8 @@ struct Cli {
     #[arg(long)]
     predict_im: Option<PathBuf>,
 
-    /// Train with `sequoia-boost` (uno's own pure-Rust XGBoost) instead of the
-    /// legacy `gbdt` crate. The legacy crate is single-threaded — ~28 min on the
-    /// 270k-row public CCS corpus vs ~1 min here, for the same feature set —
-    /// and sequoia is already uno's default ML backend for scoring. Writes a
-    /// sequoia native model; `ImModel::load` detects the format automatically.
+    /// Train with `sequoia-boost` instead of the legacy `gbdt` crate. Writes a
+    /// native Sequoia model; `ImModel::load` detects the format automatically.
     #[arg(long)]
     sequoia: bool,
 }

@@ -32,7 +32,7 @@ def prepare():
    a=l.split()[0][1:];assert a not in accessions;accessions.add(a);counts[a.split('_')[-1]]+=1
  assert set(counts)=={'HUMAN','YEAST','ECOLI','ARATH'}
  shutil.copy2(ROOT/'crates/uno/src/koth_bruker.toml',inputs/'koth.toml')
- (inputs/'uno.toml').write_text('[digest]\nmin_len = 7\nmax_len = 30\nmissed_cleavages = 0\n\n[matching]\nmin_charge = 2\nppm_tolerance = 20.0\n\n[scoring]\nmass_anchor_ppm = 20.0\n')
+ (inputs/'uno.toml').write_text('[digest]\nmin_len = 7\nmax_len = 30\nmissed_cleavages = 0\n\n[matching]\nmin_charge = 2\nmin_isotopes = 4\nmin_combined_score = 0.85\nppm_tolerance = 20.0\n\n[scoring]\nmass_anchor_ppm = 20.0\n')
  sources={str(p):sha(p) for p in [targets,plant,SAGE]}
  for key in EVAL:
   for p in sorted((RAW/(STEMS[key]+'.d')).rglob('*')):

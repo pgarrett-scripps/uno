@@ -25,11 +25,7 @@ fn to_f32(v: &[f64]) -> Vec<f32> {
     v.iter().map(|&x| x as f32).collect()
 }
 
-/// Either backend. `gbdt` is the legacy single-threaded crate the shipped
-/// `im_im2deep.gbdt` was trained with; `sequoia-boost` is uno's own pure-Rust
-/// XGBoost reimplementation (already the default ML backend for scoring) and
-/// trains on the ambient Rayon pool, which is ~20x faster here — the legacy
-/// crate needed ~28 min on the 270k-row public CCS corpus.
+/// Supported IM prediction backends, both using the current feature encoder.
 pub enum ImModel {
     Gbdt(GBDT),
     Sequoia(Box<sequoia_boost::prelude::BoostedModel>),
@@ -40,6 +36,8 @@ impl ImModel {
     pub fn load(path: impl AsRef<Path>) -> Result<Self> {
         let path = path.as_ref();
         if let Ok(m) = sequoia_boost::prelude::BoostedModel::load_binary(path) {
+            anyhow::ensure!(m.n_features() == IM_N_FEATURES,
+                "IM model expects {} features, current encoder supplies {}. Retrain with the current encoder; do not silently reinterpret an old schema.", m.n_features(), IM_N_FEATURES);
             return Ok(ImModel::Sequoia(Box::new(m)));
         }
         let metadata: serde_json::Value = serde_json::from_slice(&std::fs::read(path)?)?;
@@ -137,6 +135,19 @@ mod schema_tests {
         let err = ImModel::load(&p).err().expect("old feature width must fail");
         std::fs::remove_file(p).unwrap();
         assert!(err.to_string().contains("expects 70 features, current encoder supplies 100"));
+    }
+    #[test]
+    fn incompatible_sequoia_schema_is_rejected_at_load() {
+        use sequoia_boost::prelude::*;
+        let d = DMatrix::from_dense(&[0.0, 1.0, 2.0, 3.0], 4, 1).unwrap()
+            .with_labels(&[0.0, 1.0, 2.0, 3.0]).unwrap();
+        let params = TrainingParams::builder().objective("reg:squarederror").build().unwrap();
+        let model = train(&params, &d, 1).unwrap();
+        let p = std::env::temp_dir().join(format!("uno-im-schema-{}.sequoia", std::process::id()));
+        model.save_binary(&p).unwrap();
+        let err = ImModel::load(&p).err().expect("wrong feature width must fail");
+        std::fs::remove_file(p).unwrap();
+        assert!(err.to_string().contains("expects 1 features, current encoder supplies 100"));
     }
     #[test]
     fn charge_is_last_and_sequence_descriptors_are_charge_independent() {

@@ -66,7 +66,9 @@ def main():
  outcomes={arm:dict(paired_deltas=v,improved=sum(x>0 for x in v),unchanged=sum(x==0 for x in v),worse=sum(x<0 for x in v),
    median_delta=median(v),all_files_median_improved=all(summaries[k][arm]['median']>summaries[k]['off']['median'] for k in EVAL)) for arm,v in deltas.items()}
  for arm,v in outcomes.items():v['passes_prespecified_gain_rule']=v['improved']>=7 and v['all_files_median_improved']
- report=dict(status='complete',plan=plan,calibration=read(OUT/'calibration.json'),public_model=read(OUT/'model/training-plan.json'),
+ report=dict(status='complete',plan=plan,calibration=read(OUT/'calibration.json'),public_model=read(ROOT/'models/im_public_20260913.training.json'),
+  feature_counts=read(OUT/'feature_counts.json'),calibration_retention=read(OUT/'calibration_retention.json'),
+  unfiltered_attempts=read(OUT/'unfiltered_attempt/summary.json'),search_source=read(OUT/'source.json'),
   results=result,summary=summaries,outcomes=outcomes,verified_inputs=hashes,producer_sha256=sha(Path(__file__)))
  write(OUT/'report.json',report)
  print(json.dumps(dict(summary=summaries,outcomes=outcomes),indent=2))

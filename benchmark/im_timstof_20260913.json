@@ -1,0 +1,1665 @@
+{
+  "status": "complete",
+  "plan": {
+    "calibration_run": "A1",
+    "evaluation_runs": [
+      "A2",
+      "B2",
+      "C2"
+    ],
+    "seeds": [
+      0,
+      1,
+      2
+    ],
+    "arms": [
+      "off",
+      "im3",
+      "im2"
+    ],
+    "primary": "im3 versus off; im2 is prespecified sensitivity. All 27 searches retained.",
+    "model": "Compatible 100-feature Sequoia tree model trained on public measured CCS. No HYE evaluation-run labels used for fitting.",
+    "calibration": "A1 used only for error-width estimation; each searched run gets the original gate's unsupervised per-charge median obs/pred scale from its candidate pool.",
+    "evaluation": "Whole tied-binomial-score blocks, expanded same-species accessions; absent Arabidopsis count / present HYE count times FASTA HYE/Arabidopsis size, at 1%, 3%, 5%. Also internal q<=1% lists and per-file Sage corroboration.",
+    "decision": "Call a consistent gain only if the primary arm improves median 1% depth in each of the three files and improves at least seven of nine paired searches; otherwise report mixed/no benefit. No parameter tuning after results.",
+    "limitations": "One timsTOF Ultra 2 HYE dataset, three evaluation acquisitions and three seeds. MS/MS corroboration is not a complete truth set. Entapment thresholds are retrospective, not deployable q-values. No paper update.",
+    "fasta_counts": {
+      "HUMAN": 20416,
+      "ECOLI": 4403,
+      "YEAST": 6066,
+      "ARATH": 16343
+    },
+    "source_hashes": {
+      "/home/patrick-garrett/Repos/uno/benchmark/results/matrix_20260913_koth050/ionstar/human_ecoli_yeast.fasta": "fb22278827c736cab5c5a38f9fa40f2336d854e06e7352eaa50e4235e1c681f2",
+      "/home/patrick-garrett/Data/fasta/arabidopsis_UP000006548_reviewed.fasta": "5ab306e7040bfbc7a755c83f5a8f88ab24efe3220508e232ffd1faee5be4b1d2",
+      "/home/patrick-garrett/Data/dnoise/results/dda_15min/original/results.sage.tsv": "923992beb45c5d06d4d684ea2fa7a29f5ee9b926f894cbae20f5769a5b29ec1b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/column_setpoint.txt": "d00e9f72fc814669325d9ecf8dc6b68bd357720620446333a9704dde28489c45",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/column_temperature.txt": "99a02a50b9071d79175715390dec4fd5b9e25f90513e4b02fc4989a5026e1cc6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/execution-log_547.txt": "663464cfdf526026ea47fef0109e8a39d0cf656043d6ffcab39234cf0138a3ea",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/flowsensor-a_flow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/flowsensor-b_flow.txt": "8046542af718fa599af1e77f28f85dba748176a6197a10341e0d345d8899ddcc",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/pump-a_pressure.txt": "3483db44803e3b4c19906a662b41b860a470d9c07ae227b1cc382ecc3aa68513",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/pump-a_speed.txt": "741428f777d7f6de2ea63be2ebf32a725670166b1412805d6fab847f0894ae7b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/pump-a_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/pump-a_volume.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/pump-b_pressure.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/pump-b_speed.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/pump-b_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/pump-b_volume.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/sample-tray_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/setflow-a_setflow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/setflow-b_setflow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/solvent-a_composition.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/solvent-b_composition.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/system-info_547.txt": "c791ea519574b44db5786442a0610cbc9bf5f51d83c79b10f06ac1a5498bfe72",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/system_activity.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/valve-a_angle.txt": "3602d70721b4b7012120b4585e26bddfc3bc61b94d9ca0205a85228efb022892",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/valve-b_angle.txt": "74153ffd58996edc9b43c6a8685a4fa8c541b498e7054535fde266d755a6dd2f",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/valve-i_angle.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/2025-03-14_22-30-04_One-column-separation/valve-t_angle.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/InstrumentSetup.isset": "41f9671ad76b08f2b4da5b7f1c100e65db4a916c889e81accc14d331906b9722",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14.m/microTOFQImpacTemAcquisition.method": "de75ba954c8648ec425753a8a3dead33d4913009cc62e280cc156cc6847571ab",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14.m/submethods.xml": "f167279922fab94f125d6e453242ba80345d396d242845f2af0825bd53758baf",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14_1.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14_1.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14_1.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14_1.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14_1.m/microTOFQImpacTemAcquisition.method": "0714b499e35bf0d3b04a39645e08b1632c93cdc3cd5975538930c5d8f4cea4e8",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14_1.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14_1.m/submethods.xml": "a470d1d1b969b02a35c1215d1608dbf17ca71f7e43dea458c9c0f3ac941f04e8",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/backup-2025-03-14_1.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/desktop.ini": "2ff533a52f300f0aca4de61e95aa757c7ce548e60085baeff044336f976104c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/microTOFQImpacTemAcquisition.method": "de75ba954c8648ec425753a8a3dead33d4913009cc62e280cc156cc6847571ab",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/submethods.xml": "16c7ad1810bc882a114e514e26f68ae9607a87837289508bec42422b1e31ea04",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/547.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/HyStarMetadata.xml": "26ed367f7491113e18279853353d4e730ed53c0e8323b5b69a8dd5b0f225a23e",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d.features": "2208fd74c8520444d944077535e5e5a97ca2e06a1646df31978282f23dd38f20",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/SampleInfo.xml": "14106744f682c497caa3108181196199465979675c4f28f9b58e37add853b10e",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/analysis.tdf": "112ca275db370ea0f880e9ce6fe5c393335b4dc4b60d716c53f88658ce38c317",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/analysis.tdf_bin": "9c04c417e6b287528ec7721b27f83d625c7b1051357e66d0e39fb3265954a82f",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/chromatography-data-pre.sqlite": "c902fdc5cf48cfbf723cdc05e3a78f8c6f601acfee4205c2d1e0a0bcf00ae813",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/chromatography-data.sqlite": "4fce33cfd7af7c574e5b61eb8deaa51e77a03944b4761ab79601cf47b17d6947",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/chromatography-data.sqlite-journal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2.d/desktop.ini": "52ce95735b37a6cbc0aed100e9132dd1027b4001b90f1be23ba0e5dabd887ac4",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/column_setpoint.txt": "f8133e77f844669f5adf3797d8469ad5b77bd2aaa97fbb8593e2293a30544b19",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/column_temperature.txt": "c8a2cce14eadb3cbfad3c47d68ede59f343cf0b0c91c36d10000fb6b86d3360e",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/execution-log_548.txt": "30646c84728c95f09f86b30c3ec0bcdeaf97d4f54d11ee24c1b24fe255765aca",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/flowsensor-a_flow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/flowsensor-b_flow.txt": "8393c99e854e392fbe4d8602621fef1d3e0847f4778a54075da3a33ded212b55",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/pump-a_pressure.txt": "e9638faa91d38d4786d409332ac61f5e1cd45a0eaed27e4c91bf1521ba3f9d91",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/pump-a_speed.txt": "8acc609c66a7e79ca705e71bfbc2fdd4415064d2d4c84323306a27d791cb47a4",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/pump-a_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/pump-a_volume.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/pump-b_pressure.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/pump-b_speed.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/pump-b_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/pump-b_volume.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/sample-tray_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/setflow-a_setflow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/setflow-b_setflow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/solvent-a_composition.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/solvent-b_composition.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/system-info_548.txt": "4d73d6dae692280a9d827f9a6037c60c0cddc97ab0c46aab2687460c27bccce2",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/system_activity.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/valve-a_angle.txt": "0219cf204214b588cf1d3d39150b0c40733e18b38f914f79a312478c85bf50d2",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/valve-b_angle.txt": "aab96490a1a739e0e9b97f4c199158d33e9268ba00c2c6d3fc7714036567311b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/valve-i_angle.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/2025-03-14_23-05-36_One-column-separation/valve-t_angle.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/InstrumentSetup.isset": "41f9671ad76b08f2b4da5b7f1c100e65db4a916c889e81accc14d331906b9722",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14.m/microTOFQImpacTemAcquisition.method": "de75ba954c8648ec425753a8a3dead33d4913009cc62e280cc156cc6847571ab",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14.m/submethods.xml": "f167279922fab94f125d6e453242ba80345d396d242845f2af0825bd53758baf",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14_1.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14_1.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14_1.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14_1.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14_1.m/microTOFQImpacTemAcquisition.method": "0714b499e35bf0d3b04a39645e08b1632c93cdc3cd5975538930c5d8f4cea4e8",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14_1.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14_1.m/submethods.xml": "a470d1d1b969b02a35c1215d1608dbf17ca71f7e43dea458c9c0f3ac941f04e8",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/backup-2025-03-14_1.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/desktop.ini": "2ff533a52f300f0aca4de61e95aa757c7ce548e60085baeff044336f976104c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/microTOFQImpacTemAcquisition.method": "de75ba954c8648ec425753a8a3dead33d4913009cc62e280cc156cc6847571ab",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/submethods.xml": "16c7ad1810bc882a114e514e26f68ae9607a87837289508bec42422b1e31ea04",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/548.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/HyStarMetadata.xml": "0842af50dd1b7c3d355bd1c890815f7854677a076a7312a8218740cd45b84549",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d.features": "884aa34b875428de9f053f71d7cc3b71d4bdc6535a9ae6cf302b879ae12e16a0",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/SampleInfo.xml": "30d9b05b694bc3177c38a3ae9e9aa91e14f56a7689f0eac1a5554f1fb0193b9a",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/analysis.tdf": "a1a99a83ba325da7d7c6e0974ea9ac16358bc334ad94fe457e61137f37041df9",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/analysis.tdf_bin": "52e098e8fc08ef1a8249f9d5b1ec37f672b07c116fe6046776c2abe767fd26d7",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/chromatography-data-pre.sqlite": "1c5959b7ee05989b9dcd2912298684f27c0f0e715e5c4bc721a44a0f39915f97",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/chromatography-data.sqlite": "a4ba140ce40f20ff481db7a14f5484de756fa8ef9d8b40fba9f533cee0a40c62",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/chromatography-data.sqlite-journal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2.d/desktop.ini": "52ce95735b37a6cbc0aed100e9132dd1027b4001b90f1be23ba0e5dabd887ac4",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/column_setpoint.txt": "50b34ea61a164ea3bcb0a377321f82e5a11c2df1a495bfae21ce1c8da5e12beb",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/column_temperature.txt": "7a5ff68df32b45a7403b5a16138c19ab4a16b5ea9fc505444020139721f53a81",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/execution-log_549.txt": "f2b5474c01cfab9adb43fe045941212189aa7c7dc20d55eae5ff6e5bd7f744cf",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/flowsensor-a_flow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/flowsensor-b_flow.txt": "fb76a659c1c76c92f0e6903d329944bd784eb2039f3c405599ce1885ebad6bdf",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/pump-a_pressure.txt": "33ac5cf1db96e6e58b04bef90448defe561549841cca88ea43b43ab7b954a054",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/pump-a_speed.txt": "1e50624b1abed7aacb1e5f505e403025dcce9128b248adf9ba648f30461d37f3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/pump-a_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/pump-a_volume.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/pump-b_pressure.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/pump-b_speed.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/pump-b_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/pump-b_volume.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/sample-tray_temperature.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/setflow-a_setflow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/setflow-b_setflow.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/solvent-a_composition.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/solvent-b_composition.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/system-info_549.txt": "8677bdeb278f7d8a74b35f4db38fbc147e3a6b9812c85bfea469f1d2f2a5f1f7",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/system_activity.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/valve-a_angle.txt": "fa6016f36788372c1e74b401958e6dc421cdf5e97e04f769e47abab94ab280ab",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/valve-b_angle.txt": "9893d4a4ddad90d6719fa6e582d49a5f6e837d545dcef6c0900c45e7eff1446a",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/valve-i_angle.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/2025-03-14_23-41-08_One-column-separation/valve-t_angle.txt": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/InstrumentSetup.isset": "41f9671ad76b08f2b4da5b7f1c100e65db4a916c889e81accc14d331906b9722",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15.m/microTOFQImpacTemAcquisition.method": "de75ba954c8648ec425753a8a3dead33d4913009cc62e280cc156cc6847571ab",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15.m/submethods.xml": "b6034598dfdc563dee115e930237fdbf5d749aeb9c3c73468f38c2446888a2e4",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15_1.m/Maldi.method": "53bd0d9d2e349013dd56c1f15829e2571d49a137983b0c8768a9de2899936b0b",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15_1.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15_1.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15_1.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15_1.m/microTOFQImpacTemAcquisition.method": "0714b499e35bf0d3b04a39645e08b1632c93cdc3cd5975538930c5d8f4cea4e8",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15_1.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15_1.m/submethods.xml": "54ac938bec11e02afdf088e52da7d75c150c9a9e4e84944e41e6bbe468272514",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/backup-2025-03-15_1.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/desktop.ini": "2ff533a52f300f0aca4de61e95aa757c7ce548e60085baeff044336f976104c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/diaSettings.diasqlite": "c3a4d277a2caecd9326ad11993619c3e582e9c427ed115e4dbb2efb57d1e18c6",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/hystar.method": "fab2b1651c6157ca087488fcfe4d2262e6b7d0f92022b0508334f2a118dba6e5",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/lock.file": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/microTOFQImpacTemAcquisition.method": "de75ba954c8648ec425753a8a3dead33d4913009cc62e280cc156cc6847571ab",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/prmSettings.prmsqlite": "099e7e45cb89983d9b8ab020f6856e893c09ed48507a7b9a238a5e691c2b67b3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/submethods.xml": "16c7ad1810bc882a114e514e26f68ae9607a87837289508bec42422b1e31ea04",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/549.m/synchroSettings.syncsqlite": "4b5e059841e701ab83220e75d31b0c8ee2952435f70f035eded148af671c0831",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/HyStarMetadata.xml": "501ad3327cc3a82728a65ac11f0c4a919577413c61cac251a28031f1ca3ef93e",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d.features": "2d3674b8c6f532e4253d231835ac1617209a8e9e6c7ef2cfd18e98f845865ffa",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/SampleInfo.xml": "085c26c8b159b253c995644126479bd708f8e766f15f9a127a70456ffbbfc7a3",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/analysis.tdf": "bd3cbafa3b9b0dc17c868a03b6f5171ecdac96593c7353c7b6ce4ae7086b4618",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/analysis.tdf_bin": "35938e9eadd09158caa6588cef2d5b489427e280110df674039a479295be56da",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/chromatography-data-pre.sqlite": "df38daccd7a06fa084369b406137520bb32b93489a334cd1af8b5f6efba1c546",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/chromatography-data.sqlite": "bf5f06bc6b6e0ed6a80b9fabf8907c3cd48d5bb8f392d7264d4f6130872df961",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/chromatography-data.sqlite-journal": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/patrick-garrett/Data/dnoise/data/dda_15min/raw/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2.d/desktop.ini": "52ce95735b37a6cbc0aed100e9132dd1027b4001b90f1be23ba0e5dabd887ac4",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/uno.toml": "6ad20d5a53e306d55eb9e8b685dc3327072288019d56e2d38548284b2a7a21e8",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/calibration.tsv": "c10edbab43cad53294b20a3d8faa40e6f32188f097325f71972f933ab49c3dba",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/hye_arabidopsis.fasta": "ca07a33ea0a855b8873c66de99109b8a0a7ebd398d4221b4016701d4d5c42fb9",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/koth.toml": "bc1161300df203b3b45837f0b15051f0a8ea72cde174baf686fb306f4c0ac6fa",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/predict.tsv": "c0fd5b5b2f21739e4af428298aa3080db48388d9d8f634d5ef8298bc2a036811",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/sage_support.json": "a067ef9bcbb1f569146d80fc169560d4e3448243204589f4fa3e7280b6718741"
+    },
+    "driver_sha256": "5c30117c734068b5b67ae7e75c135e16ad0083f298478f4ab0f74fab37c7df8e",
+    "paper_tag": "paper-2026-09-13",
+    "amendment": "Before any completed identification results, the bundled model was found to expect 70 inputs while the encoder emits 100. The two in-flight jobs were interrupted and archived separately. Replacement model training is fixed at depth 5, 300 trees, learning rate 0.1, seed 42, on public corpus training sequences only. All evaluation files, search seeds, filter widths, thresholds, and decision criteria remain unchanged.",
+    "training_driver_sha256": "7fa39942cec452757220152ca53573dfd8a89e064551b40be77af1e3693266f2",
+    "matching_defaults": {
+      "reason": "Setup correction: --features does not apply the existing --raw Bruker defaults. Ungated runs collapsed to empty outputs, so they cannot assess IM under the standard supported workflow. Both paired arms now explicitly use matching.min_isotopes=4 and matching.min_combined_score=0.85, copied exactly from main at paper-2026-09-13 (crates/uno/src/main.rs). These thresholds were not selected from this experiment.",
+      "unchanged": "Model, IM widths, raw data, extracted features, database, seeds, arms, primary decision rule and all other settings unchanged. Restart all 27 planned searches; preserve all unfiltered completed and interrupted attempts separately.",
+      "utc": "2026-09-14T01:51:50.589944+00:00",
+      "config_sha256": "6ad20d5a53e306d55eb9e8b685dc3327072288019d56e2d38548284b2a7a21e8",
+      "driver_sha256": "5c30117c734068b5b67ae7e75c135e16ad0083f298478f4ab0f74fab37c7df8e"
+    }
+  },
+  "calibration": {
+    "per_charge": {
+      "2": {
+        "n": 21937,
+        "scale": 0.9539061586898495,
+        "median_absolute_relative_error": 0.0115976787185415
+      },
+      "3": {
+        "n": 6068,
+        "scale": 0.9447379853999721,
+        "median_absolute_relative_error": 0.027982734244281434
+      },
+      "4": {
+        "n": 464,
+        "scale": 0.9377472584318611,
+        "median_absolute_relative_error": 0.029632301909318606
+      },
+      "5": {
+        "n": 18,
+        "scale": 0.8494312894643117,
+        "median_absolute_relative_error": 0.02459493441023122
+      }
+    },
+    "relative_sigma": {
+      "2": 0.017310415534033376,
+      "3": 0.04172355400806588
+    },
+    "model_sha256": "893cf231fe7a9997a7a7030e8d0027da967249137e506ef7e9ca35dab1464bf1",
+    "prediction_sha256": "2c6eed32637e587f93c5777e8e4a2276d7314bedcabc00ab1cc5b7f5f77d2a5f"
+  },
+  "public_model": {
+    "source": "/home/patrick-garrett/Repos/pepboost/benchmarks/data/ccs_features/combined_sm.zip",
+    "source_sha256": "097f84e3ffc4edd9a88d5dc0fc858069a90a72c050a59bc6bfbc74258ac7dd91",
+    "counts": {
+      "raw": 718917
+    },
+    "training_rows": 518569,
+    "validation_rows": 58213,
+    "training_sequences": 420435,
+    "validation_sequences": 47101,
+    "split": "SHA256 uno-im-public-v1:sequence modulo 10; bucket 0 external validation; group by sequence, all charge states together.",
+    "label": "CCS * sqrt(mass * 28.0134 / (mass + 28.0134)) / charge / 1000; proportional inverse mobility; dataset-specific multiplicative calibration is required.",
+    "chemistry": "Unmodified sequences with fixed carbamidomethyl C; measured mass within 0.02 Da of that chemistry; lengths 7-30, charges 2-4; replicate medians.",
+    "parameters": {
+      "backend": "sequoia",
+      "max_depth": 5,
+      "iterations": 300,
+      "shrinkage": 0.1,
+      "seed": 42
+    },
+    "hashes": {
+      "validation_predict.tsv": "323e3c903f1b46723ec240145de721f3516b9e93d4affa1cc0bf6eec4f39acf9",
+      "validation.csv": "9920ed1da3277ffd96ae3dcaa1f4ec24b97fd3555879c4082d60326ff988386a",
+      "train.csv": "e2df644ae7284e21f3a225a800f3a23b30006b60bcba43a77347dcfd4ccc9dea"
+    },
+    "model_sha256": "893cf231fe7a9997a7a7030e8d0027da967249137e506ef7e9ca35dab1464bf1",
+    "feature_width": 100,
+    "feature_encoder_sha256": "bd9113033387ae1cd1bce0d81c290ea43b084aca04e6dd26b9cd5dccc018619c",
+    "validation": {
+      "rows": 58213,
+      "sequence_disjoint": true,
+      "r2": 0.9686066531704892,
+      "median_absolute_relative_error": 0.013162027174450313,
+      "relative_error_68": 0.020702126225489413,
+      "model_sha256": "893cf231fe7a9997a7a7030e8d0027da967249137e506ef7e9ca35dab1464bf1"
+    },
+    "training_command": "RAYON_NUM_THREADS=8 OMP_NUM_THREADS=8 uno-rt-train --labels model/train.csv --im-labels model/train.csv --out model/im_public.sequoia --sequoia --max-depth 5 --iterations 300 --shrinkage 0.1",
+    "actual_training_rows": 466716,
+    "internal_validation_rows": 51853,
+    "dataset_url": "https://proteomicsml.org/datasets/ionmobility/Meier_TIMS.html",
+    "dataset_repository_commit": "4d880356ab963893de1c8b1e3cd80f4f35ed63d3"
+  },
+  "feature_counts": {
+    "A2": {
+      "all_features": 114185,
+      "quality_filtered_features": 17503,
+      "retained_charge_counts": {
+        "2": 11997,
+        "3": 4893,
+        "4": 560,
+        "5": 51,
+        "6": 2
+      }
+    },
+    "B2": {
+      "all_features": 111610,
+      "quality_filtered_features": 17653,
+      "retained_charge_counts": {
+        "2": 12081,
+        "3": 4977,
+        "4": 527,
+        "5": 64,
+        "6": 4
+      }
+    },
+    "C2": {
+      "all_features": 100721,
+      "quality_filtered_features": 15317,
+      "retained_charge_counts": {
+        "2": 10245,
+        "3": 4533,
+        "4": 485,
+        "5": 49,
+        "6": 5
+      }
+    }
+  },
+  "calibration_retention": {
+    "2": {
+      "n": 21937,
+      "retention": {
+        "2": 0.9370469982221817,
+        "3": 0.9864156448010211
+      }
+    },
+    "3": {
+      "n": 6068,
+      "retention": {
+        "2": 0.9451219512195121,
+        "3": 0.9896176664469347
+      }
+    },
+    "4": {
+      "n": 464,
+      "retention": {
+        "2": 0.9547413793103449,
+        "3": 0.9956896551724138
+      }
+    },
+    "5": {
+      "n": 18,
+      "retention": {
+        "2": 0.9444444444444444,
+        "3": 1.0
+      }
+    }
+  },
+  "unfiltered_attempts": [
+    {
+      "job": "A2/seed0/im2",
+      "returncode": 0,
+      "protein_rows": 0,
+      "q1_target_rows": 0
+    },
+    {
+      "job": "A2/seed0/im3",
+      "returncode": 0,
+      "protein_rows": 0,
+      "q1_target_rows": 0
+    },
+    {
+      "job": "A2/seed0/off",
+      "returncode": 0,
+      "protein_rows": 0,
+      "q1_target_rows": 0
+    },
+    {
+      "job": "A2/seed1/off",
+      "returncode": null,
+      "protein_rows": null,
+      "q1_target_rows": null
+    },
+    {
+      "job": "B2/seed0/im2",
+      "returncode": 0,
+      "protein_rows": 8039,
+      "q1_target_rows": 111
+    },
+    {
+      "job": "B2/seed0/im3",
+      "returncode": 0,
+      "protein_rows": 0,
+      "q1_target_rows": 0
+    },
+    {
+      "job": "B2/seed0/off",
+      "returncode": 0,
+      "protein_rows": 0,
+      "q1_target_rows": 0
+    },
+    {
+      "job": "C2/seed0/im2",
+      "returncode": null,
+      "protein_rows": null,
+      "q1_target_rows": null
+    },
+    {
+      "job": "C2/seed0/im3",
+      "returncode": null,
+      "protein_rows": null,
+      "q1_target_rows": null
+    },
+    {
+      "job": "C2/seed0/off",
+      "returncode": null,
+      "protein_rows": null,
+      "q1_target_rows": null
+    }
+  ],
+  "search_source": {
+    "files": {
+      "crates/uno-lightgbm-sys/build.rs": "d113087d664a784ad2d9c80804a2f361e2dbdd77511eba28999b84348fd7511e",
+      "crates/uno/build.rs": "4b09f9a62eaebf5582357776bf71b5eafb6807ca4f587f26eab976946e9d835d",
+      "crates/uno-lightgbm-sys/src/lib.rs": "b608f629cf3de4690880b779a433bd6f40bd9425fc5bede66fefcb681ec8b8f1",
+      "crates/uno-core/examples/joint_validate.rs": "a4dd55868b8d027e42e86f6bfa2dda13d9f33a01408e73ae32326f6f8a407a73",
+      "crates/uno-core/examples/decoy_show.rs": "1f47d68e8e765f29ab5ff12f4f465e4dbd23a0edcedab356bdfce09cedd65867",
+      "crates/uno-core/examples/long_validate.rs": "06a40ac7c1a79e77241972bf847652d7063a5d5781a5b94ba3c35e43e66704a3",
+      "crates/uno-core/src/rt_cnn.rs": "97d65f713c1d534f5c21a83750eaa587f24d368da30b917dabe25447b3a533dc",
+      "crates/uno-core/src/lib.rs": "5323075f0fb42a05978d965f13b141928c2cf7bf3cf240414ced367baa5251df",
+      "crates/uno-core/src/decoy.rs": "1cb2783194e7602ea0a1b53b3a7e53e4a83fbd3bbf36423c0e4911bccfc257d3",
+      "crates/uno-core/src/cell_evidence.rs": "1925c649fadd590bc4ce990f8b32cd93d6b3529506acfac9c33509038a4caa0a",
+      "crates/uno-core/src/rt.rs": "bd9113033387ae1cd1bce0d81c290ea43b084aca04e6dd26b9cd5dccc018619c",
+      "crates/uno-core/src/matching.rs": "4cde8ed90a653fbaedcd67a2a1ac8c58f83c03ddda6264a9414d6f84d811cc74",
+      "crates/uno-core/src/input.rs": "4b5624fd58e5d9dda2d6dbfe0a8249240a931fc0d9ff7698378cd19a736e6c88",
+      "crates/uno-core/src/broad_rt.rs": "b9b02360bf1bba8d239ec45616aa8a02ff406b2a127c5a70f5813b9967bc14c3",
+      "crates/uno-core/src/database.rs": "47dedfc343ec35eb456189902ecdd6b8c67fc5964399f53770d1793a1f85bd62",
+      "crates/uno-core/src/mass.rs": "bf81de66708670037fe75c2859ac423f9bc2ba73ba18618ad42b84596c54781a",
+      "crates/uno-core/src/protein.rs": "e05bf9f8485a02d171bce5c448b766554b4e1ea797549534b46d45fd925f8ddc",
+      "crates/uno-core/src/long_input.rs": "9d4ac3629808a505fc346e3743c955ee5f58a00a2cd766be36b5ed9360348536",
+      "crates/uno-core/src/im.rs": "2ed597e0f1528a670843ffb4a8ad98a3d3c98377cef97e11dfbd88ac3e76dc8d",
+      "crates/uno-core/src/joint.rs": "a663e2f3d7d0d0856a1f90f1422fcc430bd7997105fb8ddb99a2006dbf6fd823",
+      "crates/uno-core/src/rt_mlp.rs": "e0f5c8245b2be167fb7531e61fa44aa487f0fd45693b3d6df13b40214964776e",
+      "crates/uno-core/src/group.rs": "d92ce40da72403809617bc69789a255fd2685dee4cde845e17b54768e4d89998",
+      "crates/uno-core/src/rt_cache.rs": "b37c9ea5a23d8c748e612dcd1ae279c2805e2126488d2317ae646d1c2b3e7340",
+      "crates/uno-core/src/score.rs": "c705fad2f3fff369ed112bd492855965d6cb87da7214fe6460d3cf236c741052",
+      "crates/uno-core/src/quant.rs": "16be49ddc3df191e989a09d12f4ed2fee5e54b41dac3fe359506535c67b61942",
+      "crates/uno-core/src/calibrate.rs": "c44b9722d74852da1c0255c887c330fdd6a9a07e04e4d22faa92a183ca572974",
+      "crates/uno-rt-train/src/main.rs": "5a677dac8050517e63b0ad2ef9336d52f9e1c076d838796ffab0085a730a18ae",
+      "crates/uno-rt-train/src/bin/rt_throughput.rs": "6f38221e0b333bf494faf18f5d16a38bfcda44029f0595ca208f4bb13a04936f",
+      "crates/uno-rt-train/src/bin/linear_probe.rs": "cb1794d41bdd27f7ca2ca995b0efb623d75dbb58fd2d784bf9ff3fd1236b61b4",
+      "crates/uno-rt-train/src/bin/mlp_bench.rs": "dc506bbc79d8b9287a355623b2434ad3ac56b0e2b2b959d8158fa00eb0b8c5ed",
+      "crates/uno-rt-train/src/bin/embed_probe.rs": "4b3835d970f9e0cc6d35510d98a19917ddd2c5a4a17d3f0d2a5934c29bef8db2",
+      "crates/uno-rt-train/src/bin/rt_eval.rs": "fe0a8f510cff42d081963ad61a81e7851c5affb3abab69821292f739a5e36f3d",
+      "crates/uno/src/rt_cli.rs": "eba0d282e3e24446c94d408e3f8eaf0e2aac169a9b4e4b6ca2ba86c4de76ef06",
+      "crates/uno/src/main.rs": "64694ece751ef18aa583311dc48e0d092c16272ffe4f712a4c2bec6f40cf0378",
+      "crates/uno/src/koth_ingest.rs": "751790d63eee055b21e5afd3925b2197c80b378c1a97eaa26a27c3e8196c356e",
+      "crates/uno-lightgbm-sys/Cargo.toml": "31d276142ccdecc617834d87d999ddce7785135917d8dc9ba74210ede0a8a6ff",
+      "crates/uno-core/Cargo.toml": "c131bb363c75e2103048c9b5567925a569113f7198e3433e92b9eee330376b4e",
+      "crates/uno-rt-train/Cargo.toml": "d4a4010f57349c9459fbceec96355c2ae949b9cb1094ac262a9f8f4b2537bd85",
+      "crates/uno/Cargo.toml": "41bcfa9d3099c0a6bd8a742f1ef0337ad29746154a4133ec3d5456c9b67aa99d",
+      "Cargo.lock": "43440b586f8cf6bb110c22df94fc03cf568ea7e983ae4dece577e3f0f770d787",
+      "Cargo.toml": "b77ee078a4080cdb8aa80b22a12e6fe8ff3f8d0a34a177fcdc3a208ce5432f3a"
+    },
+    "base_commit": "2fff76492352a974baffb8fb8e11d58049576f6e",
+    "binaries": {
+      "uno": "ae1e614f1d94b7e3e5a03c82f489eefdc6673735561db6e219d821e4f63ae600",
+      "uno-rt-train": "02492510e78ee3b688e823ba977ff5508a1c2739a9a97e0209b9cee9a9145a6b"
+    },
+    "model_sha256": "893cf231fe7a9997a7a7030e8d0027da967249137e506ef7e9ca35dab1464bf1",
+    "commit": "1223f922ae1fcad0025d9a2f3b46276d20031357"
+  },
+  "results": {
+    "A2": {
+      "0": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 286,
+              "entrapment": 1,
+              "fdp": 0.006607692008169276,
+              "threshold": "2.452",
+              "sage_supported": 284
+            },
+            "0.03": {
+              "present": 391,
+              "entrapment": 6,
+              "fdp": 0.02899948717651785,
+              "threshold": "1.987",
+              "sage_supported": 380
+            },
+            "0.05": {
+              "present": 409,
+              "entrapment": 10,
+              "fdp": 0.04620537687864091,
+              "threshold": "1.914",
+              "sage_supported": 396
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 228,
+            "entrapment": 1,
+            "fdp": 0.008288596115510584
+          },
+          "gate": null,
+          "seconds": 79.678213596344
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 256,
+              "entrapment": 1,
+              "fdp": 0.007382030915376613,
+              "threshold": "2.584",
+              "sage_supported": 256
+            },
+            "0.03": {
+              "present": 337,
+              "entrapment": 5,
+              "fdp": 0.028038574396682687,
+              "threshold": "2.222",
+              "sage_supported": 333
+            },
+            "0.05": {
+              "present": 432,
+              "entrapment": 11,
+              "fdp": 0.04811990522615867,
+              "threshold": "1.860",
+              "sage_supported": 417
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 223,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1618625,
+            "before": 1715791,
+            "rejected_fraction": 0.05663044042077381
+          },
+          "seconds": 116.1595606803894
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 99,
+              "entrapment": 0,
+              "fdp": 0.0,
+              "threshold": "3.611",
+              "sage_supported": 99
+            },
+            "0.03": {
+              "present": 140,
+              "entrapment": 2,
+              "fdp": 0.02699714163337733,
+              "threshold": "3.158",
+              "sage_supported": 140
+            },
+            "0.05": {
+              "present": 272,
+              "entrapment": 7,
+              "fdp": 0.04863455661895181,
+              "threshold": "2.325",
+              "sage_supported": 270
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 224,
+            "entrapment": 6,
+            "fdp": 0.050619640562582495
+          },
+          "gate": {
+            "kept": 1407063,
+            "before": 1715791,
+            "rejected_fraction": 0.1799333368691175
+          },
+          "seconds": 108.17129015922546
+        }
+      },
+      "1": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 104,
+              "entrapment": 0,
+              "fdp": 0.0,
+              "threshold": "3.682",
+              "sage_supported": 104
+            },
+            "0.03": {
+              "present": 278,
+              "entrapment": 4,
+              "fdp": 0.027191365673905222,
+              "threshold": "2.245",
+              "sage_supported": 273
+            },
+            "0.05": {
+              "present": 341,
+              "entrapment": 9,
+              "fdp": 0.049877417093922925,
+              "threshold": "1.912",
+              "sage_supported": 332
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 131,
+            "entrapment": 1,
+            "fdp": 0.014425953544552771
+          },
+          "gate": null,
+          "seconds": 107.78563976287842
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 305,
+              "entrapment": 1,
+              "fdp": 0.006196065292906272,
+              "threshold": "2.454",
+              "sage_supported": 298
+            },
+            "0.03": {
+              "present": 350,
+              "entrapment": 4,
+              "fdp": 0.021597713306701863,
+              "threshold": "2.186",
+              "sage_supported": 342
+            },
+            "0.05": {
+              "present": 387,
+              "entrapment": 10,
+              "fdp": 0.04883203913013987,
+              "threshold": "1.957",
+              "sage_supported": 377
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 209,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1618295,
+            "before": 1715376,
+            "rejected_fraction": 0.05659458917461824
+          },
+          "seconds": 115.28906202316284
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 210,
+              "entrapment": 1,
+              "fdp": 0.008999047211125776,
+              "threshold": "2.870",
+              "sage_supported": 210
+            },
+            "0.03": {
+              "present": 317,
+              "entrapment": 5,
+              "fdp": 0.029807569626757305,
+              "threshold": "2.279",
+              "sage_supported": 314
+            },
+            "0.05": {
+              "present": 373,
+              "entrapment": 9,
+              "fdp": 0.04559838935396171,
+              "threshold": "2.065",
+              "sage_supported": 368
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 126,
+            "entrapment": 1,
+            "fdp": 0.01499841201854296
+          },
+          "gate": {
+            "kept": 1407437,
+            "before": 1715376,
+            "rejected_fraction": 0.17951691057820562
+          },
+          "seconds": 103.4517867565155
+        }
+      },
+      "2": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 263,
+              "entrapment": 1,
+              "fdp": 0.007185551005081418,
+              "threshold": "2.458",
+              "sage_supported": 261
+            },
+            "0.03": {
+              "present": 355,
+              "entrapment": 5,
+              "fdp": 0.026616900201921312,
+              "threshold": "2.006",
+              "sage_supported": 346
+            },
+            "0.05": {
+              "present": 400,
+              "entrapment": 10,
+              "fdp": 0.047244997858410326,
+              "threshold": "1.824",
+              "sage_supported": 386
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 170,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": null,
+          "seconds": 95.19897794723511
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 229,
+              "entrapment": 1,
+              "fdp": 0.008252401372648092,
+              "threshold": "2.671",
+              "sage_supported": 229
+            },
+            "0.03": {
+              "present": 339,
+              "entrapment": 4,
+              "fdp": 0.022298524062966524,
+              "threshold": "2.144",
+              "sage_supported": 331
+            },
+            "0.05": {
+              "present": 434,
+              "entrapment": 11,
+              "fdp": 0.04789815451083075,
+              "threshold": "1.730",
+              "sage_supported": 415
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 143,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1618359,
+            "before": 1715613,
+            "rejected_fraction": 0.05668760961825303
+          },
+          "seconds": 91.85599327087402
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 301,
+              "entrapment": 1,
+              "fdp": 0.006278405031017983,
+              "threshold": "2.406",
+              "sage_supported": 298
+            },
+            "0.03": {
+              "present": 323,
+              "entrapment": 5,
+              "fdp": 0.02925386864297853,
+              "threshold": "2.283",
+              "sage_supported": 320
+            },
+            "0.05": {
+              "present": 359,
+              "entrapment": 9,
+              "fdp": 0.04737659952375409,
+              "threshold": "2.088",
+              "sage_supported": 354
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 172,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1407021,
+            "before": 1715613,
+            "rejected_fraction": 0.1798727335360597
+          },
+          "seconds": 88.81914567947388
+        }
+      }
+    },
+    "B2": {
+      "0": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 69,
+              "entrapment": 0,
+              "fdp": 0.0,
+              "threshold": "4.221",
+              "sage_supported": 69
+            },
+            "0.03": {
+              "present": 215,
+              "entrapment": 3,
+              "fdp": 0.02636930113027553,
+              "threshold": "2.598",
+              "sage_supported": 214
+            },
+            "0.05": {
+              "present": 236,
+              "entrapment": 6,
+              "fdp": 0.048045760533976606,
+              "threshold": "2.322",
+              "sage_supported": 234
+            }
+          },
+          "ambiguous_groups": 2,
+          "internal_1pct": {
+            "present": 207,
+            "entrapment": 2,
+            "fdp": 0.018258936370400127
+          },
+          "gate": null,
+          "seconds": 94.37669277191162
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            },
+            "0.03": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            },
+            "0.05": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            }
+          },
+          "ambiguous_groups": 0,
+          "internal_1pct": {
+            "present": 0,
+            "entrapment": 0,
+            "fdp": null
+          },
+          "gate": {
+            "kept": 1625801,
+            "before": 1727105,
+            "rejected_fraction": 0.058655379956632614
+          },
+          "seconds": 151.66263270378113
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 78,
+              "entrapment": 0,
+              "fdp": 0.0,
+              "threshold": "4.156",
+              "sage_supported": 78
+            },
+            "0.03": {
+              "present": 212,
+              "entrapment": 3,
+              "fdp": 0.02674245161796811,
+              "threshold": "2.597",
+              "sage_supported": 208
+            },
+            "0.05": {
+              "present": 268,
+              "entrapment": 7,
+              "fdp": 0.049360445523712285,
+              "threshold": "2.235",
+              "sage_supported": 262
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 166,
+            "entrapment": 1,
+            "fdp": 0.011384336833351886
+          },
+          "gate": {
+            "kept": 1409581,
+            "before": 1727105,
+            "rejected_fraction": 0.1838475367739657
+          },
+          "seconds": 136.92481660842896
+        }
+      },
+      "1": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 284,
+              "entrapment": 1,
+              "fdp": 0.006654225050480328,
+              "threshold": "2.477",
+              "sage_supported": 281
+            },
+            "0.03": {
+              "present": 353,
+              "entrapment": 5,
+              "fdp": 0.026767704169071007,
+              "threshold": "2.097",
+              "sage_supported": 347
+            },
+            "0.05": {
+              "present": 367,
+              "entrapment": 9,
+              "fdp": 0.04634386710906735,
+              "threshold": "2.001",
+              "sage_supported": 360
+            }
+          },
+          "ambiguous_groups": 2,
+          "internal_1pct": {
+            "present": 166,
+            "entrapment": 1,
+            "fdp": 0.011384336833351886
+          },
+          "gate": null,
+          "seconds": 96.49498915672302
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 287,
+              "entrapment": 1,
+              "fdp": 0.006584668691067642,
+              "threshold": "2.846",
+              "sage_supported": 287
+            },
+            "0.03": {
+              "present": 418,
+              "entrapment": 6,
+              "fdp": 0.02712631455985282,
+              "threshold": "2.240",
+              "sage_supported": 416
+            },
+            "0.05": {
+              "present": 544,
+              "entrapment": 13,
+              "fdp": 0.04516065971759811,
+              "threshold": "1.826",
+              "sage_supported": 525
+            }
+          },
+          "ambiguous_groups": 2,
+          "internal_1pct": {
+            "present": 216,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1625512,
+            "before": 1726839,
+            "rejected_fraction": 0.0586777342879099
+          },
+          "seconds": 108.82946848869324
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 255,
+              "entrapment": 1,
+              "fdp": 0.0074109800562212275,
+              "threshold": "3.102",
+              "sage_supported": 255
+            },
+            "0.03": {
+              "present": 429,
+              "entrapment": 6,
+              "fdp": 0.026430768032677108,
+              "threshold": "2.161",
+              "sage_supported": 425
+            },
+            "0.05": {
+              "present": 531,
+              "entrapment": 12,
+              "fdp": 0.04270734269686809,
+              "threshold": "1.792",
+              "sage_supported": 514
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 221,
+            "entrapment": 1,
+            "fdp": 0.008551130834101417
+          },
+          "gate": {
+            "kept": 1410040,
+            "before": 1726839,
+            "rejected_fraction": 0.18345601413912938
+          },
+          "seconds": 49.73656868934631
+        }
+      },
+      "2": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            },
+            "0.03": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            },
+            "0.05": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            }
+          },
+          "ambiguous_groups": 0,
+          "internal_1pct": {
+            "present": 0,
+            "entrapment": 0,
+            "fdp": null
+          },
+          "gate": null,
+          "seconds": 99.78301334381104
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            },
+            "0.03": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            },
+            "0.05": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            }
+          },
+          "ambiguous_groups": 0,
+          "internal_1pct": {
+            "present": 0,
+            "entrapment": 0,
+            "fdp": null
+          },
+          "gate": {
+            "kept": 1625563,
+            "before": 1727002,
+            "rejected_fraction": 0.058737048364738476
+          },
+          "seconds": 129.56119418144226
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 139,
+              "entrapment": 0,
+              "fdp": 0.0,
+              "threshold": "3.102",
+              "sage_supported": 139
+            },
+            "0.03": {
+              "present": 233,
+              "entrapment": 3,
+              "fdp": 0.024332187738237077,
+              "threshold": "2.359",
+              "sage_supported": 230
+            },
+            "0.05": {
+              "present": 271,
+              "entrapment": 7,
+              "fdp": 0.04881401992750883,
+              "threshold": "2.040",
+              "sage_supported": 266
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 111,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1409624,
+            "before": 1727002,
+            "rejected_fraction": 0.18377396204520902
+          },
+          "seconds": 110.78946852684021
+        }
+      }
+    },
+    "C2": {
+      "0": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 193,
+              "entrapment": 1,
+              "fdp": 0.009791709400706804,
+              "threshold": "2.393",
+              "sage_supported": 188
+            },
+            "0.03": {
+              "present": 211,
+              "entrapment": 3,
+              "fdp": 0.026869193094830518,
+              "threshold": "2.260",
+              "sage_supported": 201
+            },
+            "0.05": {
+              "present": 255,
+              "entrapment": 6,
+              "fdp": 0.04446588033732737,
+              "threshold": "1.943",
+              "sage_supported": 241
+            }
+          },
+          "ambiguous_groups": 0,
+          "internal_1pct": {
+            "present": 112,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": null,
+          "seconds": 102.17177319526672
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 217,
+              "entrapment": 1,
+              "fdp": 0.00870875536560559,
+              "threshold": "2.124",
+              "sage_supported": 209
+            },
+            "0.03": {
+              "present": 238,
+              "entrapment": 3,
+              "fdp": 0.023821007323568233,
+              "threshold": "1.981",
+              "sage_supported": 226
+            },
+            "0.05": {
+              "present": 271,
+              "entrapment": 7,
+              "fdp": 0.04881401992750883,
+              "threshold": "1.771",
+              "sage_supported": 251
+            }
+          },
+          "ambiguous_groups": 0,
+          "internal_1pct": {
+            "present": 106,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1421715,
+            "before": 1494559,
+            "rejected_fraction": 0.048739460937975654
+          },
+          "seconds": 136.82119464874268
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 395,
+              "entrapment": 2,
+              "fdp": 0.009568607161197028,
+              "threshold": "2.548",
+              "sage_supported": 392
+            },
+            "0.03": {
+              "present": 536,
+              "entrapment": 8,
+              "fdp": 0.02820596887069273,
+              "threshold": "2.073",
+              "sage_supported": 520
+            },
+            "0.05": {
+              "present": 663,
+              "entrapment": 17,
+              "fdp": 0.048456408059908036,
+              "threshold": "1.768",
+              "sage_supported": 627
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 339,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1249942,
+            "before": 1494559,
+            "rejected_fraction": 0.16367169178332874
+          },
+          "seconds": 62.9485068321228
+        }
+      },
+      "1": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 381,
+              "entrapment": 2,
+              "fdp": 0.009920209524075659,
+              "threshold": "2.449",
+              "sage_supported": 380
+            },
+            "0.03": {
+              "present": 463,
+              "entrapment": 7,
+              "fdp": 0.028571488985647715,
+              "threshold": "2.115",
+              "sage_supported": 456
+            },
+            "0.05": {
+              "present": 546,
+              "entrapment": 14,
+              "fdp": 0.04845640805990803,
+              "threshold": "1.793",
+              "sage_supported": 523
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 310,
+            "entrapment": 1,
+            "fdp": 0.006096128755923913
+          },
+          "gate": null,
+          "seconds": 34.932372093200684
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 460,
+              "entrapment": 2,
+              "fdp": 0.008216521366680057,
+              "threshold": "2.271",
+              "sage_supported": 452
+            },
+            "0.03": {
+              "present": 549,
+              "entrapment": 8,
+              "fdp": 0.027538067968472323,
+              "threshold": "1.948",
+              "sage_supported": 533
+            },
+            "0.05": {
+              "present": 593,
+              "entrapment": 13,
+              "fdp": 0.04142900318106808,
+              "threshold": "1.773",
+              "sage_supported": 566
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 343,
+            "entrapment": 1,
+            "fdp": 0.005509620741505577
+          },
+          "gate": {
+            "kept": 1421425,
+            "before": 1494221,
+            "rejected_fraction": 0.04871836227706616
+          },
+          "seconds": 102.61228156089783
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 474,
+              "entrapment": 2,
+              "fdp": 0.007973839300997524,
+              "threshold": "2.302",
+              "sage_supported": 470
+            },
+            "0.03": {
+              "present": 608,
+              "entrapment": 9,
+              "fdp": 0.02797401188984822,
+              "threshold": "1.884",
+              "sage_supported": 583
+            },
+            "0.05": {
+              "present": 761,
+              "entrapment": 20,
+              "fdp": 0.049666226395175116,
+              "threshold": "1.531",
+              "sage_supported": 702
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 352,
+            "entrapment": 2,
+            "fdp": 0.010737499513275075
+          },
+          "gate": {
+            "kept": 1250131,
+            "before": 1494221,
+            "rejected_fraction": 0.16335602297116691
+          },
+          "seconds": 72.80669355392456
+        }
+      },
+      "2": {
+        "off": {
+          "thresholds": {
+            "0.01": {
+              "present": 413,
+              "entrapment": 2,
+              "fdp": 0.009151573435043163,
+              "threshold": "2.444",
+              "sage_supported": 408
+            },
+            "0.03": {
+              "present": 548,
+              "entrapment": 8,
+              "fdp": 0.027588319917319897,
+              "threshold": "1.941",
+              "sage_supported": 530
+            },
+            "0.05": {
+              "present": 590,
+              "entrapment": 15,
+              "fdp": 0.048045760533976606,
+              "threshold": "1.776",
+              "sage_supported": 561
+            }
+          },
+          "ambiguous_groups": 1,
+          "internal_1pct": {
+            "present": 333,
+            "entrapment": 2,
+            "fdp": 0.011350149635654132
+          },
+          "gate": null,
+          "seconds": 47.466734886169434
+        },
+        "im3": {
+          "thresholds": {
+            "0.01": {
+              "present": 209,
+              "entrapment": 1,
+              "fdp": 0.009042104853284274,
+              "threshold": "2.209",
+              "sage_supported": 200
+            },
+            "0.03": {
+              "present": 215,
+              "entrapment": 3,
+              "fdp": 0.02636930113027553,
+              "threshold": "2.172",
+              "sage_supported": 206
+            },
+            "0.05": {
+              "present": 250,
+              "entrapment": 5,
+              "fdp": 0.03779599828672826,
+              "threshold": "1.950",
+              "sage_supported": 233
+            }
+          },
+          "ambiguous_groups": 0,
+          "internal_1pct": {
+            "present": 109,
+            "entrapment": 0,
+            "fdp": 0.0
+          },
+          "gate": {
+            "kept": 1421549,
+            "before": 1494483,
+            "rejected_fraction": 0.04880216101487944
+          },
+          "seconds": 96.52960109710693
+        },
+        "im2": {
+          "thresholds": {
+            "0.01": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            },
+            "0.03": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            },
+            "0.05": {
+              "present": 0,
+              "entrapment": 0,
+              "fdp": null,
+              "threshold": null,
+              "sage_supported": 0
+            }
+          },
+          "ambiguous_groups": 0,
+          "internal_1pct": {
+            "present": 0,
+            "entrapment": 0,
+            "fdp": null
+          },
+          "gate": {
+            "kept": 1250163,
+            "before": 1494483,
+            "rejected_fraction": 0.1634812841631521
+          },
+          "seconds": 88.26250767707825
+        }
+      }
+    }
+  },
+  "summary": {
+    "A2": {
+      "off": {
+        "values": [
+          286,
+          104,
+          263
+        ],
+        "median": 263,
+        "min": 104,
+        "max": 286
+      },
+      "im3": {
+        "values": [
+          256,
+          305,
+          229
+        ],
+        "median": 256,
+        "min": 229,
+        "max": 305
+      },
+      "im2": {
+        "values": [
+          99,
+          210,
+          301
+        ],
+        "median": 210,
+        "min": 99,
+        "max": 301
+      }
+    },
+    "B2": {
+      "off": {
+        "values": [
+          69,
+          284,
+          0
+        ],
+        "median": 69,
+        "min": 0,
+        "max": 284
+      },
+      "im3": {
+        "values": [
+          0,
+          287,
+          0
+        ],
+        "median": 0,
+        "min": 0,
+        "max": 287
+      },
+      "im2": {
+        "values": [
+          78,
+          255,
+          139
+        ],
+        "median": 139,
+        "min": 78,
+        "max": 255
+      }
+    },
+    "C2": {
+      "off": {
+        "values": [
+          193,
+          381,
+          413
+        ],
+        "median": 381,
+        "min": 193,
+        "max": 413
+      },
+      "im3": {
+        "values": [
+          217,
+          460,
+          209
+        ],
+        "median": 217,
+        "min": 209,
+        "max": 460
+      },
+      "im2": {
+        "values": [
+          395,
+          474,
+          0
+        ],
+        "median": 395,
+        "min": 0,
+        "max": 474
+      }
+    }
+  },
+  "outcomes": {
+    "im3": {
+      "paired_deltas": [
+        -30,
+        201,
+        -34,
+        -69,
+        3,
+        0,
+        24,
+        79,
+        -204
+      ],
+      "improved": 4,
+      "unchanged": 1,
+      "worse": 4,
+      "median_delta": 0,
+      "all_files_median_improved": false,
+      "passes_prespecified_gain_rule": false
+    },
+    "im2": {
+      "paired_deltas": [
+        -187,
+        106,
+        38,
+        9,
+        -29,
+        139,
+        202,
+        93,
+        -413
+      ],
+      "improved": 6,
+      "unchanged": 0,
+      "worse": 3,
+      "median_delta": 38,
+      "all_files_median_improved": false,
+      "passes_prespecified_gain_rule": false
+    }
+  },
+  "verified_inputs": {
+    "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/bin/uno": "ae1e614f1d94b7e3e5a03c82f489eefdc6673735561db6e219d821e4f63ae600",
+    "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/hye_arabidopsis.fasta": "ca07a33ea0a855b8873c66de99109b8a0a7ebd398d4221b4016701d4d5c42fb9",
+    "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/uno.toml": "6ad20d5a53e306d55eb9e8b685dc3327072288019d56e2d38548284b2a7a21e8",
+    "/home/patrick-garrett/Repos/uno/benchmark/results/matrix_20260913_koth050/ionstar/rt.urtc": "c8f1a017526670444059f1e2c06341f39484f31433c266a029a6a7e802e6237a",
+    "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/features/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2/features.tsv": "770f91804188431b284e3e5c68117ec3bdc19c0e28e92bd0485b85616808aeb1",
+    "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/model/im_public.sequoia": "893cf231fe7a9997a7a7030e8d0027da967249137e506ef7e9ca35dab1464bf1",
+    "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/calibration.json": "b7e2b858ff150eb2c863683dcc993896e99880a1e2145fe90d709a3811a3d84d",
+    "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/features/LFQ_Ultra2_PASEF_15min_50ng_Condition_B_REP2/features.tsv": "72bc722c64a73f90f0b7aaf95a2ae81415d68209b3c4ffb0bee6e1550ce65c39",
+    "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/features/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2/features.tsv": "eb76f69e1e4088baf57b4a0db74930ca2274447f791de45aa1bcd20baea7550d"
+  },
+  "producer_sha256": "d252cba586cb52388e5048539101c721720eca1481debd169fe3c103c96222c8",
+  "validation": {
+    "status": "passed",
+    "independent_cutoffs": 81,
+    "report_sha256": "7774d1a8f1723a34ec672c497e28c9fa1cae61675f1c6f03ec1efb0de9918aa3",
+    "source_sha256": "4de8dcfe534dccbc5391e8cdbc67adf17c7a2430a57127ac787d7d5ad88a3525",
+    "checker_sha256": "47e98ffcabb9a56c9897f147448705c7c9f2aef376496c9aa16e31fee2f93fe9"
+  },
+  "main_control": {
+    "status": "passed",
+    "argv": [
+      "/home/patrick-garrett/Repos/uno/experiments/consolidation-20260913/uno-paper",
+      "--features",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/features/LFQ_Ultra2_PASEF_15min_50ng_Condition_A_REP2/features.tsv",
+      "--fasta",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/hye_arabidopsis.fasta",
+      "--rt-model",
+      "/home/patrick-garrett/Repos/uno/benchmark/results/matrix_20260913_koth050/ionstar/rt.urtc",
+      "--config",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/uno.toml",
+      "--seed",
+      "0",
+      "--out-proteins",
+      "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/main_control/proteins.tsv"
+    ],
+    "seconds": 99.98964476585388,
+    "binary_sha256": "0a4683b5aeea34b1965142489b615a52559dc736279832e790eefbafa44a8aa9",
+    "experimental_output_sha256": "078948cafd824a599393052b6600e0cd6afe509f21ce2f04a7c914eea7a0be82",
+    "main_output_sha256": "078948cafd824a599393052b6600e0cd6afe509f21ce2f04a7c914eea7a0be82"
+  },
+  "loader_parity": {
+    "status": "passed",
+    "rows": 58213,
+    "prediction_sha256": "af4000dfdf8ab46b7da29ccbb421e19b306e8d1ce48d5b7d3efbfc90b2b448db",
+    "change": "Sequoia width guard added after study binary freeze; valid model predictions unchanged.",
+    "binary_sha256": "84c2e4a89d6e50b7da5eb7adce4ed4c9a80eb1b46237ff42daa2eb89740a366a",
+    "im_source_sha256": "b1698443a2fdf2abcfc7dba9345ad3631a1331a7e94ef7eaedba06b3acc960cc"
+  },
+  "raw_report": "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/report.json",
+  "tests": {
+    "workspace_passed": 76,
+    "log_sha256": "27ca2a25c71a9c643d0c423053ccf7c54401d89d8b806a0df1fb09e0cc4f5bba"
+  },
+  "conclusion": "No consistent benefit from the primary or sensitivity IM gate; keep experimental and do not alter the submission paper."
+}
