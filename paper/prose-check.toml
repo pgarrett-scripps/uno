@@ -43,7 +43,7 @@ orphaned-asset = [
   "fig.figs4-quality-columns-pdf", "fig.figs5-quant-detail-pdf",
   "fig.figs6-determinism-pdf", "fig.fig5-raw-mode-pdf", "fig.fig4-overlap-pdf",
   "fig.figs3-rt-predictor-pdf", "fig.figs4-rt-throughput-pdf",
-  "fig.figs2-rt-model-pdf",
+  "fig.figs2-rt-model-pdf", "fig.figs7-koth-matrix-pdf",
 ]
 
 # Thresholds. Omit any you are happy with.

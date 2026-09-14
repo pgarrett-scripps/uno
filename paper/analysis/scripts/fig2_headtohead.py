@@ -54,7 +54,7 @@ def depth_panel(ax, datasets):
             ax.text(x[i] + offset, max(values) + 85, f"n={len(values)}",
                     fontsize=5.7, ha="center", color=style.C[engine])
     ax.set_xticks(x, [LABEL[d] for d in datasets], fontsize=6.5)
-    ax.set_ylabel("proteins @ 1% entrapment FDR")
+    ax.set_ylabel("proteins at 1% entrapment FDR")
     ax.set_xlim(-0.65, len(datasets) - 0.35)
     ax.set_ylim(bottom=0)
     ax.margins(y=0.17)
@@ -72,8 +72,8 @@ def resource_panel(ax, df, datasets, letter):
                    facecolors=color if tool == "uno" else "white",
                    edgecolors=color, linewidths=0.8, zorder=3,
                    label="uno" if tool == "uno" else "ms1searchpy (3 runs each)")
-    ax.set_xlabel("wall-clock (s)")
-    ax.set_ylabel("peak RSS (GiB)")
+    ax.set_xlabel("wall time (s)")
+    ax.set_ylabel("peak resident memory (GiB)")
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=0)
     ax.legend(loc="lower right")

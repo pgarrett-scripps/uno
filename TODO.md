@@ -297,3 +297,43 @@ tested and rejected (see score.rs comment). `UNO_SMOOTH=0` restores the old
 path. NOTE: the July primary reference outputs differ from the current binary
 on 09734 (1035 → 946) and 05433 (2072 → 2327) independent of this change;
 that is the C1 re-run.
+
+## uno timsTOF collapse-to-zero (found 2026-09-11, HYE Ultra 2 `--raw`, fixed uncommitted in `score.rs`)
+
+**Symptom.** Same `.d` file, 20 seeds: 5 runs report 0 proteins, the other 15
+span 155–328. Nothing measurable against that floor (IM gate, multi-run, any
+timsTOF number).
+
+**Cause.** The mass-anchor bootstrap picks "confident" proteins with a walk over
+the INSTANTANEOUS decoy/target ratio, so the set is essentially the targets
+ranked above the first decoy protein. On timsTOF at background p≈0.22 the
+mass-only binomial separates only ~20 proteins from the decoys; where the first
+decoy lands is a property of the decoy draw. 21 targets above it with one seed,
+7 with another. 7 proteins carry ~35 anchor peptides, below the 50 both
+calibrators need, so mass stays at the 3.5 ppm default, RT calibration is
+skipped and every stage sees an uncalibrated run. A proper suffix-minimum
+q-value does not help (below rank ~20 targets and decoys interleave).
+
+**Fix.** Post-loop fallback only: when the whole bootstrap ends under 50 anchor
+peptides, take the top-scored target proteins regardless of q until ~250 unique
+anchor peptides (contamination is absorbed by the median / clipped-sigma /
+RANSAC calibrators), then estimate RT sigma on that path with the Gaussian-core
+peak instead of `clipped_sigma` (the contaminated set inflates the clipped
+estimate to 1.02 min vs a 0.38 peak; a healthy seed's clean set reads 0.50 /
+0.38). Applying the rescue to any starved ROUND was tried first and rejected:
+seeds whose round 0 starves but whose later rounds recover lost depth to the
+contaminated set (302→124, 301→200, 277→137, 221→170).
+
+**Result (20 seeds).** Collapses 5/20 → 0/20; the five rescued seeds report
+205 / 197 / 265 / 144 / 187 (honest entrapment @1% 340 / 219 / 301 / 284 / 229),
+inside the healthy seeds' range. All 15 healthy seeds byte-identical. Cannot
+fire on any paper run: the minimum anchor count over every pinned Orbitrap and
+Astral log is 165 (threshold 50); hela5min_09746 re-run byte-identical.
+
+**Still open.** Three of the five rescued seeds (10, 16, 18) find 0 proteins at
+stage 1 under every sigma multiplier and reach their result through the
+bounded-RT recovery path, not the primary one. The rescued calibration is
+sound (RANSAC 71 inliers, 0.17 min residual, same as the seeds that succeed);
+stage 1 is simply at the q≤1% edge on this data. Keeping the RANSAC calibration
+for the seeded retry (instead of `fit_robust` on the seed set) changed nothing.
+The 155–328 spread among healthy seeds is the next stability item.

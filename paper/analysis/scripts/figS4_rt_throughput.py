@@ -63,7 +63,7 @@ def main() -> int:
         ax.set_xlabel("peptides per batch")
         ax.yaxis.set_minor_formatter(plt.NullFormatter())
     ax_t.set_ylabel("wall time per batch (s)")
-    ax_r.set_ylabel("throughput (peptides / s)")
+    ax_r.set_ylabel("throughput (peptides/s)")
     speedup = rate_at_max["uno CNN"] / rate_at_max["DeepLC 3.1.13"]
     ax_t.set_title("inference only, same workstation", fontsize=7.5, pad=3)
     ax_r.set_title(f"{speedup:.0f}× at 100,000 peptides", fontsize=7.5, pad=3)

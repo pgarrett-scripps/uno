@@ -34,7 +34,18 @@ written by a script, and `si/versions.typ` pins that build, its three out-of-tre
 path dependencies and the comparator patch. The comparator was not re-run,
 because it did not change.
 
-What is left is not compute. It is the author-blocked material (B2, B3, the
+**2026-09-13 matrix rerun:** the SI replaces the incomplete September 12
+extension with 144 searches over three seeds, 32 fresh KOTH 0.5.0 feature tables,
+and eight LFQ bundles. Astral is presented first, including all input levels and
+the all-file pool; IonStar retains all balanced nested cohorts. Comparisons use
+matched empirical entrapment accession cutoffs, while internal-list calibration
+and quantitative evaluation remain separately labeled. Four additional searches
+provide a dedicated serialized warm-cache timing comparison. Source snapshots,
+runtime dependencies, input/output hashes, and execution-only concurrency
+amendments are archived with the study. The primary single-run evidence remains
+on its separately pinned build.
+
+What remains for the main single-run study is not compute. It is the author-blocked material (B2, B3, the
 release decision behind B1 and D5), the submission bundle (B4, B7), and the two
 remaining integrity edits, C2 and C4.
 

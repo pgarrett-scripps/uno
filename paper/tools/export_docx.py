@@ -92,6 +92,34 @@ def format_tables(path: Path) -> None:
             weights = [12, 23, 12, 10, 25, 18]
         elif "Definition" in header:
             weights = [6, 25, 55, 14]
+        elif header.startswith("Program Source revision"):
+            weights = [38, 30, 32]
+        elif header.startswith("Program Revision / version"):
+            weights = [34, 33, 33]
+        elif header.startswith("Route Measurements used"):
+            weights = [20, 60, 20]
+        elif header.startswith("Astral cohort / arm"):
+            weights = [25, 25, 15, 17, 18]
+        elif header.startswith("IonStar runs / arm"):
+            weights = [24, 24, 12, 18, 22]
+        elif header.startswith("20-run comparison"):
+            weights = [35, 17, 18, 15, 15]
+        elif header.startswith("Astral 100 ng route"):
+            weights = [43, 19, 19, 19]
+        elif header.startswith("Pilot comparison"):
+            weights = [54, 23, 23]
+        elif header.startswith("Runs / route"):
+            weights = [22, 20, 20, 19, 19]
+        elif header.startswith("20-run arm"):
+            weights = [30, 19, 17, 12, 22]
+        elif header.startswith("Comparison / arm"):
+            weights = [33, 12, 13, 15, 11, 16]
+        elif header.startswith("Cohort / arm") and "Human accessions" in header:
+            weights = [32, 18, 17, 12, 21]
+        elif header.startswith("Cohort / arm") and "Joint only" in header:
+            weights = [34, 22, 22, 22]
+        elif header.startswith("Input / replicate"):
+            weights = [25, 16, 15, 20, 24]
         else:
             raise ValueError(f"Set Word column widths for new table: {header}")
         widths = [round(9360 * w / sum(weights)) for w in weights]

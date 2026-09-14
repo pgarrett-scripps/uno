@@ -8,6 +8,7 @@ from pathlib import Path
 
 from _stats import Stats
 import seed_data
+import koth_matrix_stats
 
 HERE = Path(__file__).resolve().parent
 PAPER = HERE.parent.parent
@@ -399,11 +400,16 @@ def main() -> int:
     st.add("raw.wall_max", max(float(r["wall_s"]) for r in raw_rows if r["arm"] == "raw"),
            fmt=".0f", unit="s", desc="Maximum original serialized raw-mode wall time", between=(1, 600))
 
-    # Provenance of the uno side. Every uno search in this manuscript was
+    # Provenance of the main single-run comparisons. These searches were
     # re-executed on one pinned build (benchmark/publication_rerun.py); the
     # case table records, per search, whether the protein output is
     # byte-identical to the superseded build's and what its depth was before.
     rerun = table_rows(RERUN)
+    st.add("astral.uno_seed_recovered", sum(
+        bool(r["astral_stem"]) and r["arm"] == "biosaur2" and r["had_prev"] == "1"
+        and r["prev_depth_1pct"] == "0" and int(r["depth_1pct"]) > 0 for r in rerun),
+        fmt="d", desc="Astral biosaur2 seed searches recovered from zero by the pinned rerun",
+        between=(0, 1000))
     prev = [(r, r["prev_depth_1pct"], int(r["depth_1pct"])) for r in rerun if r["had_prev"] == "1"]
     st.add("rerun.searches", len(rerun), fmt="d",
            desc="uno searches re-executed on the pinned build", between=(1, 1000))
@@ -418,8 +424,11 @@ def main() -> int:
            desc="Re-run uno searches that still return no proteins at 1% entrapment FDR",
            between=(0, 1000))
 
+    koth_matrix_stats.add(st)
+
     return st.write(
         inputs=[
+            "figdata/koth_matrix_study.json",
             "../benchmark/results/summary.tsv",
             "../benchmark/results/spread.tsv",
             "../benchmark/results/variability_extension/summary.tsv",

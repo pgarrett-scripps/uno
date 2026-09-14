@@ -35,7 +35,7 @@ LABEL = {
     "hela5min_09734": "09734",
     "hela5min_09778": "09778",
     "hela5min_09950": "09950",
-    "faims_LUM2_05433_VG": "05433 (3 CV)",
+    "faims_LUM2_05433_VG": "05433 (FAIMS)",
 }
 for _lvl, _reps in (("200pg", (1, 2, 3)), ("1ng", (1, 2, 4)), ("10ng", (1, 4, 6)), ("100ng", (2, 3, 4))):
     for _r in _reps:
@@ -74,7 +74,7 @@ def overlap_panel(ax, df, datasets, letter):
         ax.text(xi, v + 0.015, f"{v:.2f}", ha="center", va="bottom", fontsize=6)
     ax.set_xticks(x)
     ax.set_xticklabels([LABEL[d] for d in datasets], fontsize=6.3, rotation=45, ha="right")
-    ax.set_ylabel("1% lists shared / union")
+    ax.set_ylabel("Jaccard index of 1% lists")
     ax.set_ylim(0, 1)
     ax.set_xlim(-0.6, len(datasets) - 0.4)
     style.panel_label(ax, letter, x=-0.13)
@@ -91,7 +91,7 @@ def main() -> int:
             raise SystemExit(f"{d}: need both arms")
 
     fig, ax = plt.subplots(1, 1, figsize=(style.W2, 2.6))
-    depth_panel(ax, df, datasets, "depth_1pct", "proteins @ 1% entrapment FDR", None, True)
+    depth_panel(ax, df, datasets, "depth_1pct", "proteins at 1% entrapment FDR", None, True)
     ax.axvline(5.5, color=style.C["light"], lw=0.8, zorder=1)
     ax.legend(loc="upper left", fontsize=6.5)
     style.save(fig, "fig5_raw_mode")

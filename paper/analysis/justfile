@@ -95,6 +95,10 @@ _figures force="":
   for f in "${scripts[@]}"; do
     b=$(basename "$f")
     case "$b" in style.py|_*|conftest.py|test_*|entrapment_data.py) continue;; esac
+    # FIGURE_MANIFEST.md retains these as archival orphans. Their historical
+    # inputs are not required to rebuild the current manuscript; individual
+    # scripts remain runnable when those datasets are available.
+    case "$b" in fig4_quant.py|figS2_faims.py|figS3_resources.py|figS4_quality_columns.py|figS5_quant_detail.py) continue;; esac
     png="../figures/${b%.py}.png"
     if [ -z "{{force}}" ] && [ -f "$png" ] \
        && [ "$png" -nt "$f" ] && [ "$png" -nt "$style" ]; then

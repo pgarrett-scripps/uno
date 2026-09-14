@@ -9,9 +9,12 @@ the migration and the upstream history.
 [`AUDIT.md`](AUDIT.md) when you need the evidence behind an item. They hold a
 pre-submission audit's fix list and 16 settled decisions, each citing `file:line`.
 Most of what looks like an error in this manuscript is already recorded there with
-a decision attached. Every uno identification number now comes from the pinned
+a decision attached. Main single-run identification numbers come from the pinned
 re-run of 2026-09-11 (`benchmark/publication_rerun.py`); re-run it and then
 `benchmark/refresh_summaries.py` if the engine changes again.
+The fresh matrix extension is separate: `figdata/koth_matrix_study.json` records
+the complete KOTH 0.5.0 three-seed rerun: 144 searches, separately serialized
+timing controls, verified outputs, source snapshots, and runtime-library hashes.
 [`../TODO.md`](../TODO.md) is the code-side half.
 
 ## The contract for generated things

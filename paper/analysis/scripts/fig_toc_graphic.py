@@ -296,7 +296,7 @@ def main() -> int:
     depth_chart(fig, depths)
     ax.text(4.635, 2.90, "6 DirectMS1 datasets, identical inputs",
             ha="center", va="center", fontsize=pt(11), color=MUTED)
-    ax.text(4.635, 3.08, "3.9–6.6× faster, half the memory",
+    ax.text(4.635, 3.08, "3.9 to 6.6× faster, half the memory",
             ha="center", va="center", fontsize=pt(11), fontweight="bold",
             color=INK)
 

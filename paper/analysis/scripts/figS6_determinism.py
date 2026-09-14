@@ -88,8 +88,8 @@ def main() -> int:
 
     # -- a, b: both engines as spreads over independent draws -----------------
     for pi, (col, ylab) in enumerate([
-        ("depth_1pct", "proteins @ 1% entrapment FDR"),
-        ("depth_5pct", "proteins @ 5% entrapment FDR"),
+        ("depth_1pct", "proteins at 1% entrapment FDR"),
+        ("depth_5pct", "proteins at 5% entrapment FDR"),
     ]):
         ax = axes[pi]
         for i, d in enumerate(datasets):

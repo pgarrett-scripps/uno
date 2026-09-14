@@ -161,7 +161,7 @@ def panel_architecture(ax, hdr):
     box(ax, x, ys, w, h, f"embedding\n21 × {hdr['emb']}", blue)
     arrow(ax, x + w, ys + h / 2, x + w + 0.036, ys + h / 2)
     x += w + 0.036
-    box(ax, x, ys, w, h, f"conv stem\n{hdr['ch']} ch, k = {hdr['k']}", blue)
+    box(ax, x, ys, w, h, f"convolution\n{hdr['ch']} channels, k = {hdr['k']}", blue)
     arrow(ax, x + w, ys + h / 2, x + w + 0.036, ys + h / 2)
     x += w + 0.036
     box(ax, x, ys, w * 1.34, h,
@@ -180,16 +180,16 @@ def panel_architecture(ax, hdr):
             color=dark, zorder=3)
     xh = xa + w * 1.5 + 0.03 + w * 1.35 + 0.036
     arrow(ax, xh - 0.036, y2 + h / 2, xh, y2 + h / 2)
-    box(ax, xh, y2, w * 1.15, h, f"head\n{2 * hdr['ch'] + hdr['n_global']} → {hdr['head']} → 1",
+    box(ax, xh, y2, w * 1.15, h, f"output layers\n{2 * hdr['ch'] + hdr['n_global']} → {hdr['head']} → 1",
         blue)
     arrow(ax, xh + w * 1.15, y2 + h / 2, xh + w * 1.15 + 0.036, y2 + h / 2)
-    ax.text(xh + w * 1.15 + 0.045, y2 + h / 2, "abstract\nRT", ha="left", va="center",
+    ax.text(xh + w * 1.15 + 0.045, y2 + h / 2, "hydrophobic\nindex", ha="left", va="center",
             fontsize=6.2, color=dark, linespacing=1.35)
 
     ax.text(0.0, 0.055,
             f"{hdr['n_params']:,} parameters   ·   ReLU   ·   trained on hydrophobic index "
             f"(mean {hdr['y_mean']:.1f}, SD {hdr['y_std']:.1f})\n"
-            "amino acids only; cysteine is implicitly carbamidomethyl",
+            "amino acids only, cysteine implicitly carbamidomethyl",
             ha="left", va="center", fontsize=6.2, color=dark, linespacing=1.5)
 
 
@@ -249,13 +249,13 @@ def main() -> int:
         ax_len.text(xi, v + 0.012, f"{c:,}", ha="center", va="bottom", fontsize=5.6,
                     color=style.C["neutral"])
     ax_len.set_xticks(xs)
-    ax_len.set_xticklabels([f"{lo}–{hi}" for lo, hi in LEN_BINS], fontsize=6.3)
+    ax_len.set_xticklabels([f"{lo} to {hi}" for lo, hi in LEN_BINS], fontsize=6.3)
     ax_len.set_xlabel("peptide length (residues)")
-    ax_len.set_ylabel("holdout MAE (HI units)")
+    ax_len.set_ylabel("holdout mean absolute error\n(hydrophobic index)")
     ax_len.set_ylim(0, max(mae) * 1.25)
     ax_len.set_title("accuracy by length, bar labels are peptide counts",
                      fontsize=7.5, pad=3)
-    style.panel_label(ax_len, "c", x=-0.20, y=1.05)
+    style.panel_label(ax_len, "c", x=-0.27, y=1.05)
 
     # ---- d: accuracy by source dataset ----
     rows = []
@@ -277,10 +277,10 @@ def main() -> int:
                            ha="right", rotation_mode="anchor")
     ax_src.set_xlim(-0.6, len(rows) - 0.4)
     ax_src.set_ylim(0, max(r[2] for r in rows) * 1.25)
-    ax_src.set_ylabel("holdout MAE (HI units)")
+    ax_src.set_ylabel("holdout mean absolute error\n(hydrophobic index)")
     ax_src.set_title("accuracy by source dataset, at least 200 holdout peptides",
                      fontsize=7.5, pad=3)
-    style.panel_label(ax_src, "d", x=-0.20, y=1.05)
+    style.panel_label(ax_src, "d", x=-0.27, y=1.05)
 
     style.save(fig, "figS2_rt_model", tight=False)
     provenance = [MODEL, CORPUS / "train.tsv", CORPUS / "val.tsv", CORPUS / "holdout.tsv",

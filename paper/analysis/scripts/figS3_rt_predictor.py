@@ -42,7 +42,7 @@ SUMMARY = RESULTS / "summary.tsv"
 
 # (display name, x-axis label, scale factor applied to the set's RT units)
 SETS = {
-    "chronologer_holdout": ("Chronologer holdout", "observed RT (harmonized HI)", 1.0),
+    "chronologer_holdout": ("Chronologer holdout", "observed RT (hydrophobic index)", 1.0),
     "prosit_unmodified_holdout": ("ProteomeTools holdout", "observed RT (iRT)", 1.0),
     "deeplc_unmodified": ("DeepLC unmodified", "observed RT (min)", 1 / 60),
 }

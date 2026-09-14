@@ -79,7 +79,7 @@ def main():
         ax.set_xlim(-0.6, len(ed.DATASETS) - 0.4)
         ax.set_ylim(0, 105)
         ax.set_xlabel("dataset")
-    ax_a.set_ylabel("1% lists shared / union (%)")
+    ax_a.set_ylabel("Jaccard index of 1% lists (%)")
     ax_b.set_ylabel("ms1searchpy core recovered by uno (%)")
     ax_a.legend(loc="lower left", fontsize=6.1)
     style.panel_label(ax_a, "a", x=-0.16)

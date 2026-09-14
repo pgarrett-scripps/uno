@@ -301,10 +301,10 @@ def main() -> int:
 
     y = TOP
     lane_r = [
-        ("one LC–MS run", None, glyph_lcms, 6.8, 9.5),
+        ("one LC-MS run", None, glyph_lcms, 6.8, 9.5),
         ("feature detection", None, glyph_features, 6.8, 9.5),
         ("feature table",
-         "mass, retention time, charge,\nintensity and feature quality",
+         "mass, retention time, charge,\nintensity, and feature quality",
          None, 0.0, GLYPH_W),
     ]
     for i, (title, detail, glyph, min_h, gw) in enumerate(lane_r):
@@ -344,8 +344,8 @@ def main() -> int:
         ("retention-time prediction and calibration",
          "an in-process model maps candidate sequences onto this run's gradient",
          glyph_rt),
-        ("peptide–feature match scoring",
-         "mass, retention time and available feature evidence are combined",
+        ("peptide-to-feature match scoring",
+         "mass, retention time, and available feature evidence are combined",
          glyph_scoring),
         ("protein inference and FDR control",
          "binomial protein score → parsimony → target/decoy competition",
@@ -389,11 +389,11 @@ def main() -> int:
 
     fig.text(0.5, 0.030,
              "Solid blue boxes inside the outlined panel are stages of the single uno "
-             "binary; dashed boxes are inputs and external tools; green boxes are outputs.",
+             "binary. Dashed boxes are inputs and external tools, and green boxes are outputs.",
              ha="center", va="bottom", fontsize=6.1, color=style.C["neutral"])
     fig.text(0.5, 0.004,
-             "For the benchmark, biosaur2 performs feature detection and both engines "
-             "receive the identical single-run feature table.",
+             "For the benchmark, biosaur2 performed feature detection and both engines "
+             "received the identical single-run feature table.",
              ha="center", va="bottom", fontsize=6.1, color=style.C["neutral"])
 
     # Size the canvas to the drawing: keep UNITS_PER_INCH fixed (so the height
@@ -404,6 +404,10 @@ def main() -> int:
     fig.set_size_inches(style.W2, fig_h)
     fig.subplots_adjust(left=0.004, right=0.996, top=1.0, bottom=CAPTION_IN / fig_h)
     style.save(fig, "fig1_pipeline", tight=False)
+    from _assets import record
+    for ext, suffix in [("png", ""), ("pdf", "-pdf")]:
+        record("fig.fig1-pipeline" + suffix, "figures/fig1_pipeline." + ext,
+               kind="figure", desc="Pipeline schematic generated from this script; no numerical data inputs")
     return 0
 
 

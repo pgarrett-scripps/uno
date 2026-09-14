@@ -1,5 +1,9 @@
 # MS1 quant: uno output + downstream stats
 
+> Historical development record. The July results below are excluded from the
+> fresh matrix-input study; use [the new protocol](../../docs/koth-matrix-benchmark-plan.md)
+> and `benchmark/matrix_study.py` for the current KOTH rerun.
+
 uno is an ID + quant tool. For a multi-sample (koth-aligned) matrix it emits a
 protein-group x sample ABUNDANCE matrix and stops there:
 

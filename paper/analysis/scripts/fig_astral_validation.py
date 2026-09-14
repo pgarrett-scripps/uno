@@ -3,14 +3,14 @@
 
 Twelve 11-min dual-column, fixed-CV HeLa files at 200 pg, 1 ng, 10 ng and
 100 ng (three per level, the first three by file name). uno is measured over
-three seeds per file. ms1searchpy stock searches were run three
-times per file (ten at 10 ng) and, because stock RT self-calibration failed on
+three seeds per file. Self-calibrated ms1searchpy searches were run three
+times per file (ten at 10 ng) and, because its RT self-calibration failed on
 every file, three more times per file with DeepLC calibrated on an external
 MS/MS peptide list (`-pl`, analysis/astral/RT_CALIBRATION.md). Depth is the
 common human/yeast entrapment scorer.
 
 Panels: (a) depth at 1% entrapment FDR versus input; (b) wall-clock versus
-peak RSS for every serialized search (uno and stock
+peak RSS for every serialized search (uno and self-calibrated
 ms1searchpy at all inputs; the 10 ng `-pl` runs were concurrent and are
 excluded, the other `-pl` runs were serialized and are shown).
 
@@ -33,7 +33,7 @@ LEVELS = [0.2, 1.0, 10.0, 100.0]
 TICKS = ["200 pg", "1 ng", "10 ng", "100 ng"]
 PL_COLOR = style.C["accent2"]
 SERIES = [("uno", style.C["uno"], "uno"),
-          ("ms1searchpy", style.C["ms1searchpy"], "ms1searchpy, stock"),
+          ("ms1searchpy", style.C["ms1searchpy"], "ms1searchpy, self-calibrated"),
           ("ms1searchpy-pl", PL_COLOR, "ms1searchpy, external RT calibration")]
 OFFS = {"uno": 0.62, "ms1searchpy": 1.0, "ms1searchpy-pl": 1.6}  # multiplicative x offsets
 
@@ -71,7 +71,7 @@ def depth_panel(ax, df, col, threshold, letter):
     ax.set_xscale("log")
     ax.set_xticks(LEVELS, TICKS)
     ax.set_xlim(0.08, 220)
-    ax.set_ylabel(f"proteins @ {threshold} entrapment FDR")
+    ax.set_ylabel(f"proteins at {threshold} entrapment FDR")
     ax.set_xlabel("HeLa input")
     ax.set_ylim(bottom=-45)
     ax.set_yticks([v for v in ax.get_yticks() if v >= 0])
@@ -88,8 +88,8 @@ def resource_panel(ax, df):
                    s=16 if eng == "uno" else 11, marker=marker,
                    facecolors=color if eng == "uno" else "white", edgecolors=color,
                    linewidths=0.8, zorder=3)
-    ax.set_xlabel("wall-clock (s)")
-    ax.set_ylabel("peak RSS (GiB)")
+    ax.set_xlabel("wall time (s)")
+    ax.set_ylabel("peak resident memory (GiB)")
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=0)
     style.panel_label(ax, "b", x=-0.18)
@@ -115,7 +115,7 @@ def main() -> int:
     inputs = [os.path.relpath(SUMMARY, style.PAPER), os.path.relpath(EXTENSION, style.PAPER)]
     record("fig.fig-astral-validation", "figures/fig_astral_validation.png", kind="figure", inputs=inputs,
            desc="Independent Orbitrap Astral validation across input: depth at 1% entrapment FDR "
-                "(uno, stock ms1searchpy, ms1searchpy with external RT calibration) and wall-clock versus peak memory")
+                "(uno, self-calibrated ms1searchpy, ms1searchpy with external RT calibration) and wall-clock versus peak memory")
     record("fig.fig-astral-validation-pdf", "figures/fig_astral_validation.pdf", kind="figure", inputs=inputs,
            desc="Vector twin of the Astral validation figure")
     return 0
