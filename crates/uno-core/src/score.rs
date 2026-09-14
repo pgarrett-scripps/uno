@@ -2458,8 +2458,83 @@ pub fn score(
     cfg: &ScoreConfig,
 ) -> ScoreResult {
     let n_features = matrix.features.len();
-    let reduced = reduce_top_k(pfms, n_features, cfg.top_k);
+    let mut reduced = reduce_top_k(pfms, n_features, cfg.top_k);
     log::info!("reduced {} PFMs to {} (top-{} per feature)", pfms.len(), reduced.len(), cfg.top_k);
+
+    // EXPERIMENT (UNO_IM_GATE=<k>): drop PFMs whose peptide's predicted 1/K0
+    // disagrees with the feature's measured 1/K0 by more than k * sigma(charge).
+    //
+    // sigma MUST be per-charge and MUST NOT be estimated from the PFM residuals:
+    // at a background rate of p~0.2 most PFMs are random peptide matches, so their
+    // residual spread measures the POPULATION spread of 1/K0, not the model error
+    // (measured: 3.70% pooled, vs true model error 1.66% at z=2 / 3.93% at z=3).
+    // Gating on the population spread makes the z=2 window ~2x too wide to reject
+    // anything while still clipping true matches. Defaults are the held-out
+    // accuracy of the public-corpus model (UNO_IM_SIG2 / UNO_IM_SIG3 to override).
+    if let (Some(im_model), Ok(k)) = (
+        _im_model,
+        std::env::var("UNO_IM_GATE").map_or(Err(()), |v| v.parse::<f64>().map_err(|_| ())),
+    ) {
+        let ev = |key: &str, d: f64| std::env::var(key).ok().and_then(|s| s.parse().ok()).unwrap_or(d);
+        let (sig2, sig3) = (ev("UNO_IM_SIG2", 0.0166), ev("UNO_IM_SIG3", 0.0393));
+        let sigma_for = |z: u8| if z >= 3 { sig3 } else { sig2 };
+        let items: Vec<(&str, u8)> = reduced
+            .iter()
+            .map(|&i| {
+                let p = &pfms[i];
+                (
+                    &*db.peptides[p.peptide_idx as usize].sequence,
+                    matrix.features[p.feature_idx as usize].charge,
+                )
+            })
+            .collect();
+        let pred = im_model.predict_many(&items);
+        // Per-charge scale (median obs/pred). The median survives the random-match
+        // background because random matches still track the mass/charge trend.
+        let mut by_z: std::collections::HashMap<u8, Vec<f64>> = std::collections::HashMap::new();
+        for (&i, &pr) in reduced.iter().zip(&pred) {
+            let f = &matrix.features[pfms[i].feature_idx as usize];
+            if let (Some(o), true) = (f.im, pr > 0.0) {
+                by_z.entry(f.charge).or_default().push(o / pr);
+            }
+        }
+        let scale: std::collections::HashMap<u8, f64> = by_z
+            .into_iter()
+            .filter(|(_, v)| v.len() >= 100)
+            .map(|(z, mut v)| {
+                v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                (z, v[v.len() / 2])
+            })
+            .collect();
+        if !scale.is_empty() {
+            let before = reduced.len();
+            let keep: Vec<bool> = reduced
+                .iter()
+                .zip(&pred)
+                .map(|(&i, &pr)| {
+                    let f = &matrix.features[pfms[i].feature_idx as usize];
+                    match (f.im, scale.get(&f.charge)) {
+                        (Some(o), Some(&sc)) if pr > 0.0 => {
+                            ((o - pr * sc) / o).abs() <= k * sigma_for(f.charge)
+                        }
+                        _ => true,
+                    }
+                })
+                .collect();
+            let mut it = keep.iter();
+            reduced.retain(|_| *it.next().unwrap());
+            let mut zs: Vec<_> = scale.iter().collect();
+            zs.sort_by_key(|(z, _)| **z);
+            log::info!(
+                "IM gate: k={:.1} sigma(z2)={:.2}% sigma(z3+)={:.2}% scale={:?} -> kept {}/{} PFMs ({:.0}% rejected)",
+                k, sig2 * 100.0, sig3 * 100.0,
+                zs.iter().map(|(z, s)| (**z, (**s * 1000.0).round() / 1000.0)).collect::<Vec<_>>(),
+                reduced.len(), before,
+                (1.0 - reduced.len() as f64 / before as f64) * 100.0
+            );
+        }
+    }
+    let reduced = reduced;
 
     // Penultimate embeddings per unique peptide_idx, captured in the SAME pass that
     // predicts abstract RT below (the on-data RT fine-tune re-embeds exactly these
