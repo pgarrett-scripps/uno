@@ -29,10 +29,17 @@ pure-Rust learned model, with an on-data calibration step per run.
 - **A sibling `sage` checkout.** The workspace has a path dependency
   `sage-core = { path = "../sage/crates/sage" }`, so `sage` must be cloned next
   to this repo before it will build.
+- **A sibling `koth_rust` checkout at `v0.7.0`** (commit
+  `88f9e7c54c9ad3d6ca5a56a906703a3d46982f43`) and the existing sibling `Sequoia`
+  checkout. Cargo enforces KOTH version `=0.7.0`; its source is still a local path
+  dependency. See [the LFQ migration](docs/matrix-input.md#koth-070-compatibility)
+  for new settings and schema-3 support.
 
 ```
 Repos/
 ├── sage/    # https://github.com/lazear/sage
+├── koth_rust/ # https://github.com/tacular-omics/koth_rust, tag v0.7.0
+├── Sequoia/ # sequoia-boost dependency
 └── uno/     # this repo
 ```
 
