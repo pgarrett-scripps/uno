@@ -466,6 +466,7 @@ fn mass_anchor_calibration(
     cfg: &ScoreConfig,
     retain_zero_discovery_evidence: bool,
     broad_rt_bootstrap: bool,
+    im_model: Option<&crate::im::ImModel>,
 ) -> (Calibration, Vec<usize>, f64, f64) {
     use std::collections::{HashMap, HashSet};
     // Best mono (offset==0) match per peptide: (mass_error_ppm, reduced position).
@@ -1477,6 +1478,21 @@ fn mass_anchor_calibration(
             // the honest depth — vary run-to-run (observed 466..692 @1% for the SAME
             // config). Sort by peptide index to make the ML rescoring reproducible.
             items.sort_unstable_by_key(|&(pi, _, _, _)| pi);
+            // IM is a soft feature only after the mass/RT shortlist is fixed.
+            // It cannot reject candidates, change RT anchors, or rescue RT failures.
+            let im_residuals = if matrix.joint_evidence.is_none() && items.iter().any(|&(_, _, pos, _)|
+                matrix.features[pfms[reduced[pos]].feature_idx as usize].im.is_some_and(|v| v.is_finite() && v > 0.0)) {
+                im_model.map(|model| {
+                    let queries: Vec<(&str, u8, Option<f64>)> = items.iter().map(|&(pi, _, pos, _)| {
+                        let f = &matrix.features[pfms[reduced[pos]].feature_idx as usize];
+                        (db.peptides[pi].sequence.as_ref(), f.charge, f.im)
+                    }).collect();
+                    crate::im::soft_residuals(model, &queries)
+                })
+            } else { None };
+            let im_by_pos: HashMap<usize, f64> = im_residuals.as_ref().map(|residuals| {
+                items.iter().zip(residuals).filter_map(|(&(_, _, pos, _), &r)| r.map(|r| (pos, r))).collect()
+            }).unwrap_or_default();
             // Per-peptide group consistency stats over ALL the peptide's PFM matches
             // (ms1searchpy's id_count/charge_count/im_count + within-group |dev|
             // normalization): a real peptide recurs across charges / scans with a
@@ -1525,7 +1541,8 @@ fn mass_anchor_calibration(
             // consistency features. This is what ms1searchpy's `-ml 1` LightGBM uses.
             const AAS: &[u8] = b"GASPVTCLINDQKEMHFRYW";
             let featurize_ml = |pos: usize, pi: usize| -> Vec<f32> {
-                let mut v = featurize(&pfms[reduced[pos]], matrix, db, rt_diff_at(&best_cal, pos), None);
+                let mut v = featurize(&pfms[reduced[pos]], matrix, db, rt_diff_at(&best_cal, pos), im_by_pos.get(&pos).copied());
+                if im_residuals.is_some() { v.push(if im_by_pos.contains_key(&pos) { 1.0 } else { 0.0 }); }
                 if !cfg.matrix_recurrence && matrix.n_samples() > 1 { v[5] = 0.0; v[10] = 0.0; }
                 let seq = db.peptides[pfms[reduced[pos]].peptide_idx as usize].sequence.as_bytes();
                 let mut comp = [0f32; 20];
@@ -2453,7 +2470,7 @@ pub fn score(
     db: &PeptideDb,
     pfms: &[Pfm],
     rt_model: Option<&RtModel>,
-    _im_model: Option<&crate::im::ImModel>,
+    im_model: Option<&crate::im::ImModel>,
     rt_library: Option<&std::collections::HashMap<String, f64>>,
     cfg: &ScoreConfig,
 ) -> ScoreResult {
@@ -2520,12 +2537,27 @@ pub fn score(
     // `mass_anchor_calibration`, which fills the MASS_ANCHOR_PROTEINS thread-local.
     // RT is required — without it there is no protein evidence and no result.
     let has_rt = abstract_rt.iter().any(|a| a.is_some());
+    // Precompute the entire target+decoy library before RT/IM rescoring.
+    // Only charges with usable observed IM can consume these predictions.
+    // The downstream shortlist and its per-charge calibration stay unchanged.
+    if has_rt && cfg.ml_rescore && matrix.joint_evidence.is_none() {
+        if let Some(model) = im_model {
+            let charges: Vec<u8> = matrix.features.iter().filter_map(|f| {
+                (f.charge > 0 && f.im.is_some_and(|v| v.is_finite() && v > 0.0))
+                    .then_some(f.charge)
+            }).collect();
+            if !charges.is_empty() {
+                let seqs: Vec<&str> = db.peptides.iter().map(|p| p.sequence.as_ref()).collect();
+                model.precompute_library(&seqs, &charges);
+            }
+        }
+    }
     let run_anchor = |broad_rt_bootstrap, retain_zero| {
         // Early calibration exits publish nothing; each pass starts without
         // evidence from an earlier pass or search on this thread.
         MASS_ANCHOR_PROTEINS.with(|c| c.borrow_mut().clear());
         MASS_ANCHOR_PEPTIDES.with(|c| c.borrow_mut().clear());
-        mass_anchor_calibration(&reduced, pfms, matrix, db, &abstract_rt, cfg, retain_zero, broad_rt_bootstrap);
+        mass_anchor_calibration(&reduced, pfms, matrix, db, &abstract_rt, cfg, retain_zero, broad_rt_bootstrap, im_model);
         let proteins = MASS_ANCHOR_PROTEINS.with(|c| std::mem::take(&mut *c.borrow_mut()));
         let peptides = MASS_ANCHOR_PEPTIDES.with(|c| {
             std::mem::take(&mut *c.borrow_mut())

@@ -29,10 +29,10 @@ def rebase_output(model, info, mean, std, slope=1.0, intercept=0.0):
     return dict(info, y_mean=mean, y_std=std)
 
 
-def load_model(path):
+def load_model(path, *, target="rt"):
     blob = Path(path).read_bytes()
-    if blob[:4] != b"URTC":
-        raise ValueError("only URTC CNN models can be trained")
+    if blob[:4] != (b"UIMC" if target == "im" else b"URTC"):
+        raise ValueError(f"expected a {'UIMC' if target == 'im' else 'URTC'} CNN model")
     pos = 4
 
     def unpack(fmt):
@@ -45,7 +45,7 @@ def load_model(path):
         return value
 
     version, mean, std, emb, ch, k, nb = unpack("<IffIIII")
-    if version not in (1, 2, 3):
+    if version not in (1, 2, 3) or (target == "im" and version != 3):
         raise ValueError(f"unsupported URTC version {version}")
     if not (math.isfinite(mean) and math.isfinite(std) and std > 0):
         raise ValueError("invalid URTC normalization")
@@ -54,7 +54,7 @@ def load_model(path):
     blocks = list(unpack(f"<{nb}I"))
     head, = unpack("<I")
     ng = unpack("<I")[0] if version >= 2 else 0
-    if not 1 <= head <= 4096 or any(not 1 <= d <= 1024 for d in blocks) or ng not in (0, 5, 11):
+    if not 1 <= head <= 4096 or any(not 1 <= d <= 1024 for d in blocks) or ng not in ((12,) if target == "im" else (0, 5, 11)):
         raise ValueError("invalid or unsupported CNN architecture/feature schema")
     metadata = {}
     if version == 3:
@@ -63,7 +63,7 @@ def load_model(path):
             raise ValueError("invalid URTC metadata length")
         metadata = json.loads(blob[pos:pos + size])
         pos += size
-        if not isinstance(metadata, dict) or metadata.get("feature_schema") != FEATURE_SCHEMA or metadata.get("sequence_encoding") != ENCODING:
+        if not isinstance(metadata, dict) or metadata.get("feature_schema") != ("uno-aa-global-charge-v1" if target == "im" else FEATURE_SCHEMA) or metadata.get("sequence_encoding") != ENCODING:
             raise ValueError("unsupported URTC feature schema or sequence encoding")
     cfg = dict(emb=emb, ch=ch, k=k, blocks=blocks, head=head, n_global=ng)
     # Validate weight length before allocating the network.
@@ -83,9 +83,9 @@ def load_model(path):
     return model.eval(), dict(cfg, version=version, y_mean=mean, y_std=std), metadata
 
 
-def save_model(path, model, info, metadata):
+def save_model(path, model, info, metadata, *, target="rt"):
     path = Path(path)
-    meta = dict(metadata, feature_schema=FEATURE_SCHEMA, sequence_encoding=ENCODING)
+    meta = dict(metadata, feature_schema="uno-aa-global-charge-v1" if target == "im" else FEATURE_SCHEMA, sequence_encoding=ENCODING)
     encoded = json.dumps(meta, allow_nan=False, separators=(",", ":")).encode()
     if len(encoded) > 64 * 1024 * 1024:
         raise ValueError("URTC metadata exceeds 64 MiB")
@@ -94,7 +94,7 @@ def save_model(path, model, info, metadata):
     try:
         with tempfile.NamedTemporaryFile(dir=path.parent, delete=False) as stream:
             temporary = stream.name
-            stream.write(b"URTC")
+            stream.write(b"UIMC" if target == "im" else b"URTC")
             stream.write(struct.pack("<IffIIII", 3, info["y_mean"], info["y_std"], info["emb"], info["ch"], info["k"], len(info["blocks"])))
             stream.write(struct.pack(f"<{len(info['blocks'])}I", *info["blocks"]))
             stream.write(struct.pack("<III", info["head"], info["n_global"], len(encoded)))
@@ -102,7 +102,7 @@ def save_model(path, model, info, metadata):
             for parameter in model.parameters():
                 stream.write(parameter.detach().cpu().numpy().astype("<f4").tobytes())
         # The reader verifies the exact artifact before it becomes user-visible.
-        load_model(temporary)
+        load_model(temporary, target=target)
         os.link(temporary, path)
     finally:
         if temporary is not None:

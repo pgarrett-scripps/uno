@@ -12,6 +12,7 @@ use uno_core::{
 
 mod koth_ingest;
 mod rt_cli;
+mod im_cli;
 
 #[cfg(test)]
 mod rt_command_tests {
@@ -26,6 +27,18 @@ mod rt_command_tests {
         ] { assert!(Cli::try_parse_from(argv).is_ok()); }
         assert!(Cli::try_parse_from(["uno", "--features", "run.tsv"]).is_err());
         assert!(Cli::try_parse_from(["uno", "--fasta", "db.fasta"]).is_err());
+    }
+
+    #[test]
+    fn im_defaults_to_bundled_with_explicit_disable_and_override() {
+        let base = ["uno", "--features", "run.tsv", "--fasta", "db.fasta"];
+        let cli = Cli::try_parse_from(base).unwrap();
+        assert!(load_models(&cli).unwrap().im.unwrap().cnn_info().is_some());
+        let cli = Cli::try_parse_from(base.into_iter().chain(["--no-im"])).unwrap();
+        assert!(load_models(&cli).unwrap().im.is_none());
+        assert!(Cli::try_parse_from(base.into_iter().chain(["--no-im", "--im-model", "custom.uimc"])).is_err());
+        let cli = Cli::try_parse_from(base.into_iter().chain(["--im-model", "missing.uimc"])).unwrap();
+        assert!(load_models(&cli).is_err());
     }
 
     #[test]
@@ -109,10 +122,14 @@ struct Cli {
     #[arg(long, conflicts_with = "rt_library")]
     rt_model: Option<PathBuf>,
 
-    /// Distilled IM/CCS model (`uno-rt-train --im-labels` output). Used only when
-    /// the data has ion mobility.
-    #[arg(long)]
+    /// Custom IM model. Defaults to the bundled sequence CNN; IM is a soft
+    /// rescoring feature predicted after RT shortlisting, never a hard cutoff.
+    #[arg(long, conflicts_with = "no_im")]
     im_model: Option<PathBuf>,
+
+    /// Disable IM prediction and scoring, retaining the RT-only workflow.
+    #[arg(long)]
+    no_im: bool,
 
     /// TOML config (digest + matching + scoring). Defaults are used if omitted.
     #[arg(long)]
@@ -341,7 +358,11 @@ fn load_models(cli: &Cli) -> Result<Models> {
             log::info!("loaded IM model from {}", p.display());
             Some(m)
         }
-        None => None,
+        None if cli.no_im => None,
+        None => {
+            log::info!("using bundled IM CNN (soft scoring after RT shortlisting)");
+            Some(ImModel::bundled()?)
+        }
     };
 
     Ok(Models {

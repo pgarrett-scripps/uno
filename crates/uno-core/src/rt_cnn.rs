@@ -244,8 +244,16 @@ impl RtCnn {
 
     /// Load a CNN without a filesystem dependency (including the bundled model).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::from_bytes_for(bytes, false)
+    }
+
+    pub(crate) fn from_im_bytes(bytes: &[u8]) -> Result<Self> {
+        Self::from_bytes_for(bytes, true)
+    }
+
+    fn from_bytes_for(bytes: &[u8], im: bool) -> Result<Self> {
         let mut c = Cur { b: bytes, p: 0 };
-        if c.b.get(0..4) != Some(&MAGIC[..]) {
+        if c.b.get(0..4) != Some(if im { &b"UIMC"[..] } else { &MAGIC[..] }) {
             bail!("not a URTC CNN model");
         }
         c.p = 4;
@@ -277,7 +285,7 @@ impl RtCnn {
         // (v2) set is a strict PREFIX of the 11-feature (v3) set (same order/
         // formulas), so any model with n_global <= N_GLOBAL loads by slicing the
         // computed features to the header's declared count (see `pool`).
-        if !matches!(n_global, 0 | 5 | N_GLOBAL) {
+        if if im { version != 3 || n_global != 12 } else { !matches!(n_global, 0 | 5 | N_GLOBAL) } {
             bail!("URTC declares {n_global} global features, this build computes at most {N_GLOBAL}");
         }
         let metadata = if version == 3 {
@@ -290,14 +298,14 @@ impl RtCnn {
                 bytes.get(c.p..end).context("truncated URTC metadata")?
             ).context("invalid URTC metadata JSON")?;
             c.p = end;
-            if metadata["feature_schema"] != "uno-aa-global-v1"
+            if metadata["feature_schema"] != if im { "uno-aa-global-charge-v1" } else { "uno-aa-global-v1" }
                 || metadata["sequence_encoding"] != "canonical-aa-fixed-cam" {
                 bail!("unsupported URTC feature schema or sequence encoding");
             }
             metadata
         } else { serde_json::json!({}) };
         let info = serde_json::json!({
-            "format": "URTC", "version": version,
+            "format": if im { "UIMC" } else { "URTC" }, "version": version,
             "architecture": {"emb": emb, "ch": ch, "k": k, "blocks": dils, "head": head, "n_global": n_global},
             "normalization": {"mean": y_mean, "std": y_std}, "metadata": metadata
         });
@@ -383,7 +391,7 @@ impl RtCnn {
             let g = global_feats(seq.as_bytes());
             // n_global is <= N_GLOBAL (checked at load); the 5-feature set is the
             // first 5 of the computed 11, so slice to the model's declared count.
-            out.extend_from_slice(&g[..self.n_global]);
+            out.extend_from_slice(&g[..self.n_global.min(N_GLOBAL)]);
         }
     }
 
@@ -403,6 +411,18 @@ impl RtCnn {
             y += wi * ai;
         }
         (y * self.y_std + self.y_mean) as f64
+    }
+
+    /// Charge-aware IM head on the same sequence CNN. Charge is scaled by four.
+    pub(crate) fn predict_im_many(&self, items: &[(&str, u8)]) -> Vec<f64> {
+        items.par_chunks(2048).flat_map(|chunk| {
+            let mut buf = Buffers::default();
+            chunk.iter().map(|&(s, z)| {
+                self.pool(s, &mut buf);
+                buf.pooled.push(z as f32 / 4.0);
+                self.head(&buf.pooled, &mut buf.hid)
+            }).collect::<Vec<_>>()
+        }).collect()
     }
 
     /// Predict abstract RT (iRT units) for one sequence.
