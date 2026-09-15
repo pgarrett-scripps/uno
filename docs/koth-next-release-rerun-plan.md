@@ -1,7 +1,6 @@
 # UNO rerun with KOTH 0.7.0
 
-Status: 23-file scope approved; matrix arm corrected to consensus-row search
-following user feedback. Full rerun not started.
+Status: execution authorized; 23-file scope uses consensus-row matrix search.
 This replaces the earlier 32-file/eight-matrix/144-search matrix proposal.
 Machine-readable selection: `benchmark/matrix_publication_koth070.json`.
 
@@ -14,10 +13,27 @@ remained zero. One seed-zero joint search completed in 74.31 seconds with peak
 RSS 1,234,556 KiB on four threads, using a fresh RT-cache directory. This is a
 compatibility measurement, not a full-cohort runtime estimate or publication
 result. Local logs, output hashes and receipts are in the ignored
-`benchmark/results/koth070_compatibility/` directory. A consensus-row search
-smoke (the completed search used the removed joint arm), Bruker and IonStar
-pilots, standalone/embedded raw-route equivalence, and publication-driver
-adaptation remain execution prerequisites below.
+`benchmark/results/koth070_compatibility/` directory. The corrected consensus-row
+search also passed (27.77 seconds, warm RT cache). The executable matrix driver
+is `benchmark/matrix_koth070_study.py`: it freezes inputs and binaries, runs the
+four-file IonStar LFQ/consensus pilot, and then executes the two publication
+cohorts and serialized timing controls. Its three driver tests check the input
+routes and rejection of changed outputs on resume. Bruker and embedded-raw route
+checks apply to the separate IM/raw-mode studies before those are launched.
+
+Start or resume the matrix queue with:
+
+```sh
+python3 benchmark/matrix_koth070_study.py run \
+  --out benchmark/results/matrix_20260915_koth070 --threads 4 --workers 2
+```
+
+The study's `status.json` records active jobs and completed counts;
+`jobs/*/receipt.json` records commands, hashes, timing and return codes.
+`complete.json` marks execution completion, not scientific validation.
+The queue includes 75 publication searches, four timing controls, and one
+separately recorded IonStar pilot search. Raw-mode and IM studies are separate
+queues and are not launched by this matrix driver.
 
 ## 1. Use the release-compatible build on main
 
