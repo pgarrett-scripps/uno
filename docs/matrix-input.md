@@ -1,5 +1,33 @@
 # KOTH matrix input
 
+## KOTH 0.7.0 compatibility
+
+UNO accepts long-bundle schema versions 1, 2, and 3. KOTH 0.7.0 writes schema 3;
+regenerate both features/hills and aligned LFQ bundles when upgrading because
+feature ranking, group admission, and signal ownership have changed.
+
+Use `benchmark/koth_align.toml` as the current alignment/LFQ profile:
+
+```sh
+koth_align BATCH_DIRECTORY --config benchmark/koth_align.toml --output BUNDLE
+uno --matrix-long BUNDLE --matrix-joint --fasta proteins.fasta --out-proteins proteins.tsv
+```
+
+The extraction half-windows remain `rt_window_pct = 0.005` and
+`im_tolerance = 0.015`. The new `[lfq.consensus] max_group_qvalue = 0.05`
+replaces `min_member_combined_score`, `min_seed_combined_score`, `min_group_size`,
+and `allow_replicated_weak_seeds`; the removed settings now fail configuration
+loading. Groups need at least two original runs. Grouping coordinate limits
+are separate from extraction windows.
+
+Schema 2 adds `group_score` and `group_qvalue`; schema 3 adds signal-ownership
+status, owned/excluded sample counts, competing-group identity, and preceding
+signal fraction. UNO validates these fields, group consistency and admission,
+and suppressed-cell zero intensity. It retains the original observations even
+when shared or ambiguous LFQ signal has been zeroed. Group confidence is not
+used as extraction confidence or peptide/protein q-values, nor added to the
+classifier. Original feature quality and run-specific evidence remain distinct.
+
 ## Long-format evidence bundles
 
 KOTH can export `matrix_manifest.json`, `lfq_matrix.long.tsv`, and
@@ -119,8 +147,9 @@ The classifier receives agreement as learned descriptors; the implementation
 does not multiply replicate probabilities. Protein inference counts unique
 peptides and estimates target/decoy error once for the cohort.
 
-Joint input defaults to `--matrix-min-runs 1`, preserving KOTH's retained singleton
-groups. Missing runs and MBR-only extraction cells do not create direct peptide
+Joint input defaults to `--matrix-min-runs 1`, preserving singleton groups in
+legacy schema-1 bundles; KOTH 0.7.0 itself requires two-run group support.
+Missing runs and MBR-only extraction cells do not create direct peptide
 observations. Optional extraction covariates are described below.
 Quantification retains the original integrated LFQ cells exactly once;
 it does not substitute original apex intensities for those quantities.
@@ -131,11 +160,12 @@ and representative long-input searches retain their existing behavior and a
 default two-run floor. The experimental route is not yet a recommended default;
 see the pilot results for measured sensitivity and error.
 
-KOTH can retain replicated moderate-quality groups with
-`[lfq.consensus] allow_replicated_weak_seeds = true`. Joint search uses these
-observations for identification but excludes groups below the bundle's original
-seed-quality floor from the initial calibration. Later cohort recalibration
-uses the actual mass-compatible observations of confidently supported proteins.
+Legacy schema-1 bundles can contain groups admitted by
+`allow_replicated_weak_seeds`; UNO retains their original seed-quality floor for
+initial calibration. Schema-2/3 bundles use the declared group-confidence gate
+instead, without silently restoring the removed seed floor. UNO's existing
+isotope/feature anchor criteria still apply. Later cohort recalibration uses
+actual mass-compatible observations of confidently supported proteins.
 
 ## Optional joint extraction-quality scores
 

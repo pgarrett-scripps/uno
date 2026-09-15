@@ -1,0 +1,23 @@
+# UNO publication rerun with KOTH 0.7.0; long bundle schema 3.
+# Group confidence and cell extraction confidence are separate from UNO ID FDR.
+[lfq]
+rt_window_pct = 0.005
+im_tolerance = 0.015
+run_tdc = true
+normalize = "none"
+quant_estimator = "sum"
+detected_use_grid = true
+averagine_projection = false
+
+[lfq.consensus]
+mz_ppm = 20.0
+rt_window_pct = 0.02
+im_tolerance = 0.05
+max_group_qvalue = 0.05
+
+[output]
+export_long = true
+format = "tsv"
+max_qvalue = 1.0
+export_details = true
+export_decoys = true

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased — KOTH 0.7.0 compatibility
+
+- Require the sibling KOTH dependency at version 0.7.0 and record the released source revision. Pin additive isotope-evidence defaults in both raw profiles and update the standalone feature configuration.
+- Accept long-bundle schemas 2/3 alongside legacy schema 1, validate group confidence and exclusive-signal provenance, and retain suppressed-cell zeros. New group admission replaces the removed seed floor; original anchor-quality checks remain.
+- Add the current LFQ configuration using `max_group_qvalue = 0.05`. The approved publication rerun is 23 extractions, two alignments and 75 searches; current manuscript results remain the archived 0.6.0 evidence until rerun.
+
 ## Unreleased — experimental RT-first IM sequence CNN
 
 - Added charge-aware IM training and fine-tuning using the shared RT sequence CNN, with Rust inspection, prediction, and independent evaluation.

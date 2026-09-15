@@ -1,0 +1,282 @@
+{
+  "status": "approved design; publication jobs not started",
+  "koth_release": "v0.7.0",
+  "koth_commit": "88f9e7c54c9ad3d6ca5a56a906703a3d46982f43",
+  "long_schema_version": 3,
+  "seeds": [
+    0,
+    1,
+    2
+  ],
+  "arms": [
+    "separate",
+    "joint"
+  ],
+  "joint_cell_quality": false,
+  "configurations": {
+    "detection": "benchmark/koth_uno.toml",
+    "alignment": "benchmark/koth_align.toml",
+    "search": "benchmark/uno.toml"
+  },
+  "planned": {
+    "feature_extractions": 23,
+    "alignments": 2,
+    "separate_searches": 69,
+    "joint_searches": 6,
+    "total_searches": 75,
+    "serialized_timing_controls": 4
+  },
+  "selection": "Astral 100 ng triplicate and complete 20-run IonStar concentration series. Scope selected before 0.7.0 UNO outcomes; historical development on these datasets is disclosed. No low-input or scaling generalization from the reduced matrix study.",
+  "removed_from_new_publication_run": [
+    "Astral 200 pg/1 ng/10 ng matrices",
+    "pooled 12-run Astral matrix",
+    "IonStar 5/10-run scaling matrices",
+    "joint-cell-quality ablation arm"
+  ],
+  "cohorts": [
+    {
+      "dataset": "astral",
+      "cohort": "100ng",
+      "source_manifest": "benchmark/results/matrix_20260912/astral/inputs.tsv",
+      "source_manifest_sha256": "74f4ad77bb793f02370f8910e6ae54cd539ddbcb732d8a562416bc74778aa5ea",
+      "inputs": [
+        {
+          "run": "CW0710_OldFAIMS_100ng__RA1_rep2_ch2_DIA10ng",
+          "path": "/home/patrick-garrett/Data/PXD066701_Astral/mzML/CW0710_OldFAIMS_100ng__RA1_rep2_ch2_DIA10ng.mzML",
+          "condition": "100ng",
+          "pilot": "False",
+          "bytes": "2480846088",
+          "sha256": "589b40299bde1e61f421c0b50cba7bdb510fe9a7279dd2dadff674a326b76b24"
+        },
+        {
+          "run": "CW0710_OldFAIMS_100ng__RA1_rep3_ch1_DIA10ng",
+          "path": "/home/patrick-garrett/Data/PXD066701_Astral/mzML/CW0710_OldFAIMS_100ng__RA1_rep3_ch1_DIA10ng.mzML",
+          "condition": "100ng",
+          "pilot": "False",
+          "bytes": "2423332106",
+          "sha256": "fefdd83edba0edd961853e01dbb6b2b57dffdf186220b1ec068d6d3dc03da493"
+        },
+        {
+          "run": "CW0710_OldFAIMS_100ng__RA1_rep4_ch2_DIA10ng",
+          "path": "/home/patrick-garrett/Data/PXD066701_Astral/mzML/CW0710_OldFAIMS_100ng__RA1_rep4_ch2_DIA10ng.mzML",
+          "condition": "100ng",
+          "pilot": "False",
+          "bytes": "2541375365",
+          "sha256": "83982f201e69495662779fb8ae49c067dc08e8172e51306acb397751795e17bd"
+        }
+      ],
+      "fasta": "benchmark/results/matrix_20260912/astral/human_ecoli_yeast.fasta",
+      "rt_model": "benchmark/results/matrix_20260912/astral/rt.urtc"
+    },
+    {
+      "dataset": "ionstar",
+      "cohort": "20",
+      "source_manifest": "benchmark/results/matrix_20260912/inputs.tsv",
+      "source_manifest_sha256": "018329cece9c89f7eee80ff00efa90bacfc9698bfe1d993a248a08985d00c1e0",
+      "inputs": [
+        {
+          "run": "B03_02_150304_human_ecoli_B_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_02_150304_human_ecoli_B_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "B",
+          "replicate_order": "1",
+          "expected_fold": "1.5",
+          "pilot": "False",
+          "bytes": "245246104",
+          "sha256": "2392f059fae4ebb2dc838a12dbcab8874d37cc4518c0882808816e5be9a99183"
+        },
+        {
+          "run": "B03_03_150304_human_ecoli_C_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_03_150304_human_ecoli_C_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "C",
+          "replicate_order": "1",
+          "expected_fold": "2",
+          "pilot": "False",
+          "bytes": "247848520",
+          "sha256": "3b6b31c1b9bfd64f123bfc559042331625c3c26df6f01b3c7a5e61e753265ae0"
+        },
+        {
+          "run": "B03_04_150304_human_ecoli_D_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_04_150304_human_ecoli_D_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "D",
+          "replicate_order": "1",
+          "expected_fold": "2.5",
+          "pilot": "False",
+          "bytes": "245745738",
+          "sha256": "7ffc158d776ab281e6a12582ea6d0c2c75f06831def821e95e8fd825d8d3db94"
+        },
+        {
+          "run": "B03_05_150304_human_ecoli_E_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_05_150304_human_ecoli_E_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "E",
+          "replicate_order": "1",
+          "expected_fold": "3",
+          "pilot": "True",
+          "bytes": "245108482",
+          "sha256": "45c339455bbd7bb9a747996261172a236d0914883d1bb41a68583db92627f5d0"
+        },
+        {
+          "run": "B03_06_150304_human_ecoli_E_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_06_150304_human_ecoli_E_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "E",
+          "replicate_order": "2",
+          "expected_fold": "3",
+          "pilot": "True",
+          "bytes": "243607349",
+          "sha256": "a760728e1d2afa2b30c73bb750c57470798517a53a835e359f858cea297883c5"
+        },
+        {
+          "run": "B03_07_150304_human_ecoli_D_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_07_150304_human_ecoli_D_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "D",
+          "replicate_order": "2",
+          "expected_fold": "2.5",
+          "pilot": "False",
+          "bytes": "244190380",
+          "sha256": "8a338559036187747666b7f5b64d7fc4a84a5f46ce738c3613e6b24621c12a75"
+        },
+        {
+          "run": "B03_08_150304_human_ecoli_C_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_08_150304_human_ecoli_C_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "C",
+          "replicate_order": "2",
+          "expected_fold": "2",
+          "pilot": "False",
+          "bytes": "244552767",
+          "sha256": "b4724b9d50aff5a6a811621ca2f416360aff2dad0b527077745da3ac131979fe"
+        },
+        {
+          "run": "B03_09_150304_human_ecoli_B_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_09_150304_human_ecoli_B_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "B",
+          "replicate_order": "2",
+          "expected_fold": "1.5",
+          "pilot": "False",
+          "bytes": "243366726",
+          "sha256": "caf28dc3b1815e211fef16e5565d284c0371ebe6d27f1610100474d28f66c38e"
+        },
+        {
+          "run": "B03_10_150304_human_ecoli_A_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_10_150304_human_ecoli_A_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "A",
+          "replicate_order": "1",
+          "expected_fold": "1",
+          "pilot": "True",
+          "bytes": "243639614",
+          "sha256": "f9cd70ca9ffd2b19ff5a2d63f64f73435082a10d93a865998955624d220f92f5"
+        },
+        {
+          "run": "B03_11_150304_human_ecoli_A_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_11_150304_human_ecoli_A_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "A",
+          "replicate_order": "2",
+          "expected_fold": "1",
+          "pilot": "True",
+          "bytes": "249347605",
+          "sha256": "c807792688d270b23b6a44abba4d891b4663b670e30bab38d8bac6fbdee271b0"
+        },
+        {
+          "run": "B03_12_150304_human_ecoli_B_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_12_150304_human_ecoli_B_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "B",
+          "replicate_order": "3",
+          "expected_fold": "1.5",
+          "pilot": "False",
+          "bytes": "246905308",
+          "sha256": "dba4df7b6dc1d8718db4fa859c915340c5a3eded0ae8820a449c3f33da18b869"
+        },
+        {
+          "run": "B03_13_150304_human_ecoli_C_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_13_150304_human_ecoli_C_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "C",
+          "replicate_order": "3",
+          "expected_fold": "2",
+          "pilot": "False",
+          "bytes": "248669144",
+          "sha256": "2949469a6baba42937e8e0e7ea39f418a5cc5387957af57000d55f11e9cdee16"
+        },
+        {
+          "run": "B03_14_150304_human_ecoli_D_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_14_150304_human_ecoli_D_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "D",
+          "replicate_order": "3",
+          "expected_fold": "2.5",
+          "pilot": "False",
+          "bytes": "246971366",
+          "sha256": "c11aa7b3fe538eeaf042fd7ee525705ce5d8fad8556befa091c8a0201068db9c"
+        },
+        {
+          "run": "B03_15_150304_human_ecoli_E_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_15_150304_human_ecoli_E_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "E",
+          "replicate_order": "3",
+          "expected_fold": "3",
+          "pilot": "False",
+          "bytes": "247675795",
+          "sha256": "9d599ec0b8ff0343e918e6b317bad7e9c1df6e4b4a794b0bb1380a615f4f2680"
+        },
+        {
+          "run": "B03_16_150304_human_ecoli_E_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_16_150304_human_ecoli_E_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "E",
+          "replicate_order": "4",
+          "expected_fold": "3",
+          "pilot": "False",
+          "bytes": "247184922",
+          "sha256": "52520bd4450723cadd1c2100f95e65902b6e930ee91efeeece34b3b76c46f0b7"
+        },
+        {
+          "run": "B03_17_150304_human_ecoli_D_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_17_150304_human_ecoli_D_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "D",
+          "replicate_order": "4",
+          "expected_fold": "2.5",
+          "pilot": "False",
+          "bytes": "247858853",
+          "sha256": "4b4f0b4887bb2aaca951a2ab4990f037fc1ca195c38790d901957e8dc7efeb0b"
+        },
+        {
+          "run": "B03_18_150304_human_ecoli_C_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_18_150304_human_ecoli_C_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "C",
+          "replicate_order": "4",
+          "expected_fold": "2",
+          "pilot": "False",
+          "bytes": "247385172",
+          "sha256": "d1a66fb9ca840baf531aa2e0f412c1699bbda15aea41138cac7a6ac3adf4b67b"
+        },
+        {
+          "run": "B03_19_150304_human_ecoli_B_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_19_150304_human_ecoli_B_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "B",
+          "replicate_order": "4",
+          "expected_fold": "1.5",
+          "pilot": "False",
+          "bytes": "248104836",
+          "sha256": "f017ce3ba1e638085c3992add84d199a9a2bef7d91b2537202c48d7d4def0d0c"
+        },
+        {
+          "run": "B03_20_150304_human_ecoli_A_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_20_150304_human_ecoli_A_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "A",
+          "replicate_order": "3",
+          "expected_fold": "1",
+          "pilot": "False",
+          "bytes": "247779639",
+          "sha256": "ec208454740f097879dfd841c6c16d7d419f029b21c235031fad074b5239ad6c"
+        },
+        {
+          "run": "B03_21_150304_human_ecoli_A_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML",
+          "path": "/home/patrick-garrett/Data/PXD003881/mzml/B03_21_150304_human_ecoli_A_3ul_3um_column_95_HCD_OT_2hrs_30B_9B.mzML.gz",
+          "condition": "A",
+          "replicate_order": "4",
+          "expected_fold": "1",
+          "pilot": "False",
+          "bytes": "246986207",
+          "sha256": "bf448f33a573a702cb6069b3736fcec4db9dbc56b19f9a7f4ac089fed53dd4a7"
+        }
+      ],
+      "fasta": "benchmark/results/matrix_20260912/human_ecoli_yeast.fasta",
+      "rt_model": "benchmark/results/matrix_20260912/rt.urtc"
+    }
+  ]
+}

@@ -96,6 +96,8 @@ min_isotope_step_ratio = 0.01
 max_isotopes = 6
 
 max_isotope_log2_ratio = 1.5
+isotope_evidence_ratio_sigma = 0.75
+isotope_evidence_cosine_shape = 2.0
 
 neutron_mass = 1.003354835
 

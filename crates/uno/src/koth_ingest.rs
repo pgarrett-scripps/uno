@@ -38,12 +38,48 @@ pub const BRUKER_KOTH_CONFIG: &str = include_str!("koth_bruker.toml");
 
 /// Parse the bundled default koth config.
 pub fn default_config() -> Result<KothConfig> {
-    toml::from_str(DEFAULT_KOTH_CONFIG).context("parsing bundled default koth config")
+    let cfg: KothConfig = toml::from_str(DEFAULT_KOTH_CONFIG).context("parsing bundled default koth config")?;
+    cfg.features.validate()?;
+    Ok(cfg)
 }
 
 /// Parse the bundled Bruker koth config.
 pub fn bruker_config() -> Result<KothConfig> {
-    toml::from_str(BRUKER_KOTH_CONFIG).context("parsing bundled Bruker koth config")
+    let cfg: KothConfig = toml::from_str(BRUKER_KOTH_CONFIG).context("parsing bundled Bruker koth config")?;
+    cfg.features.validate()?;
+    Ok(cfg)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn koth070_profiles_and_lfq_config_are_valid() {
+        let orbitrap = default_config().unwrap();
+        let bruker = bruker_config().unwrap();
+        for cfg in [&orbitrap, &bruker] {
+            assert_eq!(cfg.features.isotope_evidence_ratio_sigma, 0.75);
+            assert_eq!(cfg.features.isotope_evidence_cosine_shape, 2.0);
+        }
+        let standalone: KothConfig = toml::from_str(include_str!("../../../benchmark/koth_uno.toml")).unwrap();
+        assert_eq!(toml::to_string(&standalone).unwrap(), toml::to_string(&orbitrap).unwrap());
+        let align: koth_ff::config::AlignConfig = toml::from_str(include_str!("../../../benchmark/koth_align.toml")).unwrap();
+        align.lfq.consensus.validate().unwrap();
+        assert_eq!(align.lfq.consensus.max_group_qvalue, 0.05);
+        assert_eq!(align.lfq.rt_window_pct, 0.005);
+        assert_eq!(align.lfq.im_tolerance, 0.015);
+        assert!(align.output.export_long);
+    }
+
+    #[test]
+    fn legacy_lfq_admission_flags_are_rejected() {
+        for setting in ["min_group_size = 1", "allow_replicated_weak_seeds = true",
+            "min_seed_combined_score = 0.75", "min_member_combined_score = 0.5"] {
+            let text = format!("[lfq.consensus]\n{setting}\n");
+            assert!(toml::from_str::<koth_ff::config::AlignConfig>(&text).is_err());
+        }
+    }
 }
 
 /// Is this raw input a Bruker `.d` directory? koth routes by extension, so match

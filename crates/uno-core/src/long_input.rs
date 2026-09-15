@@ -64,8 +64,8 @@ impl Bundle {
             .context("manifest requires parent directory")?
             .to_owned();
         ensure!(
-            b.schema_version == 1,
-            "unsupported long-matrix schema version"
+            (1..=3).contains(&b.schema_version),
+            "unsupported long-matrix schema version {} (supported: 1, 2, 3)", b.schema_version
         );
         ensure!(
             !b.runs.is_empty() && b.reference_run_id < b.runs.len(),
@@ -153,9 +153,14 @@ impl Bundle {
         // Reuse complete cell/membership validation, keeping consensus index order.
         let mut matrix = self.load_consensus(0, true, false)?;
         let mut groups = vec![Vec::new(); self.n_consensus];
-        let seed_floor = self.config.as_ref()
-            .and_then(|c| c.pointer("/lfq/consensus/min_seed_combined_score"))
-            .and_then(serde_json::Value::as_f64).unwrap_or(0.75);
+        // Schema 1 used a seed-quality admission rule. New bundles have already
+        // passed KOTH's cross-run group-confidence gate; do not silently restore
+        // the removed seed floor. Original feature anchor checks still apply.
+        let seed_floor = if self.schema_version == 1 {
+            self.config.as_ref()
+                .and_then(|c| c.pointer("/lfq/consensus/min_seed_combined_score"))
+                .and_then(serde_json::Value::as_f64).unwrap_or(0.75)
+        } else { 0.0 };
         ensure!(seed_floor.is_finite() && (0.0..=1.0).contains(&seed_floor), "invalid joint bootstrap quality floor");
         let mut source_ids = HashMap::new();
         let run_ids: Vec<usize> = self.runs.iter().map(|r| {
@@ -246,9 +251,17 @@ impl Bundle {
         let mut cells_seen = HashSet::new();
         let mut primary: HashMap<(usize, usize), usize> = HashMap::new();
         let mut direct = vec![0usize; self.n_consensus];
+        let mut group_evidence = vec![None; self.n_consensus];
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')
             .from_path(self.root.join(&self.cells.path))?;
+        let release_columns = ["group_score", "group_qvalue", "lfq_ownership_status",
+            "lfq_owned_samples", "lfq_excluded_samples", "lfq_competing_consensus_id",
+            "lfq_preceding_signal_fraction"];
+        let required = match self.schema_version { 1 => 0, 2 => 2, _ => release_columns.len() };
+        for field in &release_columns[..required] {
+            ensure!(rdr.headers()?.iter().any(|h| h == *field), "schema {} requires column {field}", self.schema_version);
+        }
         for row in rdr.deserialize::<Cell>() {
             let e = row?;
             let c = e.consensus_id;
@@ -257,6 +270,13 @@ impl Bundle {
                 c < features.len() && r < nr && e.seed_run_id < nr,
                 "invalid cell/seed identity"
             );
+            self.validate_release_evidence(&e)?;
+            if self.schema_version >= 2 {
+                let evidence = (e.group_score.unwrap(), e.group_qvalue.unwrap());
+                if let Some(previous) = group_evidence[c] {
+                    ensure!(previous == evidence, "inconsistent group confidence across cells");
+                } else { group_evidence[c] = Some(evidence); }
+            }
             ensure!(
                 matches!(e.extraction_kind.as_str(), "target" | "decoy"),
                 "invalid extraction kind"
@@ -479,6 +499,36 @@ impl Bundle {
             joint_cell_evidence: None,
         })
     }
+
+    fn validate_release_evidence(&self, e: &Cell) -> Result<()> {
+        if self.schema_version >= 2 {
+            let score = e.group_score.context("schema 2/3 requires group_score")?;
+            let q = e.group_qvalue.context("schema 2/3 requires group_qvalue")?;
+            let limit = self.config.as_ref()
+                .and_then(|c| c.pointer("/lfq/consensus/max_group_qvalue"))
+                .and_then(serde_json::Value::as_f64)
+                .context("schema 2/3 requires max_group_qvalue in manifest config")?;
+            ensure!(score.is_finite() && q.is_finite() && (0.0..=1.0).contains(&q)
+                && limit.is_finite() && (0.0..=1.0).contains(&limit), "invalid group confidence");
+            ensure!(q <= limit && e.n_contributing_runs >= 2,
+                "group fails declared confidence or original-run support requirement");
+        }
+        if self.schema_version >= 3 {
+            let status = e.lfq_ownership_status.as_deref().context("schema 3 requires ownership status")?;
+            ensure!(matches!(status, "exclusive" | "residual" | "shared_signal_only" | "ambiguous_residual"),
+                "invalid LFQ ownership status");
+            let owned = e.lfq_owned_samples.context("schema 3 requires owned-sample count")?;
+            e.lfq_excluded_samples.context("schema 3 requires excluded-sample count")?;
+            let fraction = e.lfq_preceding_signal_fraction.context("schema 3 requires preceding signal fraction")?;
+            ensure!(fraction.is_finite() && (0.0..=1.0).contains(&fraction), "invalid preceding signal fraction");
+            ensure!(e.lfq_competing_consensus_id.is_none_or(|c| c < self.n_consensus && c != e.consensus_id),
+                "invalid competing consensus identity");
+            if matches!(status, "shared_signal_only" | "ambiguous_residual") {
+                ensure!(e.lfq_intensity == 0.0 && owned == 0, "suppressed LFQ signal must have zero intensity and ownership");
+            }
+        }
+        Ok(())
+    }
 }
 
 #[derive(Deserialize)]
@@ -496,6 +546,8 @@ struct Cell {
     im: Option<f64>,
     combined_score: f64,
     n_contributing_runs: u32,
+    group_score: Option<f64>,
+    group_qvalue: Option<f64>,
     lfq_intensity: f64,
     lfq_q_value: Option<f64>,
     lfq_is_mbr: bool,
@@ -506,6 +558,11 @@ struct Cell {
     lfq_hybrid_score: Option<f64>,
     lfq_isotope_pattern: Option<f64>,
     lfq_coelution: Option<f64>,
+    lfq_ownership_status: Option<String>,
+    lfq_owned_samples: Option<usize>,
+    lfq_excluded_samples: Option<usize>,
+    lfq_competing_consensus_id: Option<usize>,
+    lfq_preceding_signal_fraction: Option<f64>,
 }
 #[derive(Deserialize)]
 struct Observation {
@@ -700,6 +757,104 @@ mod tests {
             }
         }
         std::fs::write(p, out).unwrap();
+    }
+
+    fn release_fixture(version: u32) -> Fixture {
+        let f = Fixture::new();
+        with_aligned_coordinates(&f);
+        let p = f.0.join("cells.tsv");
+        let text = std::fs::read_to_string(&p).unwrap();
+        let mut out = String::new();
+        for (i, line) in text.lines().enumerate() {
+            let columns = if i == 0 { "group_score\tgroup_qvalue" } else { "2.3\t0.03" };
+            out.push_str(&format!("{line}\t{columns}"));
+            if version >= 3 {
+                out.push_str(if i == 0 {
+                    "\tlfq_ownership_status\tlfq_owned_samples\tlfq_excluded_samples\tlfq_competing_consensus_id\tlfq_preceding_signal_fraction"
+                } else { "\texclusive\t10\t0\t\t0" });
+            }
+            out.push('\n');
+        }
+        std::fs::write(p, out).unwrap();
+        f
+    }
+
+    fn open_release(f: &Fixture, version: u32) -> Result<Bundle> {
+        f.open(); // refresh table hashes after each fixture edit
+        let path = f.0.join("matrix_manifest.json");
+        let mut manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        manifest["schema_version"] = version.into();
+        manifest["config"] = serde_json::json!({"lfq":{"consensus":{"max_group_qvalue":0.05}}});
+        std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        Bundle::open(&f.0)
+    }
+
+    #[test]
+    fn release_schemas_preserve_originals_and_quantities() {
+        for version in [2, 3] {
+            let f = release_fixture(version);
+            let old = f.open().load_joint(1).unwrap();
+            let b = open_release(&f, version).unwrap();
+            let new = b.load_joint(1).unwrap();
+            assert_eq!(old.features, new.features);
+            assert_eq!(old.joint_cell_evidence, new.joint_cell_evidence);
+            assert_eq!(new.joint_evidence.unwrap()[0].len(), 3);
+            assert_eq!(b.load_run(0).unwrap().features.len(), 2);
+        }
+        assert!(open_release(&release_fixture(3), 4).is_err());
+    }
+
+    #[test]
+    fn release_group_confidence_replaces_only_the_removed_seed_floor() {
+        let f = release_fixture(3);
+        for name in ["cells.tsv", "observations.tsv"] {
+            let p = f.0.join(name);
+            let text = std::fs::read_to_string(&p).unwrap().replace("\t0.9\t", "\t0.6\t");
+            std::fs::write(p, text).unwrap();
+        }
+        let legacy = f.open().load_joint(1).unwrap();
+        assert!(legacy.joint_evidence.unwrap()[0].iter().all(|o| !o.bootstrap_eligible));
+        let release = open_release(&f, 3).unwrap().load_joint(1).unwrap();
+        assert!(release.joint_evidence.unwrap()[0].iter().all(|o| o.bootstrap_eligible));
+        assert_eq!(legacy.features, release.features);
+    }
+
+    #[test]
+    fn suppressed_lfq_retains_original_evidence_but_not_quantitative_support() {
+        let f = release_fixture(3);
+        let p = f.0.join("cells.tsv");
+        let text = std::fs::read_to_string(&p).unwrap()
+            .replace("\t123456.789\t0.001\tfalse", "\t0\t0.001\tfalse")
+            .replacen("\texclusive\t10\t0\t\t0", "\tshared_signal_only\t0\t10\t\t1", 1);
+        std::fs::write(p, text).unwrap();
+        let m = open_release(&f, 3).unwrap().load_joint(1).unwrap();
+        assert_eq!(m.features[0].intensities, vec![0.0, 65.0, 5.0]);
+        assert_eq!(m.joint_evidence.unwrap()[0].len(), 3);
+        assert_eq!(m.joint_cell_evidence.unwrap()[0][3], 1.0 / 3.0);
+    }
+
+    #[test]
+    fn release_rejects_bad_group_confidence_and_ownership() {
+        for (old, new) in [
+            ("\t2.3\t0.03", "\t2.3\t0.06"), // beyond declared group threshold
+            ("\t2.3\t0.03", "\tNaN\t0.03"),
+            ("group_qvalue", "missing_group_qvalue"),
+            ("lfq_competing_consensus_id", "missing_competitor_column"),
+            ("\texclusive\t10\t0\t\t0", "\tambiguous_residual\t0\t10\t\t1"), // nonzero suppressed intensity
+            ("\texclusive\t10\t0\t\t0", "\texclusive\t10\t0\t1\t0"), // nonexistent competitor
+            ("\texclusive\t10\t0\t\t0", "\texclusive\t10\t0\t\t1.1"),
+        ] {
+            let f = release_fixture(3);
+            let p = f.0.join("cells.tsv");
+            let text = std::fs::read_to_string(&p).unwrap().replace(old, new);
+            std::fs::write(p, text).unwrap();
+            assert!(open_release(&f, 3).unwrap().load_joint(1).is_err(), "accepted {new}");
+        }
+        let f = release_fixture(3);
+        let p = f.0.join("cells.tsv");
+        let text = std::fs::read_to_string(&p).unwrap().replacen("\t2.3\t0.03", "\t2.4\t0.03", 1);
+        std::fs::write(p, text).unwrap();
+        assert!(open_release(&f, 3).unwrap().load_joint(1).is_err());
     }
     #[test]
     fn joint_loader_preserves_alternatives_and_quant_cells_without_mbr_evidence() {

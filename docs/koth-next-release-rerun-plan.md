@@ -1,215 +1,170 @@
-# KOTH next-release rerun plan
+# UNO rerun with KOTH 0.7.0
 
-Status: planned; start after the new KOTH release is live. The release tag and
-commit are intentionally unset. This plan covers KOTH-dependent evidence in
-UNO, including feature generation, LFQ, downstream searches, and manuscript
-outputs. No benchmark was launched while preparing this plan.
+Status: reduced publication design approved by the user; full rerun not started.
+This replaces the earlier 32-file/eight-matrix/144-search matrix proposal.
+Machine-readable selection: `benchmark/matrix_publication_koth070.json`.
 
-## 1. Freeze the release and prepare an isolated rerun
+Integration verification: all 93 UNO/uno-core tests pass, and release binaries
+build offline against the released KOTH source. A two-file Astral compatibility
+smoke regenerated features and schema-3 LFQ, preserved all 171,624 original
+features on round-trip, and matched the wide export exactly for 23,333 groups.
+Joint input retained 49,394 aligned observations; ownership-suppressed quantities
+remained zero. One seed-zero joint search completed in 74.31 seconds with peak
+RSS 1,234,556 KiB on four threads, using a fresh RT-cache directory. This is a
+compatibility measurement, not a full-cohort runtime estimate or publication
+result. Local logs, output hashes and receipts are in the ignored
+`benchmark/results/koth070_compatibility/` directory. Bruker and IonStar pilots,
+standalone/embedded raw-route equivalence, and publication-driver adaptation
+remain execution prerequisites below.
 
-Create `benchmark/results/koth_<tag>_<date>/` with separate `raw_mode`, `matrix`,
-`im`, `pilot`, and provenance directories. Preserve previous studies and the
-current manuscript until the replacement evidence passes validation.
+## 1. Use the release-compatible build on main
 
-1. Resolve the published tag to its commit; verify release checksums. Build
-   `uno`, `koth_ff`, and `koth_align` against that exact KOTH source. UNO uses a
-   local path dependency (`Cargo.toml`), so installing standalone binaries does
-   not update its embedded feature finder. Verify the actual build outputs
-   rather than assuming a particular Cargo target directory.
-2. Freeze the UNO revision and all local changes, dependency sources and locks,
-   binary hashes, runtime versions, FASTAs, RT/IM models, raw-input checksums,
-   run/condition manifests, seeds, thread counts, and effective configurations.
-   The current UNO tree contains ongoing IM work: explicitly select and archive
-   the intended state before building; a commit hash alone is insufficient.
-3. Review the release's feature and LFQ configuration/schema changes. Record
-   each required migration. Preserve the existing experimental settings where
-   supported; declare any new default or estimator comparison as a separate
-   arm before inspecting full-cohort results.
-4. Adapt the existing drivers to accept the new study root and release identity.
-   Remove implicit reuse of old generated features, hills, matrices, search
-   receipts, and feature-dependent caches. Resume only when binary, complete
-   input/configuration hashes, and output hashes match the new run.
-5. Produce a dry-run inventory mapping every active KOTH-dependent claim to its
-   inputs, jobs, evaluator, and final asset. Freeze this inventory before the
-   full run, including any additional active KOTH studies landed since this plan.
+KOTH v0.7.0 is published. Its annotated tag resolves to
+`88f9e7c54c9ad3d6ca5a56a906703a3d46982f43`, verified against GitHub. The release
+page's automatically generated body mentions 0.6.0; the tagged source changelog
+and tag commit establish the actual 0.7.0 changes. UNO retains its sibling path
+build workflow, with an exact `=0.7.0` version requirement. Freeze source hashes
+as well as the version; a local path is not an immutable source pin.
 
-**Driver changes needed:** `benchmark/matrix_release_study.py` hard-codes 0.5.0,
-old source/configuration paths, and its output directory;
-`benchmark/matrix_release_report.py` also asserts the old release tag.
-`benchmark/publication_rerun.py` runs both input arms and writes canonical paths;
-add scoped selection and isolated outputs before using it here. The IM drivers
-inherit feature paths from old receipts. Hash every matrix bundle member used
-by a search, not only `matrix_manifest.json`. Archive effective LFQ defaults,
-including values not explicitly present in TOML.
+The release changes feature candidate ranking and best-prefix selection,
+introduces bounded native MS1 streaming, replaces old LFQ admission settings
+with group confidence, and applies exclusive signal ownership. Unlike the
+0.6.0 LFQ-only update, **both feature/hill tables and LFQ must be regenerated**.
+None of the old KOTH-derived separate-search results are reusable as new-version
+results merely because they do not consume an LFQ matrix.
 
-## 2. Pass a small feature-generation and LFQ pilot
+Use `benchmark/koth_uno.toml` for Orbitrap feature extraction and the embedded
+Bruker profile for timsTOF. Both explicitly carry the release's isotope-evidence
+parameters. Use `benchmark/koth_align.toml` for alignment/LFQ:
 
-Use the prespecified four-run IonStar subset (two replicates from each extreme)
-for LFQ checks and runtime estimates. Add representative low-input Astral,
-multi-CV FAIMS, and Bruker timsTOF files for feature/interface coverage. Keep
-pilot outputs separate; rerun them if the frozen settings subsequently change.
+| Setting | Rerun value |
+| --- | --- |
+| Extraction RT/IM half-windows | 0.005 of run RT span / 0.015 absolute IM |
+| Group coordinate limits | 20 ppm / 0.02 RT span / 0.05 IM |
+| Group admission | `max_group_qvalue = 0.05`, at least two original runs |
+| Quantitation | summed grid extraction, no upstream normalization, no averagine projection |
+| Exports | schema-3 long bundle, wide TSV, details and decoys |
 
-1. Compare standalone KOTH TSVs with embedded UNO `--raw` features under matched
-   configurations and matching filters. Check feature membership, mass/RT/IM
-   values, charge, quality columns, missing-value handling, and FAIMS separation.
-   Account for TSV rounding; investigate differences rather than assuming
-   byte-identical search results. Check Bruker-specific filters explicitly:
-   `--features` does not automatically inherit `--raw` defaults.
-2. Exercise long-matrix joint search and the supported ordinary matrix route.
-   Validate schema, consensus/run identities, original observations, intensity
-   cells, extraction q-values, direct/MBR labels, and complete sidecar joins.
-   Verify integrated LFQ cells are counted once and missing cells remain missing.
-3. Review feature counts, retained groups, detected/MBR support, missingness,
-   intensity distributions, identification calibration, and IonStar ratios
-   against the archived baseline. Changes are expected; unexplained failures,
-   malformed values, and broken provenance stop promotion to the full run.
-4. Measure extraction, alignment/LFQ, and search time, peak memory, and output
-   size. Use those measurements to set worker limits, disk requirements, and
-   a concrete full-run estimate. Avoid transferring old runtime estimates to
-   the new algorithms.
+Remove `min_member_combined_score`, `min_seed_combined_score`, `min_group_size`,
+and `allow_replicated_weak_seeds` from new LFQ configurations. UNO reads schemas
+1–3, validates new confidence/ownership fields, and preserves zeroed shared or
+ambiguous cells. Schema-1 bootstrap behavior stays reproducible; schema-2/3 input
+uses the new group admission without silently adding the retired seed floor.
+Original UNO feature/isotope anchor checks still apply. Group q-values, cell
+extraction q-values and identification q-values remain distinct.
 
-**Gate:** all representative routes load and complete, identities and quantities
-pass audit, configuration migrations are documented, and full-run settings are
-frozen. Parameter exploration belongs in the pilot and must be recorded.
+Parquet + Zstd IM caching is already committed on main (`3ba6be0`). It populates
+automatically and shares model/sequence/charge predictions. Set an explicit
+`UNO_IM_CACHE_DIR` for durable study storage: the default is an evictable OS-temp
+cache. Set `UNO_RT_CACHE_DIR` too. Predictions remain reusable when only KOTH
+changes; new shuffled decoys or charges cause additional misses. Do not reuse
+feature-dependent outputs or calibrated residuals. Cold cache generation and
+warm search timing must be reported separately.
 
-## 3. Regenerate every active KOTH-dependent experiment
+## 2. Run the approved publication core
 
-The dependency order is **raw inputs → features/hills → alignment/LFQ → UNO
-searches → evaluation → manuscript assets**. Reuse newly generated features
-across arms only when raw inputs and full extraction settings match. A cached
-feature-table search cannot stand in for a measured end-to-end `--raw` run.
+| Cohort | Raw files | Alignments | Separate searches | Joint searches |
+| --- | ---: | ---: | ---: | ---: |
+| Astral 100 ng | 3 | 1 | 9 | 3 |
+| IonStar full concentration series | 20 | 1 | 60 | 3 |
+| **Total** | **23** | **2** | **69** | **6** |
 
-| Evidence | Required rerun | Existing starting point |
+Use seeds 0, 1 and 2 for every arm. The comparator is the deduplicated union of
+separate searches; the joint arm uses `--matrix-long ... --matrix-joint`, with
+`matrix_joint_cell_quality = false`. Keep the same database, digest, RT model,
+matching filters, hardware policy and seeds within each cohort's comparison.
+Run the 23 new feature tables through both routes; quantification comparisons
+must map separate-search assignments to the same new integrated LFQ values.
+
+This is **75 searches, 48% fewer than 144**, plus four serialized timing controls
+(three Astral single searches and one Astral joint search, seed zero). The chosen
+scope keeps all four IonStar replicates at all five concentrations and all three
+Astral 100 ng acquisition replicates. The input inventory is inherited by name
+and checksum, not reselected by new results; all 23 source paths are present.
+Recheck their checksums at execution freeze.
+
+Drop the IonStar 5/10-run scaling matrices, the four other Astral matrices, and
+the joint-plus-cell-summary ablation from this new publication run. Preserve the
+old full studies as versioned development evidence. They must not be relabeled
+as 0.7.0 results. The narrower matrix section makes no low-input or cohort-scaling
+claim. Astral 100 ng is a focused high-input demonstration, and IonStar provides
+known-ratio quantitation and the previously unfavorable joint-search comparison.
+Both datasets have development history; this is not unseen validation.
+
+## 3. Rerun the other active KOTH-dependent evidence
+
+| Experiment | Required jobs | Why |
 | --- | --- | --- |
-| Raw-mode comparison | Six primary files plus 12 Astral files, seeds 0–2: **54 `--raw` searches**, including fresh embedded feature generation. Refresh seed variability, overlap, entrapment, and raw-route resources. | `benchmark/publication_rerun.py`, `benchmark/variability_extension.py`, `benchmark/raw_mode/summarize.py` |
-| Matrix/LFQ study | **32 fresh feature/hill extractions**, **eight independent alignments**, **144 searches**, and **four serialized timing controls**. Regenerate all long/wide LFQ exports, observations, q-values, details, and downstream proteins/precursors/abundances. | `benchmark/matrix_release_study.py`, `benchmark/matrix_release_report.py` |
-| Current IM search comparison | Regenerate timsTOF **A2/B2/C2** KOTH features; rerun off/tree-soft/CNN-soft × three runs × seeds 0–2: **27 searches**. Refresh default versus explicit-model/disabled checks and their evidence. | `benchmark/im_cnn_study.py`, `benchmark/im_cnn_check.py`, `benchmark/im_default_20260914.json` |
-| Other KOTH-dependent evidence | Rebuild KOTH-derived A1 observations/calibration/diagnostics if their lineage uses KOTH features; refresh any still-active quality, ablation, FAIMS, or legacy IM claims found by the inventory. | `benchmark/im_cnn_diagnostics.py`, `benchmark/im_published_comparison.py`, `experiments/im-timstof/uno/benchmark/im_timstof_study.py` |
+| Raw-mode figure | 18 inputs × three seeds = **54 searches** with embedded extraction | New feature ranking affects every KOTH raw-mode result, including all 12 Astral input-series files. |
+| Current timsTOF IM comparison | Fresh A2/B2/C2 features; three model settings × three files × three seeds = **27 searches** | Changed KOTH features affect candidate sets and calibrated IM evidence. |
+| Diagnostics and controls | Route parity, model/default-disable checks, and any KOTH-derived A1 observations | Determine affected inputs by provenance; public training/holdout labels alone do not depend on KOTH. |
 
-The matrix design stays matched to the current release study: IonStar nested
-5/10/20-run cohorts; Astral 200 pg/1 ng/10 ng/100 ng triplicates plus the 12-run
-pool; separate searches, joint searches, and joint searches with cell-quality
-summaries; seeds 0–2. Rebuild each subset's alignment independently. Do not slice
-the full matrix to represent a smaller cohort.
+The known publication core is now **156 searches plus four matrix timing
+controls**, rather than 225 plus four. Matrix extraction contributes 23 fresh
+feature/hill tables; IM adds three; the 54 raw-mode searches also extract
+internally. Reuse newly extracted tables across applicable arms only when raw
+input and every effective extraction setting match. A cached TSV search cannot
+replace an end-to-end `--raw` resource measurement.
 
-The known core is **225 search jobs plus four matrix timing controls**, before
-pilot checks, additional regressions, or new arms. It includes 32 matrix
-extractions and three timsTOF search-file extractions; the 54 raw-mode jobs also
-perform extraction internally. These counts are a planning baseline, not a
-substitute for the frozen inventory.
+Biosaur2-only and ms1searchpy evidence does not depend on KOTH. Keep it with its
+recorded provenance and verify a matched biosaur2 control on the new UNO build.
+Expand those reruns only if relevant UNO changes alter their behavior. Public
+RT/IM model training does not need repeating solely because KOTH changed.
 
-Reuse immutable raw/mzML inputs, FASTAs, independent MS/MS evidence, and models
-whose training data do not depend on KOTH. Public RT/IM training and public
-holdout prediction benchmarks do not automatically require retraining. Audit
-A1 observation lineage before deciding whether its prediction comparisons
-also need regeneration.
+## 4. Freeze, pilot, and execute in dependency order
 
-Biosaur2-only and ms1searchpy results remain independent evidence. Verify matched
-biosaur2 controls with the frozen UNO build; if non-KOTH changes alter its search
-behavior, expand the inventory to the affected comparator searches. Historical,
-retired experiments remain archived and explicitly versioned; any result used
-as evidence for the new version must be regenerated.
+1. Archive the committed UNO tree, exact KOTH tag/source, other path dependencies,
+   lockfiles, binaries, effective configurations, FASTA/model hashes, input
+   hashes, run/condition mapping, seeds, worker limits and driver hashes in a
+   new `benchmark/results/koth070_<date>/` directory. Historical scripts with
+   hard-coded 0.5.0/0.6.0 paths are reproduction records, not launch commands.
+2. Adapt the execution/report drivers to the approved JSON inventory and current
+   TOMLs. Require complete input/output hashes for resume, including every long
+   bundle file, and successful receipts for exactly 23 extractions, two matrices,
+   75 searches and four timing controls. Keep raw-mode and IM outputs isolated.
+3. Use small, prespecified compatibility pilots before the full run: representative
+   Orbitrap/FAIMS and Bruker extraction; the established four-file IonStar extreme
+   subset for LFQ. Check actual schema-3 bundle ingestion, original observation
+   links, group-versus-cell confidence, ownership-suppressed zeros, and standalone
+   versus embedded feature equivalence at TSV precision. No tuning on full-cohort
+   outcomes. Archive pilot attempts independently.
+4. Measure fresh extraction, ten-control group-confidence construction, exclusive
+   LFQ, and search/cache time and memory. Set concurrency and the execution budget
+   from these results. The old 3–3.5-hour matrix estimate covered a larger study
+   and older LFQ; fewer searches do not imply a proportional 0.7.0 speedup.
+5. Execute raw → features/hills → alignment/LFQ → matched separate/joint searches
+   → evaluations. Reuse predictions and completed matching jobs with valid hashes;
+   serialize the resource controls and disclose cache state.
 
-## 4. Re-evaluate identification, LFQ, and resources
+## 5. Publish only the audited replacement evidence
 
-1. Recompute per-seed protein/precursor coverage, accession unions, overlap,
-   internal-q lists, and empirical entrapment curves. Preserve whole tied-score
-   blocks and independently audit the 1%, 3%, and 5% accession sets. Report all
-   outcomes, including empty runs and regressions.
-2. Separate cohort identification, original per-run feature detection, confident
-   extraction, and MBR-only support. Recompute Astral MS/MS corroboration using
-   the new assignments; an unmatched MS/MS record is not proof of a false ID.
-3. Recompute IonStar expected ratios **1:1.5:2:2.5:3**, ratio error/compression,
-   within-condition CV, human-background stability, and coverage/missingness.
-   Preserve the normalization and rollup rules, but recalculate their numerical
-   factors from the new data. Report common and arm-specific groups, without
-   primary-analysis imputation. Map separate-search assignments to the same
-   new LFQ intensities when comparing identification effects; apex intensities
-   are a different estimator.
-4. Re-measure serialized raw-route resources and the four warm-cache Astral
-   matrix timing controls. Report extraction, alignment/LFQ, search-only, and
-   end-to-end costs separately, with cache/concurrency policy explicit.
-   Concurrent batch timings do not support serialized speed claims.
-5. Produce an old-versus-new comparison with release/configuration identities,
-   all seed outcomes, biological metrics, resources, and explained deviations.
-   Audit every planned job and checksum before accepting completion markers.
+Recompute per-seed accession depth, overlap, additions/losses, internal-q lists
+and empirical entrapment curves with whole tied-score blocks. Independently
+check 1%, 3% and 5% accession sets. Keep failures, empty outputs and regressions.
+The union of individually filtered lists is not automatically a calibrated
+cohort list; group confidence is not calibrated identification FDR.
 
-## 5. Replace manuscript evidence after the audit passes
+For IonStar, retain expected ratios **1:1.5:2:2.5:3**, E. coli ratio error and
+compression, within-condition CV, human background stability, and coverage and
+missingness. Fix normalization/rollup rules, rederive their factors from the new
+outputs, compare common and arm-specific groups, and avoid primary-analysis
+imputation. Count original detections, confident extractions and MBR-only cells
+separately. Evaluate ownership and isotope-choice limitations rather than
+assuming that exclusive extraction guarantees better ratios.
 
-Update report readers to the new study root, regenerate summaries and statistics,
-and refresh `fig5_raw_mode`, `figS7_koth_matrix`, the matrix SI tables, the IM search
-table, and any other assets identified by the dependency inventory. Refresh A1
-tables only if their underlying observations changed. Update Methods, Results,
-captions, software versions, and limitations to reflect the actual outcome.
+Keep the main-text matrix result to one concise developed paragraph and a compact
+SI comparison for the two cohorts: identification, known-ratio accuracy/coverage,
+and one clearly scoped search-resource control. Detailed per-seed records stay
+in the reproducibility archive; remove scaling/low-input/cell-ablation claims
+from the replacement section. Retain negative IonStar outcomes if they recur.
 
-Run the existing manuscript pipeline from `paper/`: `just assets-all`, `just fmt`,
-`just paper`, `just docx`, and `just verify`. Check provenance and stale-version
-references, and visually inspect affected PDF and Word pages. Preserve coherent
-multi-sentence manuscript paragraphs and remove repeated conclusions.
+After all audits pass, repoint generators to the new reports and regenerate the
+raw-mode figure, compact matrix figure/tables, affected IM tables and all derived
+statistics. Update software versions, Methods, captions and limitations. Run
+`just assets-all`, `just fmt`, `just paper`, `just docx`, `just verify`, and
+`just check-stats-deep` from `paper/`; visually inspect changed PDF/Word pages.
+Check manuscript paragraphs for repeated explanations and one-sentence fragments.
 
-**Done means:** all planned KOTH-dependent jobs have successful audited receipts;
-every current-version claim traces to new outputs; every intentionally retained
-independent or historical result has explicit provenance; manuscript assets and
-builds pass verification. Deliver a release-rerun report linking the frozen
-manifest, comparisons, and rendered manuscript. Keep the previous version
-available for reproduction.
-
-## Runtime estimate and search-seed budget
-
-Planning estimate from the archived job receipts: **4–6 hours of computation**
-on the same host with approximately two concurrent workers, and **6–10 hours
-total** including release integration, pilot review, reporting, and manuscript
-checks. These are provisional allocations, not measurements of the unreleased
-version; API/schema changes or substantially slower LFQ can extend them. Replace
-the estimate with pilot measurements before the full launch.
-
-| Archived workload | Sum of individual job wall times | Planning implication |
-| --- | --- | --- |
-| Matrix feature extraction and alignment | 30.1 minutes | This cost does not fall when search seeds are reduced. |
-| Matrix searches | 341.5 minutes across 144 jobs | About 171 minutes at ideal two-worker utilization; allow scheduling overhead. |
-| Matrix serialized timing controls | 5.1 minutes | Keep serialized. |
-| Raw-mode searches | 14.6 minutes serialized plus 44.5 concurrent job-minutes | About 37 minutes with two workers for the repeated seeds. |
-| IM searches | 41.7 minutes across 27 jobs | About 21 minutes with two workers, plus fresh Bruker extraction/checks. |
-
-Retain **three search seeds (0, 1, 2)** for the final KOTH rerun. Every core
-experiment in this plan already uses three, so reducing the unrelated historical
-11-seed UNO sweep does not reduce the 225 planned searches. Three prespecified
-seeds provide a practical descriptive check of search variability; they do not
-establish precise uncertainty or replace independent acquisition replicates.
-Keep every biological/acquisition run and report all seed outcomes.
-
-The current `benchmark/results/spread.tsv` contains 11 UNO draws per primary
-file and either three or ten ms1searchpy draws, depending on the file. Those
-biosaur2-based historical comparisons are outside the KOTH-only rerun unless
-the frozen UNO changes also affect their results. If that expansion is needed,
-three prespecified UNO seeds can be the new primary comparison, with the larger
-archived sweep retained as separately versioned supporting evidence.
-
-The largest safe scheduling improvements are to extract each matrix/IM input
-once per configuration, reuse its new features across seeds, share only validated
-model-prediction caches, and run independent jobs concurrently within measured
-memory limits. Additional workers may improve throughput; benchmark the new
-version before assuming linear scaling.
-
-IM caching is now implemented in the working tree. The new build precomputes
-the complete target/decoy library at valid observed IM charges and retains raw
-predictions by model/sequence/charge. Configure a shared `UNO_IM_CACHE_DIR` for
-the rerun, alongside `UNO_RT_CACHE_DIR`; do not execute the frozen historical IM
-driver unchanged to produce a new-version study. Warm the cache serially before
-parallel timing runs, and measure cold precomputation separately. Model-unchanged
-predictions remain reusable after KOTH changes; new decoy sequences and charges
-are added as misses. The runtime estimates above predate this IM optimization
-and must be updated from the new pilot rather than assuming a fixed speedup.
-
-## Repository sources inspected for this plan
-
-- `docs/matrix-release-20260913.md` and `benchmark/matrix_release_study.py`:
-  current 32-run/eight-matrix/144-search design and configuration.
-- `benchmark/publication_rerun.py`: 18 raw-mode files and three search seeds.
-- `benchmark/im_cnn_study.py` and `docs/im-models.md`: KOTH-dependent paired IM
-  searches and fixed public model training.
-- `paper/FIGURE_MANIFEST.md` and `paper/analysis/scripts/gen_stats.py`: active
-  figure/table/statistics dependencies and archived experiment distinctions.
-- `docs/koth-matrix-benchmark-plan.md`: original pilot, evaluation, and
-  normalization safeguards; the completed release study supplies the current
-  joint-input design where the earlier protocol describes superseded arms.
+Current manuscript numbers remain explicitly tied to the archived 0.6.0 LFQ /
+0.5.0 detection study until replacement results exist. Integration checks in
+this task do not count as the 75-search publication rerun.
