@@ -40,8 +40,13 @@ the historical 70-feature `im_im2deep.gbdt` is incompatible with the current
 
 ## Prediction cache
 
-IM caching is enabled by default. `UNO_IM_CACHE_DIR` selects its directory;
-otherwise it uses `$XDG_CACHE_HOME/uno/im` or `~/.cache/uno/im`.
+IM caching is enabled by default and reuses **Parquet + Zstd** files across runs.
+The default is the OS temporary directory: on Unix, a private `uno-im-<uid>`
+directory under `std::env::temp_dir()` (normally `/tmp`, or `TMPDIR` when set).
+On Windows, it uses `uno-im` under the user's OS temp directory. Cache files
+survive process exit but can be removed by OS temp cleanup; missing entries are
+recomputed as needed. `UNO_IM_CACHE_DIR` overrides this root when persistent
+storage is wanted; `XDG_CACHE_HOME` no longer selects the IM cache location.
 `UNO_IM_CACHE=0` disables disk and memory caching and library precomputation,
 returning to uncached prediction of the shortlist. For example:
 
@@ -49,12 +54,21 @@ returning to uncached prediction of the shortlist. For example:
 UNO_IM_CACHE_DIR=benchmark/results/current/im-cache uno --features run.features.tsv --fasta proteins.fasta
 ```
 
+Under the selected root, `parquet-v2/<model-fingerprint>/` contains immutable
+Parquet chunks with `sequence`, `charge`, and `prediction` columns. Each new
+batch writes a same-directory temporary file, closes and syncs it, then
+atomically publishes a new `.parquet` file. This avoids rewriting the full
+cache for each batch and lets concurrent processes publish independently.
+Readers ignore incomplete `.tmp` files and skip corrupt chunks. Normal write
+errors remove temporary files; an abruptly killed process can leave a `.tmp`
+file for OS cleanup. Legacy TSV caches are ignored and left untouched.
+
 Cache identity includes a SHA-256 of the exact model bytes and prediction-schema
-version; each row is keyed by sequence and charge. Raw floating-point predictions
-are preserved exactly. Calibration and residuals are recomputed from each
-shortlist. A new model uses a separate cache; new shuffled-decoy sequences and
-new charges fill only missing entries. File locks protect concurrent writes.
-Unavailable disk storage falls back to memory reuse. The first complete library
+version; each row is keyed by sequence and charge. Float64 predictions preserve
+their exact bits, including signed zero. Calibration and residuals are recomputed
+from each shortlist. A new model uses a separate cache; new shuffled-decoy
+sequences and new charges fill only missing entries. Unavailable disk storage
+falls back to memory reuse. The first complete library
 prediction costs more than a single shortlist prediction, while later searches
 reuse the covered pairs. Query batches are bounded, but the loaded cache occupies
 memory proportional to its stored sequence/charge pairs.
@@ -66,10 +80,14 @@ KOTH features change when the model and prediction semantics are unchanged.
 
 ### Cache verification
 
-`cargo test -p uno-core -p uno --offline` passed all 85 tests after this change.
-Cache tests cover exact floating-point values, charge and model separation,
-memory and fresh-model disk hits, disabled caching, partial/concurrent writes,
-unavailable storage, and independent recalibration of different shortlists.
+Cache tests verify the Parquet schema and Zstd codec, exact floating-point bits,
+charge and model separation, memory and fresh-model disk hits, disabled caching,
+partial/corrupt files, concurrent publication, unavailable or evicted storage,
+private temporary directories, and independent recalibration of different
+shortlists.
+
+The measurements below describe the earlier **TSV cache implementation**. They
+are retained as historical verification, not as Parquet performance measurements.
 
 A serialized C2/seed1 check with four threads compared uncached, cold-cache,
 and warm-cache searches using the same binary, inputs, and warm RT cache.
