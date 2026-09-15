@@ -1,5 +1,5 @@
 {
-  "status": "approved design; publication jobs not started",
+  "status": "23-file scope approved; consensus-row arm corrected following user feedback; publication jobs not started",
   "koth_release": "v0.7.0",
   "koth_commit": "88f9e7c54c9ad3d6ca5a56a906703a3d46982f43",
   "long_schema_version": 3,
@@ -10,9 +10,8 @@
   ],
   "arms": [
     "separate",
-    "joint"
+    "consensus"
   ],
-  "joint_cell_quality": false,
   "configurations": {
     "detection": "benchmark/koth_uno.toml",
     "alignment": "benchmark/koth_align.toml",
@@ -22,16 +21,17 @@
     "feature_extractions": 23,
     "alignments": 2,
     "separate_searches": 69,
-    "joint_searches": 6,
     "total_searches": 75,
-    "serialized_timing_controls": 4
+    "serialized_timing_controls": 4,
+    "consensus_searches": 6
   },
   "selection": "Astral 100 ng triplicate and complete 20-run IonStar concentration series. Scope selected before 0.7.0 UNO outcomes; historical development on these datasets is disclosed. No low-input or scaling generalization from the reduced matrix study.",
   "removed_from_new_publication_run": [
     "Astral 200 pg/1 ng/10 ng matrices",
     "pooled 12-run Astral matrix",
     "IonStar 5/10-run scaling matrices",
-    "joint-cell-quality ablation arm"
+    "joint-cell-quality ablation arm",
+    "multi-observation joint-search arm"
   ],
   "cohorts": [
     {
@@ -278,5 +278,12 @@
       "fasta": "benchmark/results/matrix_20260912/human_ecoli_yeast.fasta",
       "rt_model": "benchmark/results/matrix_20260912/rt.urtc"
     }
-  ]
+  ],
+  "matrix_input": {
+    "route": "--matrix-long BUNDLE",
+    "one_feature_per_consensus_row": true,
+    "expand_original_member_observations": false,
+    "joint_cell_quality": false
+  },
+  "comparison": "Independent file identification lists versus one search of consensus feature rows. Evaluate LFQ known-ratio accuracy for the consensus-matrix workflow."
 }

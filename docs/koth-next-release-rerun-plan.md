@@ -1,6 +1,7 @@
 # UNO rerun with KOTH 0.7.0
 
-Status: reduced publication design approved by the user; full rerun not started.
+Status: 23-file scope approved; matrix arm corrected to consensus-row search
+following user feedback. Full rerun not started.
 This replaces the earlier 32-file/eight-matrix/144-search matrix proposal.
 Machine-readable selection: `benchmark/matrix_publication_koth070.json`.
 
@@ -13,9 +14,10 @@ remained zero. One seed-zero joint search completed in 74.31 seconds with peak
 RSS 1,234,556 KiB on four threads, using a fresh RT-cache directory. This is a
 compatibility measurement, not a full-cohort runtime estimate or publication
 result. Local logs, output hashes and receipts are in the ignored
-`benchmark/results/koth070_compatibility/` directory. Bruker and IonStar pilots,
-standalone/embedded raw-route equivalence, and publication-driver adaptation
-remain execution prerequisites below.
+`benchmark/results/koth070_compatibility/` directory. A consensus-row search
+smoke (the completed search used the removed joint arm), Bruker and IonStar
+pilots, standalone/embedded raw-route equivalence, and publication-driver
+adaptation remain execution prerequisites below.
 
 ## 1. Use the release-compatible build on main
 
@@ -61,34 +63,51 @@ changes; new shuffled decoys or charges cause additional misses. Do not reuse
 feature-dependent outputs or calibrated residuals. Cold cache generation and
 warm search timing must be reported separately.
 
-## 2. Run the approved publication core
+## 2. Demonstrate direct identification from an LFQ matrix
 
-| Cohort | Raw files | Alignments | Separate searches | Joint searches |
+| Cohort | Raw files | Alignments | Separate searches | Consensus-matrix searches |
 | --- | ---: | ---: | ---: | ---: |
 | Astral 100 ng | 3 | 1 | 9 | 3 |
 | IonStar full concentration series | 20 | 1 | 60 | 3 |
 | **Total** | **23** | **2** | **69** | **6** |
 
-Use seeds 0, 1 and 2 for every arm. The comparator is the deduplicated union of
-separate searches; the joint arm uses `--matrix-long ... --matrix-joint`, with
-`matrix_joint_cell_quality = false`. Keep the same database, digest, RT model,
-matching filters, hardware policy and seeds within each cohort's comparison.
-Run the 23 new feature tables through both routes; quantification comparisons
-must map separate-search assignments to the same new integrated LFQ values.
+The question is whether UNO can identify precursors directly from an aligned
+LFQ matrix. Compare two input routes:
+
+1. **Individual files:** each original feature list is searched independently
+   with `--features`; combine the resulting identification lists for the cohort
+   comparison.
+2. **Aligned matrix:** KOTH produces one consensus precursor per row, with
+   aligned mass/RT/charge and one LFQ intensity per run. Search those rows once
+   with `--matrix-long BUNDLE`, using the existing representative-consensus
+   loader. Each row is one search feature; its intensity vector supplies
+   quantification. Do not pass `--matrix-joint` or enable joint-cell scoring.
+
+The consensus route uses one set of coordinates and representative original
+feature-quality descriptors per row. It does not expand rows into their member
+observations for multi-run scoring. LFQ quantities are used for quantification;
+LFQ cell-quality summaries are not classifier features in this comparison.
+
+Use seeds 0, 1 and 2 for both routes. Keep the database, digest, RT model, matching
+filters and hardware policy matched. Compare identification depth and error
+between the individual-file union and the consensus search. Assess the matrix
+workflow's LFQ quantities against IonStar's known ratios; a second experiment
+mapping individual-search assignments into LFQ is not required for this section.
 
 This is **75 searches, 48% fewer than 144**, plus four serialized timing controls
-(three Astral single searches and one Astral joint search, seed zero). The chosen
-scope keeps all four IonStar replicates at all five concentrations and all three
+(three Astral single searches and one Astral consensus-matrix search, seed zero).
+The chosen scope keeps all four IonStar replicates at all five concentrations and all three
 Astral 100 ng acquisition replicates. The input inventory is inherited by name
 and checksum, not reselected by new results; all 23 source paths are present.
 Recheck their checksums at execution freeze.
 
 Drop the IonStar 5/10-run scaling matrices, the four other Astral matrices, and
-the joint-plus-cell-summary ablation from this new publication run. Preserve the
-old full studies as versioned development evidence. They must not be relabeled
+the multi-observation joint-search arm and its cell-summary ablation from this
+new publication run. Preserve the old full studies as versioned development evidence. They must not be relabeled
 as 0.7.0 results. The narrower matrix section makes no low-input or cohort-scaling
 claim. Astral 100 ng is a focused high-input demonstration, and IonStar provides
-known-ratio quantitation and the previously unfavorable joint-search comparison.
+known-ratio quantitation. The previously unfavorable joint-search results remain
+in the development archive; they are not results for the consensus-row route.
 Both datasets have development history; this is not unseen validation.
 
 ## 3. Rerun the other active KOTH-dependent evidence
@@ -132,7 +151,7 @@ RT/IM model training does not need repeating solely because KOTH changed.
    LFQ, and search/cache time and memory. Set concurrency and the execution budget
    from these results. The old 3–3.5-hour matrix estimate covered a larger study
    and older LFQ; fewer searches do not imply a proportional 0.7.0 speedup.
-5. Execute raw → features/hills → alignment/LFQ → matched separate/joint searches
+5. Execute raw → features/hills → alignment/LFQ → matched individual/consensus-row searches
    → evaluations. Reuse predictions and completed matching jobs with valid hashes;
    serialize the resource controls and disclose cache state.
 
