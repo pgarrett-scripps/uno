@@ -46,6 +46,16 @@ struct Cli {
     /// this file, print `seq\tpred` to stdout. Skips training.
     #[arg(long)]
     predict_seqs: Option<PathBuf>,
+
+    /// Predict IM: load `--out` as an IM model, read `SEQUENCE<TAB>CHARGE` lines
+    /// from this file, print `seq\tcharge\tpred` to stdout. Skips training.
+    #[arg(long)]
+    predict_im: Option<PathBuf>,
+
+    /// Train with `sequoia-boost` instead of the legacy `gbdt` crate. Writes a
+    /// native Sequoia model; `ImModel::load` detects the format automatically.
+    #[arg(long)]
+    sequoia: bool,
 }
 
 /// Deterministic train/val split by a hash of the row index (no rng dep).
@@ -63,6 +73,22 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
     if cli.im_labels.is_none() && cli.predict_seqs.is_none() {
         eprintln!("DEPRECATED: this command trains legacy RT GBDTs. Use `uno rt train` for supported CNN training. IM training is unchanged.");
+    }
+
+    if let Some(f) = &cli.predict_im {
+        let model = uno_core::im::ImModel::load(&cli.out)?;
+        let text = std::fs::read_to_string(f)?;
+        let items: Vec<(&str, u8)> = text
+            .lines()
+            .filter_map(|l| {
+                let mut it = l.split('\t');
+                Some((it.next()?, it.next()?.trim().parse().ok()?))
+            })
+            .collect();
+        for (&(s, z), p) in items.iter().zip(model.predict_many(&items)) {
+            println!("{s}\t{z}\t{p}");
+        }
+        return Ok(());
     }
 
     if let Some(seq_file) = &cli.predict_seqs {
@@ -127,6 +153,48 @@ fn main() -> Result<()> {
         }
     }
     eprintln!("train rows: {}, val rows: {}", train.len(), val_y.len());
+
+    if cli.sequoia {
+        // No glob import: the prelude's `train` fn would shadow the local `train` rows.
+        use sequoia_boost::prelude::{DMatrix, TrainingParams, TreeMethod};
+        let ncol = feature_size;
+        let mut flat: Vec<f32> = Vec::with_capacity(train.len() * ncol);
+        let mut labels: Vec<f32> = Vec::with_capacity(train.len());
+        for d in &train {
+            flat.extend_from_slice(&d.feature);
+            labels.push(d.label);
+        }
+        let dtrain = DMatrix::from_dense(&flat, labels.len(), ncol)?.with_labels(&labels)?;
+        let params = TrainingParams::builder()
+            .objective("reg:squarederror")
+            .tree_method(TreeMethod::Hist)
+            .max_depth(cli.max_depth as usize)
+            .eta(cli.shrinkage as f64)
+            .subsample(0.8)
+            .colsample_bytree(0.8)
+            .seed(42)
+            .build()?;
+        let t = Instant::now();
+        let model = sequoia_boost::prelude::train(&params, &dtrain, cli.iterations)?;
+        eprintln!("trained (sequoia) in {:.1}s", t.elapsed().as_secs_f64());
+        let mut vflat: Vec<f32> = Vec::with_capacity(val_feat.len() * ncol);
+        for f in &val_feat { vflat.extend_from_slice(f); }
+        let dval = DMatrix::from_dense(&vflat, val_feat.len(), ncol)?;
+        let preds = model.predict(&dval)?;
+        let (r2, mae, rmse) = regression_metrics(&val_y, &preds);
+        // Relative error is the metric that matters for an IM gate: it is compared
+        // against the population spread of 1/K0 about the mass/charge trend.
+        let mut rel: Vec<f64> = val_y.iter().zip(&preds)
+            .filter(|(&y, _)| y > 0.0)
+            .map(|(&y, &p)| ((y - p as f64) / y).abs()).collect();
+        rel.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        let p68 = rel.get((rel.len() as f64 * 0.6827) as usize).copied().unwrap_or(f64::NAN);
+        eprintln!("validation: R^2 = {:.4}  MAE = {:.4}  RMSE = {:.4}  relative sigma = {:.2}%",
+            r2, mae, rmse, p68 * 100.0);
+        model.save_binary(&cli.out)?;
+        eprintln!("saved sequoia model to {}", cli.out.display());
+        return Ok(());
+    }
 
     let mut cfg = Config::new();
     cfg.set_feature_size(feature_size);

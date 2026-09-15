@@ -2887,6 +2887,7 @@ dependencies = [
  "clap",
  "gbdt",
  "rayon",
+ "sequoia-boost",
  "uno-core",
 ]
 
