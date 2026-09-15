@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate all matrix SI tables from the audited KOTH 0.5.0 three-seed study."""
+"""Generate all matrix SI tables from the audited KOTH LFQ update and reused separate searches."""
 import json,re
 from statistics import median
 import style
@@ -62,13 +62,16 @@ def main():
         out.append([level+' / '+rep,f"{c.get('direct_positive',0):,}",f"{c.get('mbr_positive',0):,}",f"{c.get('direct_confident',0):,}",f"{c.get('mbr_confident',0):,}"])
     table('sample-support',['Input / replicate','Direct positive','MBR positive','Direct q ≤ 1%','MBR q ≤ 1%'],out,'All target extraction cells before UNO identification; positive and extraction-q-qualified cells do not imply identified peptides')
     p=data['provenance'];out=[]
-    for binary,repo in [('uno','uno'),('koth_ff','koth_rust'),('koth_align','koth_rust')]:
-        out.append([binary.replace('_','\\_'),p['source'][repo]['head'][:12],p['binary'][binary][:12]])
+    for binary,repo in [('uno','uno'),('koth_ff','koth_detection' if 'koth_detection' in p['source'] else 'koth_rust'),('koth_align','koth_rust')]:
+        label=binary.replace('_','\\_')
+        if binary=='koth_ff' and 'detection_version' in p:label+=' '+p['detection_version']+' (reused)'
+        elif binary=='koth_align' and 'detection_version' in p:label+=' 0.6.0'
+        out.append([label,p['source'][repo]['head'][:12],p['binary'][binary][:12]])
     out.append(['LightGBM runtime','4.6.0',data['source_supplement']['files']['uno']['crates/uno-lightgbm-sys/vendor/lib_lightgbm.so'][:12]])
-    table('versions',['Program','Revision / version','Binary SHA-256 prefix'],out,'Frozen KOTH 0.5.0, UNO, and runtime library identities; complete source snapshots and hashes archived')
+    table('versions',['Program','Revision / version','Binary SHA-256 prefix'],out,'KOTH detection and LFQ, UNO, and runtime library identities; complete source snapshots and hashes archived')
     table('routes',['Route','Measurements used','Searches per cohort'],[
         ['Separate union','Original per-run koth feature table','One per file'],
         ['Joint','Original observations in long bundle','One'],
         ['Joint + cells','Original observations + extraction summaries','One']],
-        'Freshly rerun routes; ordinary --raw mode was not rerun as a separate matrix-study arm')
+        'Compared routes; ordinary --raw mode was not rerun as a separate matrix-study arm')
 if __name__=='__main__':main()

@@ -336,11 +336,10 @@ meets it. Depth in the main single-run engine comparisons is defined this way.
 The matrix extension compares deduplicated accession lists at matched empirical
 entrapment cutoffs and separately reports internal-threshold calibration
 (@sec:si-matrix). Each engine's own reported 1% list was also scored against the
-same entrapment proteome (@sec:results-calibration).
-
-The calculation assumes that target and entrapment proteomes are exchangeable
-apart from database size and therefore provides a bound rather than an unbiased
-FDR estimate @wen2025entrapment.
+same entrapment proteome (@sec:results-calibration). The calculation assumes
+that target and entrapment proteomes are exchangeable apart from database size
+and therefore provides a bound rather than an unbiased FDR estimate
+@wen2025entrapment.
 
 Independent validation used #s("astral.files") HeLa Orbitrap Astral runs from
 PXD066701, acquired in another laboratory on an 11-minute dual-column method
@@ -705,22 +704,18 @@ extension is excluded from that timing claim.
 
 == Cohort-level joint searching <sec:results-matrix>
 
-Aligned koth LFQ bundles also support one joint search over the original
-observations from several runs. This extension was explored rather than
-established, and it is reported here as a bounded observation rather than as a
-claim of the Technical Note. In the fresh three-seed Astral #lit("100") ng
-comparison (@sec:si-matrix), median human-accession recovery was #s(
-  "matrix.astral_joint_median",
-) for joint searching, #s("matrix.astral_joint_cell_median") with added
-extraction-confidence summaries, and #s("matrix.astral_union_median") for the
-separate-search union, at matched empirical entrapment cutoffs. This gain did
-not generalize to the #lit("20")-run IonStar matrix: joint searching recovered
-#s("matrix.ionstar_joint_median") present-species accessions, compared with #s(
+Aligned koth LFQ bundles support one joint search over observations from several
+runs. With koth #lit("0.6.0") LFQ extraction, the Astral #lit("100") ng
+comparison recovered a median #s("matrix.astral_joint_median") human accessions
+across three seeds, versus #s("matrix.astral_union_median") for the
+separate-search union at matched empirical entrapment cutoffs. The #lit(
+  "20",
+)-run IonStar comparison instead favored separate searching: #s(
   "matrix.ionstar_union_median",
-) for the union. The gain is therefore dataset dependent, and the complete
-Astral series and nested IonStar cohorts in @sec:si-matrix delimit the
-conditions where pooling helps. Pooled identification does not establish
-detection in every sample.
+) versus #s("matrix.ionstar_joint_median") accessions. This exploratory gain is
+dataset dependent, and pooled identification does not establish detection in
+every sample. Complete cohort results, extraction-confidence scoring, and
+quantitative checks are reported in @sec:si-matrix.
 
 = Discussion and limitations <sec:discussion>
 
