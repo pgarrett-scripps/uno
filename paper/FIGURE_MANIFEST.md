@@ -138,3 +138,21 @@ identification, added/lost accessions, upstream per-sample extraction evidence,
 quantification, and dedicated search timings. Historical numerical matrix
 results are replaced rather than mixed into this study. The original single-run
 engine comparisons retain their existing provenance.
+
+## Ion-mobility model extension
+
+`gen_im_model_table.py` generates `si/im-cohorts.typ`, `si/im-published.typ`,
+and `si/im-search.typ`. The first two use the matched IM2Deep comparison in
+`benchmark/im_published_20260914.json`, produced by
+`benchmark/im_published_comparison.py`; its frozen plan, sequence partitions,
+per-observation predictions, model hashes, and environment are archived under
+`benchmark/results/im_published_20260914`. Both predictors receive the same
+calibration sequences and charge-wise median-ratio mapping, with errors measured
+only on the remaining sequences. Training exclusion is certified only for uno.
+
+The search table retains every seed in the 27-search frozen IM experiment in
+`benchmark/im_cnn_20260914.json`. The tree arm is an internal control and is not
+IM2Deep. `im_model_stats.py`, called by `gen_stats.py`, derives training counts,
+holdout accuracy, order-ablation results, and paired search outcomes from that
+same report. These follow-up experiments do not replace the pinned primary
+benchmark or the separately frozen matrix experiment.

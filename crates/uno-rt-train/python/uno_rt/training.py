@@ -30,8 +30,13 @@ def predict(model, seqs, info, batch_size=512, device="cpu"):
 
 
 def features(seqs, device):
-    tokens, lengths = feat_tokens(seqs)
-    return tuple(torch.from_numpy(v).to(device) for v in (tokens, lengths, feat_global(seqs)))
+    is_im = bool(seqs) and isinstance(seqs[0], tuple)
+    sequences = [s for s, _ in seqs] if is_im else seqs
+    tokens, lengths = feat_tokens(sequences)
+    glob = feat_global(sequences)
+    if is_im:
+        glob = np.column_stack((glob, np.array([z / 4 for _, z in seqs], dtype=np.float32)))
+    return tuple(torch.from_numpy(v).to(device) for v in (tokens, lengths, glob))
 
 
 def metrics(y, p):
@@ -51,7 +56,7 @@ def align_on_training(y, predictions):
 
 
 def train(data, out, *, units, method, init=None, from_scratch=False, validation=None,
-          holdout_run=None, seed=0, epochs=40, config=None):
+          holdout_run=None, seed=0, epochs=40, config=None, _target="rt"):
     """Train a method-specific CNN and atomically export a URTC v3 model.
 
     ``config`` is an optional dict (or JSON file) for batch_size, lr, patience,
@@ -78,12 +83,19 @@ def train(data, out, *, units, method, init=None, from_scratch=False, validation
         raise ValueError("batch_size, patience, threads and lr must be positive")
     if "architecture" in options and not from_scratch:
         raise ValueError("architecture is read from --init; overrides require --from-scratch")
-    rows = read_data(data, units)
-    val_rows = read_data(validation, units) if validation else None
+    reader = read_data
+    if _target == "im":
+        from .im import read_data as reader
+        if init is None and not from_scratch:
+            raise ValueError("IM training requires --init or --from-scratch; no bundled IM model is assumed")
+    rows = reader(data, units)
+    val_rows = reader(validation, units) if validation else None
     tr, va = split_data(rows, val_rows, holdout_run, seed, options.get("val_fraction", .2))
     if len(tr) < 100:
         warnings.warn("fewer than 100 training observations: use an independent test set before adopting this model")
     tr_seqs, va_seqs = [r.sequence for r in tr], [r.sequence for r in va]
+    tr_inputs = [(r.sequence, r.charge) for r in tr] if _target == "im" else tr_seqs
+    va_inputs = [(r.sequence, r.charge) for r in va] if _target == "im" else va_seqs
     y = np.array([r.rt for r in tr], dtype=np.float64)
     vy = np.array([r.rt for r in va], dtype=np.float64)
     mean, std = float(y.mean()), float(y.std())
@@ -100,24 +112,24 @@ def train(data, out, *, units, method, init=None, from_scratch=False, validation
     ancestry = set()
     parent_hash = None
     if from_scratch:
-        info = dict(emb=32, ch=32, k=5, blocks=[1, 2, 4], head=64, n_global=11)
+        info = dict(emb=32, ch=32, k=5, blocks=[1, 2, 4], head=64, n_global=12 if _target == "im" else 11)
         architecture = options.get("architecture", {})
         if set(architecture) - set(info):
             raise ValueError("unknown CNN architecture fields")
         info.update(architecture)
         if not (1 <= info["emb"] <= 1024 and 1 <= info["ch"] <= 1024 and 1 <= info["head"] <= 4096
                 and 1 <= info["k"] <= 31 and info["k"] % 2 and len(info["blocks"]) <= 32
-                and all(1 <= d <= 1024 for d in info["blocks"]) and info["n_global"] in (0, 5, 11)):
+                and all(1 <= d <= 1024 for d in info["blocks"]) and info["n_global"] in ((12,) if _target == "im" else (0, 5, 11))):
             raise ValueError("invalid CNN architecture")
         model = RTCnn(**info)
     else:
         source = Path(init) if init else Path(str(files("uno_rt").joinpath("data/default.urtc")))
-        model, info, parent = load_model(source)
+        model, info, parent = load_model(source, target=_target)
         parent_hash = file_hash(source)
         ancestry = set(parent.get("seen_peptide_hashes", []))
         if ancestry & {peptide_hash(s) for s in va_seqs}:
             raise ValueError("validation peptides were used to train/select the starting model; use unseen validation data")
-        training_preds = predict(model, tr_seqs, info, bs)
+        training_preds = predict(model, tr_inputs, info, bs)
         slope, intercept = align_on_training(y, training_preds)
         # Re-express the old physical predictions on the new normalization.
         # Calibration is fitted ONLY on training observations, never validation.
@@ -125,7 +137,7 @@ def train(data, out, *, units, method, init=None, from_scratch=False, validation
     info.update(y_mean=mean, y_std=std)
     model.to(device)
     if not from_scratch:
-        baseline = metrics(vy, predict(model, va_seqs, info, bs, device))
+        baseline = metrics(vy, predict(model, va_inputs, info, bs, device))
     # Include epoch zero: unsuccessful adaptation retains the calibrated parent.
     best_mae = baseline["mae"] if baseline else float("inf")
     best_state = copy.deepcopy(model.state_dict()) if baseline else None
@@ -138,7 +150,7 @@ def train(data, out, *, units, method, init=None, from_scratch=False, validation
         order = np.random.permutation(len(tr))
         for start in range(0, len(tr), bs):
             indices = order[start:start + bs]
-            inputs = features([tr_seqs[i] for i in indices], device)
+            inputs = features([tr_inputs[i] for i in indices], device)
             labels = torch.tensor(target[indices], dtype=torch.float32, device=device)
             optimizer.zero_grad()
             loss = torch.nn.functional.smooth_l1_loss(model(*inputs), labels)
@@ -146,7 +158,7 @@ def train(data, out, *, units, method, init=None, from_scratch=False, validation
                 raise ValueError("nonfinite training loss")
             loss.backward()
             optimizer.step()
-        result = metrics(vy, predict(model, va_seqs, info, bs, device))
+        result = metrics(vy, predict(model, va_inputs, info, bs, device))
         history.append(dict(epoch=epoch, **result))
         if result["mae"] < best_mae:
             best_mae, best_epoch, stale = result["mae"], epoch, 0
@@ -160,7 +172,7 @@ def train(data, out, *, units, method, init=None, from_scratch=False, validation
     report = dict(units=units, train_observations=len(tr), validation_observations=len(va),
                   split="explicit" if validation else "heldout_run" if holdout_run else "peptide",
                   holdout_run=holdout_run, best_epoch=best_epoch, baseline=baseline,
-                  validation=metrics(vy, predict(model, va_seqs, info, bs, device)), history=history,
+                  validation=metrics(vy, predict(model, va_inputs, info, bs, device)), history=history,
                   interpretation="Validation selected the checkpoint; evaluate independent data and search performance before adoption.")
     metadata = dict(rt_units=units, method=method.strip(), created_at=datetime.now(timezone.utc).isoformat(),
                     trainer_version=__version__, torch_version=torch.__version__, numpy_version=np.__version__,
@@ -169,5 +181,8 @@ def train(data, out, *, units, method, init=None, from_scratch=False, validation
                     parent_sha256=parent_hash, report=report,
                     ancestry_coverage="complete" if from_scratch else "recorded lineage only; legacy/pretrained corpus may be unknown",
                     seen_peptide_hashes=sorted(ancestry | {peptide_hash(s) for s in tr_seqs + va_seqs}))
-    save_model(out, model.cpu(), info, metadata)
+    if _target == "im":
+        metadata["im_units"] = metadata.pop("rt_units")
+        metadata["charge_range"] = [min(r.charge for r in tr), max(r.charge for r in tr)]
+    save_model(out, model.cpu(), info, metadata, target=_target)
     return report

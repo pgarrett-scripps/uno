@@ -118,6 +118,12 @@ def format_tables(path: Path) -> None:
             weights = [32, 18, 17, 12, 21]
         elif header.startswith("Cohort / arm") and "Joint only" in header:
             weights = [34, 22, 22, 22]
+        elif header.startswith("Cohort Partition Sequences Observations"):
+            weights = [20, 28, 26, 26]
+        elif header.startswith("Cohort Model Test"):
+            weights = [15, 19, 16, 20, 16, 14]
+        elif header.startswith("File IM feature Seed"):
+            weights = [12, 28, 15, 15, 15, 15]
         elif header.startswith("Input / replicate"):
             weights = [25, 16, 15, 20, 24]
         else:

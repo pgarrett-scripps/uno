@@ -7,8 +7,8 @@ predictions to each run; it does not train or overwrite reusable model files.
 
 Training is an explicit, optional PyTorch workflow. The supported architecture
 is the sequence CNN; MLP and GBDT RT training are deprecated research tools.
-Legacy model loading remains available during migration, with a warning. IM/CCS
-training remains separate and is not affected by this RT interface.
+Legacy model loading remains available during migration, with a warning. [IM training](im-models.md) uses the same CNN/training engine with a charge
+input, separate weights, and explicit mobility units.
 
 ## Train for a different column or separation
 

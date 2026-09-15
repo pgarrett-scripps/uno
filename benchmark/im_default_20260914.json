@@ -1,0 +1,51 @@
+{
+  "tests": {
+    "default": {
+      "argv": [
+        "/home/patrick-garrett/Repos/uno/target/release/uno",
+        "--features",
+        "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/features/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2/features.tsv",
+        "--fasta",
+        "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/hye_arabidopsis.fasta",
+        "--rt-model",
+        "/home/patrick-garrett/Repos/uno/benchmark/results/matrix_20260913_koth050/ionstar/rt.urtc",
+        "--config",
+        "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/uno.toml",
+        "--seed",
+        "1",
+        "--out-proteins",
+        "/home/patrick-garrett/Repos/uno/benchmark/results/im_default_20260914/default.tsv"
+      ],
+      "returncode": 0,
+      "seconds": 35.275370997027494,
+      "sha256": "4cd9702dda920be7ace63ca868e886b1f427addbad0a0c33aec474dc6903bd48",
+      "expected_sha256": "4cd9702dda920be7ace63ca868e886b1f427addbad0a0c33aec474dc6903bd48",
+      "matches": true
+    },
+    "disabled": {
+      "argv": [
+        "/home/patrick-garrett/Repos/uno/target/release/uno",
+        "--features",
+        "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/features/LFQ_Ultra2_PASEF_15min_50ng_Condition_C_REP2/features.tsv",
+        "--fasta",
+        "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/hye_arabidopsis.fasta",
+        "--rt-model",
+        "/home/patrick-garrett/Repos/uno/benchmark/results/matrix_20260913_koth050/ionstar/rt.urtc",
+        "--config",
+        "/home/patrick-garrett/Repos/uno/experiments/im-timstof/uno/benchmark/results/im_timstof_20260913/inputs/uno.toml",
+        "--seed",
+        "1",
+        "--out-proteins",
+        "/home/patrick-garrett/Repos/uno/benchmark/results/im_default_20260914/disabled.tsv",
+        "--no-im"
+      ],
+      "returncode": 0,
+      "seconds": 23.064188539981842,
+      "sha256": "be5ad2338b1f3acf7beaec45b8f8f00f9ba9309197e88d732223686715aeec69",
+      "expected_sha256": "be5ad2338b1f3acf7beaec45b8f8f00f9ba9309197e88d732223686715aeec69",
+      "matches": true
+    }
+  },
+  "binary_sha256": "26c3c7e5f0662925082019d808501d849397f922ea9ab650d8a85692cedb3b61",
+  "model_sha256": "dd125c53b441797ce9ee85f481e5bf23270606fcb513221754c4b0b3c790793f"
+}

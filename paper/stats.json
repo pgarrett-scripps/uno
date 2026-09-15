@@ -2,12 +2,14 @@
   "_about": "Numbers the manuscript states in prose, read as #s(\"<id>\"). Scripts own each entry's value; fmt, unit, desc and expect are the author's to edit here. Entries with origin.by = \"hand\" are entirely yours.",
   "sources": {
     "analysis/scripts/gen_stats.py": {
-      "analysis/scripts/gen_stats.py": "sha256:7ddbd0e7605dfc675c7b0f356c9427fbb7f03260630c107dc36fd1cbcc74175c",
+      "analysis/scripts/gen_stats.py": "sha256:adfbfb0853678f8f5186b6a795d859bdeb0b8184d415d38c5b452fe87163eb94",
       "analysis/scripts/entrapment_data.py": "sha256:09321c4bd3d861eee79922a1a63c0cf2485f863999d7466cce333f512bd245af",
       "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
       "analysis/scripts/seed_data.py": "sha256:cbc4bfa9eb3c3d3f1886b51568d2b11593df9b9a9ae83281f51a16a468b69dcd",
       "analysis/scripts/koth_matrix_stats.py": "sha256:e285922afdb28e01b4ed78d4f7f6a010e30b4801265fb3813f8e74fc7ee3bcad",
+      "analysis/scripts/im_model_stats.py": "sha256:05f8e16c721c17a01e36dee8c5ece9e727f52ce920dcae7dc0295dc6fcf0dba1",
       "figdata/koth_matrix_study.json": "sha256:17c94d3b7acc94d853974fcd4c81e70b399792a4cd9d4e02cc9a68301eff4145",
+      "../benchmark/im_cnn_20260914.json": "sha256:24086700f3249dbb21b922c5b727c343f5312d7d423d8d61b7551771750e2a3c",
       "../benchmark/results/summary.tsv": "sha256:4ac95c86f60bc4bd6e7f328cffedb6e93498d7c3f9327cd3dd9ab16bd4ce10c4",
       "../benchmark/results/spread.tsv": "sha256:d8a0d1282bb7b56914c2839b586a78b3429d8452d8d9436e95cd6d307cc572e1",
       "../benchmark/results/variability_extension/summary.tsv": "sha256:b48537532f10e2fb0d96d17d51fd60c3ee6e6950ebebe657bf43304c21820ae3",
@@ -1407,6 +1409,246 @@
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
         "at": "2026-08-31T23:11:02Z"
+      }
+    },
+    "im.best_epoch": {
+      "value": 19,
+      "fmt": ",d",
+      "unit": "",
+      "desc": "IM best epoch",
+      "expect": {
+        "min": 1,
+        "max": 1000000
+      },
+      "checksum": "v2:9400f1b21cb527d7",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.improved": {
+      "value": 6,
+      "fmt": "d",
+      "unit": "",
+      "desc": "CNN versus off paired searches improved",
+      "expect": {
+        "min": 0,
+        "max": 9
+      },
+      "checksum": "v2:e7f6c011776e8db7",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.mae": {
+      "value": 0.019874536227201076,
+      "fmt": ".5f",
+      "unit": "",
+      "desc": "IM proportional inverse mobility mae",
+      "expect": {
+        "min": 0,
+        "max": 1
+      },
+      "checksum": "v2:5792fb3e5131732c",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.order_n": {
+      "value": 1000,
+      "fmt": ",d",
+      "unit": "",
+      "desc": "IM order n",
+      "expect": {
+        "min": 1,
+        "max": 1000000
+      },
+      "checksum": "v2:40510175845988f1",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.order_original": {
+      "value": 0.018972393592574993,
+      "fmt": ".5f",
+      "unit": "",
+      "desc": "IM proportional inverse mobility order_original",
+      "expect": {
+        "min": 0,
+        "max": 1
+      },
+      "checksum": "v2:5d334abd62656913",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.order_reversed": {
+      "value": 0.024288940130191113,
+      "fmt": ".5f",
+      "unit": "",
+      "desc": "IM proportional inverse mobility order_reversed",
+      "expect": {
+        "min": 0,
+        "max": 1
+      },
+      "checksum": "v2:4c6bb20d0fba4685",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.r2": {
+      "value": 0.963811716323413,
+      "fmt": ".4f",
+      "unit": "",
+      "desc": "IM independent public test R2",
+      "expect": {
+        "min": 0,
+        "max": 1
+      },
+      "checksum": "v2:645510699e7d9604",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.rmse": {
+      "value": 0.02864563376368393,
+      "fmt": ".5f",
+      "unit": "",
+      "desc": "IM proportional inverse mobility rmse",
+      "expect": {
+        "min": 0,
+        "max": 1
+      },
+      "checksum": "v2:332596cb91376d70",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.test_obs": {
+      "value": 45929,
+      "fmt": ",d",
+      "unit": "",
+      "desc": "IM test obs",
+      "expect": {
+        "min": 1,
+        "max": 1000000
+      },
+      "checksum": "v2:654951cac6257eba",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.test_seq": {
+      "value": 37101,
+      "fmt": ",d",
+      "unit": "",
+      "desc": "IM test disjoint sequences",
+      "expect": {
+        "min": 1,
+        "max": 1000000
+      },
+      "checksum": "v2:3e3fb5481c3ee02e",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.tied": {
+      "value": 1,
+      "fmt": "d",
+      "unit": "",
+      "desc": "CNN versus off paired searches tied",
+      "expect": {
+        "min": 0,
+        "max": 9
+      },
+      "checksum": "v2:6b86b273ff34fce1",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.train_obs": {
+      "value": 123565,
+      "fmt": ",d",
+      "unit": "",
+      "desc": "IM train obs",
+      "expect": {
+        "min": 1,
+        "max": 1000000
+      },
+      "checksum": "v2:772d1a9ad5b321f8",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.train_seq": {
+      "value": 100000,
+      "fmt": ",d",
+      "unit": "",
+      "desc": "IM train disjoint sequences",
+      "expect": {
+        "min": 1,
+        "max": 1000000
+      },
+      "checksum": "v2:3bb78535cc9555ff",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.validation_obs": {
+      "value": 12284,
+      "fmt": ",d",
+      "unit": "",
+      "desc": "IM validation obs",
+      "expect": {
+        "min": 1,
+        "max": 1000000
+      },
+      "checksum": "v2:23cae6011e178796",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.validation_seq": {
+      "value": 10000,
+      "fmt": ",d",
+      "unit": "",
+      "desc": "IM validation disjoint sequences",
+      "expect": {
+        "min": 1,
+        "max": 1000000
+      },
+      "checksum": "v2:39e5b4830d4d9c14",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
+      }
+    },
+    "im.worse": {
+      "value": 2,
+      "fmt": "d",
+      "unit": "",
+      "desc": "CNN versus off paired searches worse",
+      "expect": {
+        "min": 0,
+        "max": 9
+      },
+      "checksum": "v2:d4735e3a265e16ee",
+      "origin": {
+        "by": "analysis/scripts/gen_stats.py",
+        "at": "2026-09-14T18:24:38Z"
       }
     },
     "matrix.astral_gain_percent": {

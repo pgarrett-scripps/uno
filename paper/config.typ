@@ -56,29 +56,25 @@
 #let paper-abstract = [
   MS1-only protein identification uses precursor mass and retention time without
   MS/MS fragmentation. We present uno, an open-source Rust engine that accepts
-  the same feature tables as ms1searchpy. Across #s("bench.dataset_count")
-  DirectMS1-study datasets, uno had greater median depth on #s(
+  feature-finder output from biosaur2 and koth and can run koth internally to
+  analyze raw mass spectrometry data. Across #s("bench.dataset_count")
+  DirectMS1-study datasets, uno had greater median protein identification depth
+  than ms1searchpy on #s(
     "bench.uno_median_wins",
   ) datasets at 1% two-proteome entrapment false discovery rate (FDR) and #s(
     "bench.uno_median_wins_5pct",
   ) at 5%. Searches run one at a time were #s("bench.speed_factor_min") to #s(
     "bench.speed_factor_max",
-  ) times faster and used about half the peak memory. Both engines showed search
-  variability. Across #s("bench.uno_seed_count") seeds per primary file, uno's
-  full depth range was #s("bench.uno_seed_spread_1pct_pct_min") to #s(
-    "bench.uno_seed_spread_1pct_pct_max",
-  )% of its median at 1% entrapment FDR. Fixed seeds provided repeatability
-  rather than evidence of lower variability. On #s("astral.files") independent
-  HeLa Orbitrap Astral files, the median of file-median uno depths ranged from
-  #s("astral.uno_seed_level_median_min") to #s(
-    "astral.uno_seed_level_median_max",
-  ) across input levels. ms1searchpy's own retention-time calibration failed on
-  that liquid chromatography method. External MS/MS calibration improved its
-  depth. One low-input search using uno's built-in feature detection returned no
-  proteins. Protein-list overlap and empirical false discovery proportion (FDP)
-  varied in both engines. uno provides a fast alternative for short-gradient
-  MS1-only identification, with external entrapment calibration defining its
-  present scope.
+  ) times faster and used about half the peak memory. Independent HeLa Orbitrap
+  Astral data extended the evaluation across sample inputs. On that liquid
+  chromatography method, uno identified proteins without external retention-time
+  calibration, whereas ms1searchpy required calibration with MS/MS
+  identifications. Identification depth and protein lists varied across repeated
+  searches, with greater instability at low input. Entrapment analysis showed
+  departures from nominal error rates in both engines. uno provides a fast,
+  integrated workflow for short-gradient MS1-only protein identification, while
+  external entrapment calibration remains necessary to assess identification
+  confidence.
 ]
 
 // -----------------------------------------------------------------------------

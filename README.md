@@ -19,8 +19,8 @@ pure-Rust learned model, with an on-data calibration step per run.
 | --- | --- |
 | `uno-core` | search, scoring, and FDR library |
 | `uno` | command-line binary |
-| `uno-rt-train/python` | optional PyTorch package behind `uno rt train` (CNN only) |
-| `uno-rt-train` | legacy RT GBDT research tools and separate IM/CCS training |
+| `uno-rt-train/python` | shared optional PyTorch sequence-CNN trainer for `uno rt train` and `uno im train` |
+| `uno-rt-train` | legacy RT/IM tree-model research tools |
 | `uno-lightgbm-sys` | FFI bindings to a vendored LightGBM |
 
 ## Prerequisites
@@ -62,6 +62,18 @@ See [Custom RT models](docs/rt-models.md) for `uno rt train`, `uno rt inspect`,
 `uno --help` lists every flag, including the external predictor
 RT-library workflow (`--dump-candidate-peptides` → `--rt-library`).
 
+## Experimental sequence-aware IM
+
+[IM models](docs/im-models.md) use the same sequence CNN and training workflow
+as RT, with charge added as an input. `uno im train` supports training from
+scratch and full-network adaptation; inspection, prediction, and independent
+evaluation use the Rust search predictor.
+
+The bundled IM CNN contributes a soft classifier feature by default after the
+mass/RT shortlist. RT remains the main separator; there is no IM cutoff. Use
+`--no-im` to disable it or `--im-model adapted.uimc` to use custom weights.
+Missing IM leaves the search unchanged. See the model guide for supported chemistry, units, and limitations.
+
 ## Search reproducibility
 
 `--seed N` controls decoy generation and the default RT, cross-validation, and
@@ -88,7 +100,7 @@ are returned unchanged. Validation showed fewer empty low-input runs with
 ## Repository contents
 
 - `crates/` — the Rust workspace.
-- `models/` — distilled RT/IM models used at search time.
+- `models/` — sequence CNNs and historical RT/IM tree models.
 - `paper/` — the manuscript (Typst source + PDF).
 - `figures/` — figures for the paper.
 

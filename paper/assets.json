@@ -699,7 +699,7 @@
         "at": "2026-09-12T21:08:26Z"
       },
       "inputs": {
-        "../crates/uno-core/src/rt_cnn.rs": "sha256:97d65f713c1d534f5c21a83750eaa587f24d368da30b917dabe25447b3a533dc",
+        "../crates/uno-core/src/rt_cnn.rs": "sha256:55faa6141baf216e7594c57a900ed6c4dba297d35fc18c2d1be74c01f16d9f00",
         "../crates/uno-rt-train/python/chronologer_to_labels.py": "sha256:98f7df01b966cc1d7b7c947c0e2b837cb5f04b79ca9cbd03e85b9adcc013dfd2",
         "../crates/uno-rt-train/python/train_rt.py": "sha256:313337b80aa87a9101320e2b5b67b1f8aa448f95791992087c179af007145a84",
         "../data/rt/chronologer/Chronologer_DB_220308.gz": "sha256:82b57d0d94a6df7d0800381691d7080528c988956e302d4b4a050b7405af1e5d",
@@ -715,13 +715,13 @@
       "path": "figures/figS2_rt_model.pdf",
       "kind": "figure",
       "desc": "Vector twin of the RT model figure",
-      "hash": "sha256:282384c22102f99bdc607cca877007ddc196d3e52cea735fec4ea529b74e7d18",
+      "hash": "sha256:141ef341feebe087949991254f6a5a2cfe2e57534afe5616f2a48e781cf5a872",
       "origin": {
         "by": "analysis/scripts/figS2_rt_model.py",
-        "at": "2026-09-13T19:57:54Z"
+        "at": "2026-09-14T18:26:43Z"
       },
       "inputs": {
-        "../crates/uno-core/src/rt_cnn.rs": "sha256:97d65f713c1d534f5c21a83750eaa587f24d368da30b917dabe25447b3a533dc",
+        "../crates/uno-core/src/rt_cnn.rs": "sha256:55faa6141baf216e7594c57a900ed6c4dba297d35fc18c2d1be74c01f16d9f00",
         "../crates/uno-rt-train/python/chronologer_to_labels.py": "sha256:98f7df01b966cc1d7b7c947c0e2b837cb5f04b79ca9cbd03e85b9adcc013dfd2",
         "../crates/uno-rt-train/python/train_rt.py": "sha256:313337b80aa87a9101320e2b5b67b1f8aa448f95791992087c179af007145a84",
         "../data/rt/chronologer/Chronologer_DB_220308.gz": "sha256:82b57d0d94a6df7d0800381691d7080528c988956e302d4b4a050b7405af1e5d",
@@ -1108,6 +1108,51 @@
       },
       "inputs": {}
     },
+    "tbl.im-cohorts": {
+      "path": "si/im-cohorts.typ",
+      "kind": "table",
+      "desc": "Sequence-disjoint calibration and test partitions for the IM2Deep comparison",
+      "hash": "sha256:1c4f1760d64620a148c3a73623cb66844eae44290d4e22ffb3d449387de9901f",
+      "origin": {
+        "by": "analysis/scripts/gen_im_model_table.py",
+        "at": "2026-09-14T18:24:37Z"
+      },
+      "inputs": {
+        "../benchmark/im_cnn_20260914.json": "sha256:24086700f3249dbb21b922c5b727c343f5312d7d423d8d61b7551771750e2a3c",
+        "../benchmark/im_published_20260914.json": "sha256:60de963357d18a78fcedf127c185d1e32fa6aa271bac0bdd01fa80cca2e21759",
+        "analysis/scripts/gen_im_model_table.py": "sha256:4afe825f30993c18b138ba948531e077937b7a29e42fc2c7552667f1144b1c8e"
+      }
+    },
+    "tbl.im-published": {
+      "path": "si/im-published.typ",
+      "kind": "table",
+      "desc": "Matched held-out IM prediction accuracy with identical per-charge calibration",
+      "hash": "sha256:4a80cfa96da65a1d61339da3735684266ece60616c2fc9878a609b5654922125",
+      "origin": {
+        "by": "analysis/scripts/gen_im_model_table.py",
+        "at": "2026-09-14T18:24:37Z"
+      },
+      "inputs": {
+        "../benchmark/im_cnn_20260914.json": "sha256:24086700f3249dbb21b922c5b727c343f5312d7d423d8d61b7551771750e2a3c",
+        "../benchmark/im_published_20260914.json": "sha256:60de963357d18a78fcedf127c185d1e32fa6aa271bac0bdd01fa80cca2e21759",
+        "analysis/scripts/gen_im_model_table.py": "sha256:4afe825f30993c18b138ba948531e077937b7a29e42fc2c7552667f1144b1c8e"
+      }
+    },
+    "tbl.im-search": {
+      "path": "si/im-search.typ",
+      "kind": "table",
+      "desc": "All 27 IM search results at 1% empirical entrapment FDP",
+      "hash": "sha256:002ebd44382fb851edfca04b195038a5eb1d8ab198fe0b8a1b3ca7060080223b",
+      "origin": {
+        "by": "analysis/scripts/gen_im_model_table.py",
+        "at": "2026-09-14T18:24:37Z"
+      },
+      "inputs": {
+        "../benchmark/im_cnn_20260914.json": "sha256:24086700f3249dbb21b922c5b727c343f5312d7d423d8d61b7551771750e2a3c",
+        "../benchmark/im_published_20260914.json": "sha256:60de963357d18a78fcedf127c185d1e32fa6aa271bac0bdd01fa80cca2e21759",
+        "analysis/scripts/gen_im_model_table.py": "sha256:4afe825f30993c18b138ba948531e077937b7a29e42fc2c7552667f1144b1c8e"
+      }
+    },
     "tbl.koth-matrix-additional": {
       "path": "si/koth_matrix_additional.typ",
       "kind": "table",
@@ -1293,7 +1338,7 @@
         "at": "2026-09-03T22:38:51Z"
       },
       "inputs": {
-        "../crates/uno-core/src/rt_cnn.rs": "sha256:97d65f713c1d534f5c21a83750eaa587f24d368da30b917dabe25447b3a533dc",
+        "../crates/uno-core/src/rt_cnn.rs": "sha256:55faa6141baf216e7594c57a900ed6c4dba297d35fc18c2d1be74c01f16d9f00",
         "../crates/uno-rt-train/python/train_rt.py": "sha256:313337b80aa87a9101320e2b5b67b1f8aa448f95791992087c179af007145a84",
         "analysis/scripts/gen_rt_features_table.py": "sha256:1eea4ae7105d88c20034ffe921acc4aaa0043a4a253aee35e8a84e4f3911568a",
         "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf"

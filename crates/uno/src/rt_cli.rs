@@ -10,6 +10,11 @@ use uno_core::RtModel;
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Train, inspect, predict, or evaluate a charge-aware IM sequence CNN.
+    Im {
+        #[command(subcommand)]
+        command: crate::im_cli::ImCommand,
+    },
     /// Train, inspect, or evaluate a retention-time CNN.
     Rt {
         #[command(subcommand)]
@@ -104,7 +109,10 @@ pub struct EvaluateArgs {
 }
 
 pub fn run(command: Command) -> Result<()> {
-    let Command::Rt { command } = command;
+    let command = match command {
+        Command::Rt { command } => command,
+        Command::Im { command } => return crate::im_cli::run(command),
+    };
     match command {
         RtCommand::Train(args) => train(args),
         RtCommand::Inspect { model } => {
@@ -336,7 +344,7 @@ fn predictions(
     Ok(result)
 }
 
-fn metrics(y: &[f64], predictions: &[f64]) -> Value {
+pub(crate) fn metrics(y: &[f64], predictions: &[f64]) -> Value {
     let n = y.len() as f64;
     let mean = y.iter().sum::<f64>() / n;
     let mut errors: Vec<f64> = y

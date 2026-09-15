@@ -115,20 +115,24 @@ fragment-ion evidence on which confident peptide identification normally rests.
 Identification must instead come from what MS1 retains: accurate precursor mass
 and retention time (RT). The accurate mass and time tag approach established
 that this pair can identify peptides against a library of previously observed
-coordinates @smith2002amt @zimmer2006amt. Building on earlier MS/MS-free
-multi-enzyme work @ivanov2017multienzyme, DirectMS1 removed the need for a prior
-MS/MS census, assigning proteins from single short-gradient runs against an in
-silico database @ivanov2020directms1 @ivanov2021ms1searchpy. The tradeoff is a
-weak peptide-level signal: mass and RT alone produce many plausible matches, so
+coordinates @smith2002amt @zimmer2006amt. The same masses have also been used
+within a single shotgun run, where the MS/MS identifications define the
+candidate proteins and the unfragmented precursor masses add peptide evidence to
+them @lu2008combining. Building on earlier MS/MS-free multi-enzyme work
+@ivanov2017multienzyme, DirectMS1 removed the need for a prior MS/MS census,
+assigning proteins from single short-gradient runs against an in silico database
+@ivanov2020directms1 @ivanov2021ms1searchpy. The tradeoff is a weak
+peptide-level signal: mass and RT alone produce many plausible matches, so
 evidence must accumulate across multiple peptides at the protein level.
 
 The reference implementation, ms1searchpy @ivanov2021ms1searchpy, combines a
 mass search with DeepLC RT prediction @bouwmeester2021deeplc and learned
-rescoring. Its Python and deep-learning stack adds substantial single-run cost,
-and its decoy shuffle and hyperparameter search draw from generators it does not
-expose, so repeated searches on one input return different protein lists. That
-complicates high-throughput use, and it makes a single search of either engine a
-weak basis for comparison.
+rescoring. A single-run search over that cascade is correspondingly expensive,
+although the cost belongs to the workflow as a whole rather than to any one
+stage of it. Its decoy shuffle and hyperparameter search also draw from
+generators it does not expose, so repeated searches on one input return
+different protein lists. That complicates high-throughput use, and it makes a
+single search of either engine a weak basis for comparison.
 
 The engineering problem is therefore not only to reproduce an identification
 count. An MS1-only engine must search a large mass-compatible candidate space,
@@ -230,51 +234,25 @@ configuration.
 
 == Retention-time model <sec:methods-rt>
 
-uno predicts RT in-process with a pure-Rust convolutional neural network (CNN)
-trained on experimental RTs from the Chronologer library
-@wilburn2023chronologer. Each residue becomes a learned embedding vector. An
-initial convolution layer and three residual blocks with increasing dilation
-give every position a widening sequence context. Masked mean and maximum pooling
-then reduce the peptide to a fixed-length vector regardless of its length.
-Eleven explicit physicochemical descriptors of the whole peptide are
-concatenated to that pooled vector before a two-layer fully connected output
-returns a single predicted value. The descriptors are quantities pooling cannot
-recover, principally the total rather than the mean hydropathy and the identity
-of the terminal residues, and they are computed by the same formulas in the
-training code and in the Rust inference path. The model is small enough to ship
-inside the binary and to run over a whole candidate list without a separate
-service. Architecture, corpus, and the worked feature vector for one peptide are
-given in Supporting Information @sec:si-rt-model.
+uno predicts RT with an embedded, pure-Rust convolutional neural network (CNN)
+trained on the Chronologer harmonized library @wilburn2023chronologer. The
+network combines learned sequence features with eleven physicochemical
+descriptors. Training used sequences with fixed carbamidomethyl cysteine and no
+other modifications, with sequence-disjoint training, validation, and holdout
+sets. Architecture and training details are given in Supporting Information
+@sec:si-rt-model.
 
-Training used amino-acid sequences only, with cysteine treated as
-carbamidomethylated, and peptides carrying any other modification were removed.
-Labels were on the Chronologer hydrophobic-index scale, which harmonizes eleven
-source datasets acquired on different gradients into one physicochemical scale,
-so the model learns peptide ordering rather than one instrument's minutes.
-Peptides were partitioned into training, validation, and holdout sets by a hash
-of the sequence, so no sequence appears in more than one partition. A monotone
+The frozen model predicts a hydrophobic index rather than minutes. A monotone
 calibration initialized by random sample consensus (RANSAC) @fischler1981ransac
-maps the model output into each run's gradient space using progressively
-refined, high-confidence identifications.
+maps this index to each run's gradient. Mass-supported protein identifications
+initialize the mapping; subsequent scoring rounds refine it and the residual
+scale using the current high-confidence set.
 
-The frozen model supplies an abstract peptide ordering rather than an absolute
-time in minutes. Mass-supported protein identifications initialize the first
-calibration. Subsequent scoring rounds refine the mapping and residual scale on
-the current confident set. This division retains a sequence model learned from
-many gradients while adapting offset, scale, and nonlinear gradient shape to
-each analyzed run.
-
-To isolate predictor quality from search and protein inference, we also compared
-the shipped model with DeepLC #lit("3.1.13") @bouwmeester2021deeplc on three
-public unmodified-peptide sets. Peptides present in the Chronologer training or
-validation partitions were excluded. A sequence hash assigned 20% of each set to
-calibration and 80% to testing, and both models received the same calibration: a
-least-squares affine map from the model's native output to the experimental
-scale, fitted on that 20%. Accuracy was evaluated only on the held-out
-partition. Prediction throughput was measured separately, on a synthetic tryptic
-library at batch sizes from 100 to 100,000 peptides, because throughput depends
-on the peptides rather than on which experimental set they came from. Complete
-set construction and metrics are reported in Supporting Information
+We compared the predictor with DeepLC #lit("3.1.13") @bouwmeester2021deeplc on
+three public unmodified-peptide sets, excluding uno training and validation
+sequences. Both models used identical affine calibration on 20% of each set,
+with accuracy measured on the remaining 80%. Throughput was measured separately
+on a synthetic tryptic library. Complete protocols are in Supporting Information
 @sec:si-rt-predictor.
 
 == Scoring and FDR <sec:methods-scoring>
@@ -555,9 +533,13 @@ ng the three seeds of a single file spanned #s(
   "astral.low_range_pct_min",
 ) to #s("astral.low_range_pct_max")% of that file's median depth, against #s(
   "bench.uno_seed_spread_1pct_pct_min",
-) to #s("bench.uno_seed_spread_1pct_pct_max")% on the primary files. This
-acquisition series therefore tests compatibility and exposes a remaining
-low-input limitation.
+) to #s("bench.uno_seed_spread_1pct_pct_max")% on the primary files. Both the
+spread and the reliance on recovery trace to one mechanism. Every stage of the
+self-calibration cascade selects among its alternatives by a protein count, and
+that count is a step function on short lists. At low input a small change in the
+estimated RT $sigma$ can therefore move an entire stage
+(@sec:methods-benchmark). This acquisition series therefore tests compatibility
+and exposes a remaining low-input limitation.
 
 == Protein-level agreement <sec:results-overlap>
 
@@ -666,8 +648,12 @@ External calibration remains necessary for both engines. Greater identification
 depth does not demonstrate calibrated internal FDR, and changing the seed can
 change both the accepted list and its empirical FDP. The small number of
 accepted yeast proteins quantizes these estimates, so individual values should
-be interpreted as bounds. Per-draw counts and calibration curves are in
-@sec:si-calibration.
+be interpreted as bounds. The practical consequence for a sample carrying no
+entrapment proteome is that a reported 1% list is a ranked list at an
+approximately 1% error rate rather than one whose error rate has been measured.
+Adding an entrapment proteome to the search database, as done throughout this
+work, is what converts the nominal rate into a measured one. Per-draw counts and
+calibration curves are in @sec:si-calibration.
 
 == Built-in feature detection <sec:results-raw>
 
@@ -717,8 +703,12 @@ extension is excluded from that timing claim.
   ],
 ) <fig:rawmode>
 
+== Cohort-level joint searching <sec:results-matrix>
+
 Aligned koth LFQ bundles also support one joint search over the original
-observations from several runs. In the fresh three-seed Astral #lit("100") ng
+observations from several runs. This extension was explored rather than
+established, and it is reported here as a bounded observation rather than as a
+claim of the Technical Note. In the fresh three-seed Astral #lit("100") ng
 comparison (@sec:si-matrix), median human-accession recovery was #s(
   "matrix.astral_joint_median",
 ) for joint searching, #s("matrix.astral_joint_cell_median") with added
@@ -727,9 +717,10 @@ separate-search union, at matched empirical entrapment cutoffs. This gain did
 not generalize to the #lit("20")-run IonStar matrix: joint searching recovered
 #s("matrix.ionstar_joint_median") present-species accessions, compared with #s(
   "matrix.ionstar_union_median",
-) for the union. The complete Astral series and nested IonStar cohorts therefore
-delimit the conditions where pooling helps. Pooled identification does not
-establish detection in every sample.
+) for the union. The gain is therefore dataset dependent, and the complete
+Astral series and nested IonStar cohorts in @sec:si-matrix delimit the
+conditions where pooling helps. Pooled identification does not establish
+detection in every sample.
 
 = Discussion and limitations <sec:discussion>
 
@@ -749,24 +740,28 @@ stage accounts for the runtime difference. Conversely, the overlap analysis
 shows substantial common protein identity, alongside changes in which proteins
 pass the threshold across seeds in both engines.
 
-Matrix input changes the unit of analysis from a file to a cohort. The Astral
-results show that original observations can provide useful joint evidence, but
-the contrasting IonStar results limit a general identification claim. The
-known-ratio comparison separately tests whether the integrated quantities are
-accurate; matrix completeness or identification depth alone cannot establish
-that. These matrix settings were developed on the evaluated datasets, so this
-extension measures performance on those cohorts rather than external validation.
+Matrix input changes the unit of analysis from a file to a cohort, and the
+opposing Astral and IonStar results place that change outside what this work
+establishes. These matrix settings were developed on the evaluated datasets, so
+the extension measures performance on those cohorts rather than validating a
+cohort-level method. It is reported for completeness and is not part of the
+engine comparison.
 
-The evidence does not establish universal superiority. In the head-to-head
-engine comparisons, all samples are HeLa and all gradients are short. The Astral
-series represents one single-compensation-voltage acquisition method. The
-built-in feature finder was compared only with biosaur2 and only on these files.
-It is offered as a convenience with measured cost, not as a feature-finder
-benchmark. The primary parameters were tuned on related development data,
-although not on the reported benchmark or Astral files. The six primary files
-are a dataset panel rather than a population sample, so the per-dataset ratios
-and seed or rerun ranges are descriptive. No population-level significance is
-claimed. The Astral and raw-mode extension used only #s(
+The evidence does not establish universal superiority. The clearest boundary is
+low input. At 200 pg and 1 ng, one file searched under different seeds returns
+lists that differ by a large fraction of its median depth. The safeguards in
+@sec:methods-benchmark keep such searches from returning nothing, but they do
+not narrow that spread. At those loadings uno should be treated as an
+exploratory tool whose depth is a distribution rather than a measurement. In the
+head-to-head engine comparisons, all samples are HeLa and all gradients are
+short. The Astral series represents one single-compensation-voltage acquisition
+method. The built-in feature finder was compared only with biosaur2 and only on
+these files. It is offered as a convenience with measured cost, not as a
+feature-finder benchmark. The primary parameters were tuned on related
+development data, although not on the reported benchmark or Astral files. The
+six primary files are a dataset panel rather than a population sample, so the
+per-dataset ratios and seed or rerun ranges are descriptive. No population-level
+significance is claimed. The Astral and raw-mode extension used only #s(
   "bench.extension_seed_count",
 ) seeds per file, which provides a limited sample of search variability. The
 patched comparator received additional feature quality descriptors, which makes

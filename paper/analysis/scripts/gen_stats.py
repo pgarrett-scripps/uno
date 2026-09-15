@@ -9,6 +9,7 @@ from pathlib import Path
 from _stats import Stats
 import seed_data
 import koth_matrix_stats
+import im_model_stats
 
 HERE = Path(__file__).resolve().parent
 PAPER = HERE.parent.parent
@@ -425,10 +426,12 @@ def main() -> int:
            between=(0, 1000))
 
     koth_matrix_stats.add(st)
+    im_model_stats.add(st)
 
     return st.write(
         inputs=[
             "figdata/koth_matrix_study.json",
+            "../benchmark/im_cnn_20260914.json",
             "../benchmark/results/summary.tsv",
             "../benchmark/results/spread.tsv",
             "../benchmark/results/variability_extension/summary.tsv",
