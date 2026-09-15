@@ -11,7 +11,7 @@
         "at": "2026-09-12T21:06:56Z"
       },
       "inputs": {
-        "../../../../../../Data/PXD066701_Astral/results/input_series_summary.tsv": "sha256:cd3876e1ba8df3ae29f704e622640cc7fc41ef01942ab36f2879cbff0cff6458",
+        "../../../Data/PXD066701_Astral/results/input_series_summary.tsv": "sha256:cd3876e1ba8df3ae29f704e622640cc7fc41ef01942ab36f2879cbff0cff6458",
         "../benchmark/results/variability_extension/summary.tsv": "sha256:b48537532f10e2fb0d96d17d51fd60c3ee6e6950ebebe657bf43304c21820ae3",
         "analysis/scripts/fig_astral_validation.py": "sha256:55c6ef3c096ce9c080a21cc5a2f5a7ddba8b1c8ecdb4b196fbab0252eef2492b",
         "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf"
@@ -926,31 +926,31 @@
     "fig.figs7-koth-matrix": {
       "path": "figures/figS7_koth_matrix.png",
       "kind": "figure",
-      "desc": "Astral and IonStar matched-entrapment accession depth, warm-cache serialized timing, and known-ratio recovery; three seeds",
-      "hash": "sha256:0f1bbbac05fef9c1355e658ced15c590470395ef4a4adcdd623990fd9c527f32",
+      "desc": "KOTH 0.7.0: individual-file union versus consensus-row identification and IonStar known-ratio recovery; three seeds; no timing claim",
+      "hash": "sha256:fc97dc0957ffd62a28cd051a2c72ae5610775f0facb62dc48bfd1b2f5176304d",
       "origin": {
         "by": "analysis/scripts/figS7_koth_matrix.py",
-        "at": "2026-09-14T03:09:33Z"
+        "at": "2026-09-15T05:34:42Z"
       },
       "inputs": {
-        "analysis/scripts/figS7_koth_matrix.py": "sha256:04a33f025ee37659fc830a86739f014607270780c660e5ff7ba1b5fad69f4155",
+        "analysis/scripts/figS7_koth_matrix.py": "sha256:933593bfae62188480489855da289b0780845859daec2ee446a4c2380e1902bf",
         "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
+        "figdata/koth_matrix_study.json": "sha256:01619178c03e70d29b701c7196d885fb3c86b92d1dccde68177eaf299c907017"
       }
     },
     "fig.figs7-koth-matrix-pdf": {
       "path": "figures/figS7_koth_matrix.pdf",
       "kind": "figure",
-      "desc": "Astral and IonStar matched-entrapment accession depth, warm-cache serialized timing, and known-ratio recovery; three seeds",
-      "hash": "sha256:23aef6fa38289611998d005bcb9208a6f4c8bdc65918d833db4c202f9324b800",
+      "desc": "KOTH 0.7.0: individual-file union versus consensus-row identification and IonStar known-ratio recovery; three seeds; no timing claim",
+      "hash": "sha256:543a8428fb49530c50353946bf9133ca7405e516720a07a2109ed607631c9c5d",
       "origin": {
         "by": "analysis/scripts/figS7_koth_matrix.py",
-        "at": "2026-09-14T03:09:34Z"
+        "at": "2026-09-15T05:34:42Z"
       },
       "inputs": {
-        "analysis/scripts/figS7_koth_matrix.py": "sha256:04a33f025ee37659fc830a86739f014607270780c660e5ff7ba1b5fad69f4155",
+        "analysis/scripts/figS7_koth_matrix.py": "sha256:933593bfae62188480489855da289b0780845859daec2ee446a4c2380e1902bf",
         "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
+        "figdata/koth_matrix_study.json": "sha256:01619178c03e70d29b701c7196d885fb3c86b92d1dccde68177eaf299c907017"
       }
     },
     "tbl.commands": {
@@ -1153,124 +1153,49 @@
         "analysis/scripts/gen_im_model_table.py": "sha256:4afe825f30993c18b138ba948531e077937b7a29e42fc2c7552667f1144b1c8e"
       }
     },
-    "tbl.koth-matrix-additional": {
-      "path": "si/koth_matrix_additional.typ",
-      "kind": "table",
-      "desc": "Added and lost accessions at matched empirical cutoffs; full three-seed ranges",
-      "hash": "sha256:cc3a57598fe6a7d09099034b1588d7a71a59c24dd70356eb3261402fecb40e94",
-      "origin": {
-        "by": "analysis/scripts/gen_koth_matrix_table.py",
-        "at": "2026-09-14T03:08:36Z"
-      },
-      "inputs": {
-        "analysis/scripts/gen_koth_matrix_table.py": "sha256:97aa6c423a1af625ef9cdb5bb6ae33a5969bd3332ca27b7676d05fe6f0d29850",
-        "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
-      }
-    },
-    "tbl.koth-matrix-astral": {
-      "path": "si/koth_matrix_astral.typ",
-      "kind": "table",
-      "desc": "Astral accession counts at matched empirical 1% entrapment cutoffs; three-seed medians and ranges",
-      "hash": "sha256:e49fb703bad619f4c6e3b38111185b9e1140cf0c1e12187d157272748f90a904",
-      "origin": {
-        "by": "analysis/scripts/gen_koth_matrix_table.py",
-        "at": "2026-09-14T03:08:36Z"
-      },
-      "inputs": {
-        "analysis/scripts/gen_koth_matrix_table.py": "sha256:97aa6c423a1af625ef9cdb5bb6ae33a5969bd3332ca27b7676d05fe6f0d29850",
-        "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
-      }
-    },
     "tbl.koth-matrix-identification": {
       "path": "si/koth_matrix_identification.typ",
       "kind": "table",
-      "desc": "IonStar matched-cutoff accession coverage and separately measured FDP of internal 1% lists",
-      "hash": "sha256:5e7c615756aed349fcef8266a13a66cb008d600998f7eb2bb0c3d336a12ef68f",
+      "desc": "Present-species accession depth at empirical cutoffs and FDP of internal 1% lists; median and full range over three seeds",
+      "hash": "sha256:05e59057d5168ce8d06385806909b5cf7bb2178d583ac65ddacd9f038b4442bc",
       "origin": {
         "by": "analysis/scripts/gen_koth_matrix_table.py",
-        "at": "2026-09-14T03:08:36Z"
+        "at": "2026-09-15T05:33:35Z"
       },
       "inputs": {
-        "analysis/scripts/gen_koth_matrix_table.py": "sha256:97aa6c423a1af625ef9cdb5bb6ae33a5969bd3332ca27b7676d05fe6f0d29850",
+        "analysis/scripts/gen_koth_matrix_table.py": "sha256:ec3c22c75991c8a3457f19d366701e0c99c6a66fc0c060a48e0de08d9ccdb0a0",
         "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
+        "figdata/koth_matrix_study.json": "sha256:01619178c03e70d29b701c7196d885fb3c86b92d1dccde68177eaf299c907017"
       }
     },
     "tbl.koth-matrix-quantification": {
       "path": "si/koth_matrix_quantification.typ",
       "kind": "table",
-      "desc": "IonStar known-ratio measurements from internal-q accepted abundance outputs; shared normalization and no imputation",
-      "hash": "sha256:18cacdfbf1044a14e8e2f291b0166d38d2ad6861c8fbada36fa3093ba88e8d46",
+      "desc": "IonStar consensus-matrix quantities; internal-q accepted protein groups, median-ratio normalization, no imputation, three-seed medians and ranges",
+      "hash": "sha256:410efec3dfeb5d950674b48d63e4ccaa87d27f6263adabdf929fda6c202b25b6",
       "origin": {
         "by": "analysis/scripts/gen_koth_matrix_table.py",
-        "at": "2026-09-14T03:08:36Z"
+        "at": "2026-09-15T05:33:35Z"
       },
       "inputs": {
-        "analysis/scripts/gen_koth_matrix_table.py": "sha256:97aa6c423a1af625ef9cdb5bb6ae33a5969bd3332ca27b7676d05fe6f0d29850",
+        "analysis/scripts/gen_koth_matrix_table.py": "sha256:ec3c22c75991c8a3457f19d366701e0c99c6a66fc0c060a48e0de08d9ccdb0a0",
         "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
-      }
-    },
-    "tbl.koth-matrix-resources": {
-      "path": "si/koth_matrix_resources.typ",
-      "kind": "table",
-      "desc": "One dedicated serialized seed-zero repetition per route with warm shared RT cache; search-only times",
-      "hash": "sha256:f85d02f5df7aa88363c0e770a322f2df1bdbc84ab577dfb7dd223903726b8548",
-      "origin": {
-        "by": "analysis/scripts/gen_koth_matrix_table.py",
-        "at": "2026-09-14T03:08:36Z"
-      },
-      "inputs": {
-        "analysis/scripts/gen_koth_matrix_table.py": "sha256:97aa6c423a1af625ef9cdb5bb6ae33a5969bd3332ca27b7676d05fe6f0d29850",
-        "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
-      }
-    },
-    "tbl.koth-matrix-routes": {
-      "path": "si/koth_matrix_routes.typ",
-      "kind": "table",
-      "desc": "Compared routes; ordinary --raw mode was not rerun as a separate matrix-study arm",
-      "hash": "sha256:b6e3fef65ce7fb297153c12c20caf2c1fa2927490a45cf0d7ecdd755aabc72ec",
-      "origin": {
-        "by": "analysis/scripts/gen_koth_matrix_table.py",
-        "at": "2026-09-13T19:52:56Z"
-      },
-      "inputs": {
-        "analysis/scripts/gen_koth_matrix_table.py": "sha256:97aa6c423a1af625ef9cdb5bb6ae33a5969bd3332ca27b7676d05fe6f0d29850",
-        "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
-      }
-    },
-    "tbl.koth-matrix-sample-support": {
-      "path": "si/koth_matrix_sample-support.typ",
-      "kind": "table",
-      "desc": "All target extraction cells before UNO identification; positive and extraction-q-qualified cells do not imply identified peptides",
-      "hash": "sha256:831cbc8ce080294ac362981571fb8a83f5f252bda70a5cae4fefd8f9220fd771",
-      "origin": {
-        "by": "analysis/scripts/gen_koth_matrix_table.py",
-        "at": "2026-09-14T03:08:36Z"
-      },
-      "inputs": {
-        "analysis/scripts/gen_koth_matrix_table.py": "sha256:97aa6c423a1af625ef9cdb5bb6ae33a5969bd3332ca27b7676d05fe6f0d29850",
-        "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
+        "figdata/koth_matrix_study.json": "sha256:01619178c03e70d29b701c7196d885fb3c86b92d1dccde68177eaf299c907017"
       }
     },
     "tbl.koth-matrix-versions": {
       "path": "si/koth_matrix_versions.typ",
       "kind": "table",
-      "desc": "KOTH detection and LFQ, UNO, and runtime library identities; complete source snapshots and hashes archived",
-      "hash": "sha256:f372f3e9212d2075a5449557550771d9ccd3434878d8c37a06fb48813ce2a3e0",
+      "desc": "Frozen UNO and released KOTH 0.7.0 build identities; complete working-tree snapshots and driver amendments archived",
+      "hash": "sha256:d38b9701bb9d1a0a9e89acef1350301bd3da3797ab357fb4e4c476af79af624a",
       "origin": {
         "by": "analysis/scripts/gen_koth_matrix_table.py",
-        "at": "2026-09-14T03:08:36Z"
+        "at": "2026-09-15T05:33:35Z"
       },
       "inputs": {
-        "analysis/scripts/gen_koth_matrix_table.py": "sha256:97aa6c423a1af625ef9cdb5bb6ae33a5969bd3332ca27b7676d05fe6f0d29850",
+        "analysis/scripts/gen_koth_matrix_table.py": "sha256:ec3c22c75991c8a3457f19d366701e0c99c6a66fc0c060a48e0de08d9ccdb0a0",
         "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
-        "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008"
+        "figdata/koth_matrix_study.json": "sha256:01619178c03e70d29b701c7196d885fb3c86b92d1dccde68177eaf299c907017"
       }
     },
     "tbl.quality-ablation": {

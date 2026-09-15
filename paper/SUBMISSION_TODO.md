@@ -34,13 +34,23 @@ written by a script, and `si/versions.typ` pins that build, its three out-of-tre
 path dependencies and the comparator patch. The comparator was not re-run,
 because it did not change.
 
-**KOTH 0.6.0 LFQ update:** all eight LFQ bundles and 48 matrix searches are
-regenerated with the narrower release extraction windows. The 32 0.5.0 feature
-tables and 96 separate searches are reused because detection and UNO are
-unchanged. Four new serialized searches update the timing comparison. All
-cohorts, arms and seeds remain represented, and source/output hashes and
-coordinate parity are audited. The LFQ prose is shortened while the generated
-SI tables retain full results. Primary single-run evidence remains unchanged.
+**KOTH 0.7.0 matrix update (2026-09-15):** 23 fresh feature extractions,
+two LFQ matrices, and all 75 searches are complete: 69 individual-file searches
+and six consensus-row searches across three seeds. The reduced paper section
+uses Astral 100 ng triplicates and all 20 IonStar runs. Individual-search unions
+have greater matched-FDP depth in all six paired comparisons; the consensus
+matrix retains E. coli ratio compression. The manuscript replaces the previous
+joint-search, low-input and scaling extension with this comparison. All 109 job
+receipts and 254 unique input/output files passed the execution audit; independent
+accession-level checks reproduce the identification summaries. Four timing
+controls reproduce identification outputs but cannot support speed claims because
+the host was not isolated. Primary single-run and IM evidence retains its recorded
+versions; the broader KOTH 0.7.0 raw-mode and IM reruns remain pending.
+The replacement assets, PDF and Word builds pass `just verify` and
+`just check-stats-deep`. Independent calculations reproduce the normalization,
+endpoint ratios and CVs for all three IonStar seeds. Rendered Word pages and
+PDF layouts were reviewed, including all replacement figure/table pages.
+The main text is 4,839 words (FK grade 11.9); the SI is 2,775 words (grade 11.7).
 
 What remains for the main single-run study is not compute. It is the author-blocked material (B2, B3, the
 release decision behind B1 and D5), the submission bundle (B4, B7), and the two

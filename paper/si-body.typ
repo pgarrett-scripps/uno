@@ -411,226 +411,126 @@ Bold curves are pointwise medians where every search has a nonempty list.
   tbl("tbl.entrap-reported"),
 ) <tbl:entrapreported>
 
-= Joint searches of koth LFQ matrices <sec:si-matrix>
+= Identification from koth LFQ matrices <sec:si-matrix>
 
 #show table: set text(size: 9pt)
 #show table: set par(justify: false)
-// These compact tables and the cohort figure fit on one page with their captions.
 #show figure: set block(breakable: false)
 
-This study compares one uno search of a koth LFQ bundle with the union of
-separate searches of its constituent feature tables. The Astral HeLa series
-(#lit("PXD066701")) has triplicates at #lit("200") pg, #lit("1") ng, #lit("10")
-ng, and #lit("100") ng, analyzed as four matrices and one #lit("12")-file pool.
-IonStar (#lit("PXD003881")) @shen2018ionstar has #lit("4") replicates at each of
-#lit("5") _Escherichia coli_ levels in a constant human background, with
-expected factors #lit("1"), #lit("1.5"), #lit("2"), #lit("2.5"), and #lit("3").
-Balanced nested cohorts contain #lit("5"), #lit("10"), and #lit("20") files.
-
-We generated #lit("8") LFQ bundles with koth #lit("0.6.0") and ran #lit("48")
-joint searches across seeds #lit("0"), #lit("1"), and #lit("2"). The comparison
-retains #lit("32") feature tables and #lit("96") separate searches from the
-audited #lit("0.5.0") study because detection and uno are unchanged. Every
-cohort and seed is retained; seed ranges measure search variability conditional
-on fixed upstream outputs, not biological replication. These datasets also
-informed method development. Source snapshots, settings, reuse checks, and
-results are archived in `benchmark/results/matrix_20260914_koth060/` and
-`paper/figdata/koth_matrix_study.json`; program identities are listed in
-@tbl:matrixversions.
+We compared individual-file searches with direct searches of aligned consensus
+rows in two cohorts. The Astral HeLa cohort (#lit("PXD066701")) contains the
+#lit("100") ng triplicate. IonStar (#lit("PXD003881")) @shen2018ionstar contains
+#lit("4") replicates at each of #lit("5") _E. coli_ concentrations in a constant
+human background, with expected ratios #lit("1"), #lit("1.5"), #lit("2"), #lit(
+  "2.5",
+), and #lit("3"). All #lit("23") feature/hill tables and both LFQ matrices were
+regenerated with koth #lit("0.7.0"). Across seeds #lit("0"), #lit("1"), and
+#lit("2"), the study comprises #lit("69") individual searches and #lit("6")
+consensus-matrix searches. The cohorts were selected before these rerun
+outcomes, but both had informed development. Seed ranges describe search
+variability conditional on fixed upstream outputs, not biological replication.
+Program identities are listed in @tbl:matrixversions, and @fig:matrixcohorts
+summarizes identification and ratio recovery.
 
 #figure(
-  caption: [Programs used for reused feature detection and separate searches,
-    and for the LFQ update. Archived source manifests identify the exact builds
-    beyond their repository revisions.],
+  caption: [Programs used for the complete matrix rerun. Full source snapshots,
+    local patches, binary hashes, configurations, and driver amendments are
+    recorded in the study archive.],
   tbl("tbl.koth-matrix-versions"),
 ) <tbl:matrixversions>
 
-#block(sticky: true)[
-  *Measurements and search routes.*
-]
+== Feature rows and quantities
 
-Feature finding uses uno's bundled profile. Grouping retains bounded mass, RT,
-and IM spans, automatic reference selection, member/strong-seed score floors of
-#lit("0.5")/#lit("0.75"), single-run groups, and replicated weak-seed groups.
-The latter is an explicit study setting. LFQ uses summed grid intensities,
-extraction target-decoy competition, and no normalization or averagine
-projection. The #lit("0.6.0") extraction half-windows are #lit("0.005") of each
-run's RT span and #lit("0.015") absolute inverse mobility units; the IM setting
-is inactive on these Orbitrap inputs. Alignment and grouping tolerances are
-unchanged.
+Feature finding uses uno's bundled Orbitrap profile. Alignment uses automatic
+reference selection, and consensus grouping requires at least #lit("2") original
+runs with group q at most #lit("0.05"). Group coordinate limits are #lit("20")
+ppm, #lit("0.02") of the RT span, and #lit("0.05") inverse-mobility units. LFQ
+uses summed grid extraction with half-windows of #lit("0.005") of each run's RT
+span and #lit("0.015") inverse mobility units, extraction target-decoy
+competition, no upstream normalization, and no averagine projection. IM settings
+are inactive on these Orbitrap inputs. The release's exclusive-signal ownership
+can suppress shared or ambiguous cells to zero. Group confidence, extraction
+confidence, and identification q-values refer to different quantities.
 
-Joint searches use each original observation's aligned coordinates and original
-quality descriptors (@tbl:matrixroutes). Candidate matching takes the union of
-member mass windows. Scoring selects at most one observation per run using mass
-compatibility and joint mass/RT deviation. Compatibility requires passing the
-mass gate and squared standardized deviation at most #lit("9"). Groups without a
-strong seed remain searchable but cannot seed initial calibration. No
-separate-search protein lists enter the joint search.
+An individual search receives one original feature table. A matrix search uses
+`--matrix-long` to receive one mass/RT/charge coordinate set and representative
+original quality descriptors per consensus row, together with its LFQ intensity
+vector. It does not expand a row into original member observations or add LFQ
+cell-quality summaries to the classifier. The two matrices contain #s(
+  "matrix.astral_groups",
+) Astral and #s("matrix.ionstar_groups") IonStar rows. Databases, digest
+settings, RT model, seeds, and matching filters are matched between routes
+within each cohort.
 
-The joint scorer adds #lit("14") descriptors covering run support, compatible
-fraction, residual agreement, feature quality, isotope/scan counts, and a
-second-run indicator. Counts use log-one-plus transforms; deviations are capped
-at #lit("100"), with that value and an indicator encoding a missing second
-observation. The additional cell arm adds #lit("12") summaries of positive and
-confident MBR support, q availability, and mean/worst extraction q, with direct
-and MBR cells summarized separately. Confidence means extraction q at most #lit(
-  "0.01",
-). Cohort fractions use distinct source tables; within-stratum fractions use
-positive cells. Missing q summaries equal #lit("1") with zero availability,
-while measured zero q is retained.
+== Identification comparison
 
-Original measurements and recomputed LFQ cells remain separate. The hybrid
-extraction score is the geometric mean of RT, intensity, isotope-pattern, and
-coelution scores; it does not replace feature quality. MBR fills contribute
-extraction evidence without creating original peptide observations. The same
-cell summaries are supplied to target and sequence-decoy candidates, so this arm
-tests their combined effect, including classifier feature sampling.
-
-#figure(
-  caption: [Compared input routes. The separate-search union is an evaluation
-    comparator; its outputs are never supplied to a joint search. Ordinary raw
-    mode was not rerun as an additional arm of this study.],
-  tbl("tbl.koth-matrix-routes"),
-) <tbl:matrixroutes>
-
-#block(sticky: true)[
-  *Matched-error identification comparison.*
-]
-
-We expand same-species protein groups to accessions, deduplicate them, and
-exclude mixed-species groups. Human is present in Astral; human and _E. coli_
-are present in IonStar, with yeast absent in both. Empirical entrapment FDP is
-$
-  "FDP" = n_"yeast" / n_"present" dot N_"present" / N_"yeast",
-$
-where lowercase counts refer to accepted accessions and uppercase counts to
-searched FASTA entries. Joint lists rank by protein score, and the separate
-union by each accession's minimum per-run internal q. Whole tied-score blocks
-enter together; we report the deepest cutoff with FDP at most #lit("1")%. This
-retrospective comparison uses known entrapment and does not calibrate a
-deployable cohort q-value. Internal-q lists are evaluated separately.
-
-@fig:matrixcohorts shows all cohorts and seeds, summarized by medians and full
-ranges. At Astral #lit("100") ng, joint searching recovered #s(
-  "matrix.astral_joint_median",
-) human accessions, versus #s("matrix.astral_union_median") for the separate
-union and #s("matrix.astral_joint_cell_median") with cell summaries
-(@tbl:matrixastral). The complete input series tests whether that gain holds
-across abundance levels; @tbl:matrixadditional records added and lost accessions
-rather than only net depth.
+Same-species protein groups were expanded to accessions and deduplicated;
+mixed-species groups were excluded. The individual-file union was ranked by each
+accession's minimum reported q-value across files, and matrix accessions by
+binomial score. Whole tied-score blocks entered together. Yeast provided
+entrapment sequences, with false-discovery proportions scaled by the
+present-to-yeast database size. We evaluated the largest accession set meeting
+each empirical #lit("1"), #lit("3"), or #lit("5")% cutoff and independently
+reproduced its counts and accession set using decimal ranks and integer
+arithmetic. These retrospective cutoffs are not deployable cohort q-values. The
+FDP of each route's reported #lit("1")% list is therefore shown separately
+(@tbl:matrixidentification).
 
 #figure(
   fig("fig.figs7-koth-matrix", width: 100%),
-  caption: [LFQ matrices regenerated with koth #lit("0.6.0"). *(a)* Astral and
-    *(b)* IonStar present-species accessions at matched empirical entrapment FDP
-    at most #lit("1")%. Points, medians, and full ranges show all three seeds.
-    *(c)* One dedicated serialized timing repetition for the Astral #lit("100")
-    ng cohort, with a shared warm RT cache. *(d)* _E. coli_ abundance ratios on
-    common protein groups in the #lit("20")-run IonStar cohort, using shared
-    normalization within each seed; points and ranges summarize the three
-    seed-specific group medians. Nested cohorts and repeated search seeds are
-    not independent biological replicates.],
+  caption: [Direct consensus-row searches using koth #lit("0.7.0"). *(a)*
+    Present-species accessions at empirical entrapment FDP at most #lit("1")%
+    for the union of individual searches and the consensus-matrix search. *(b)*
+    IonStar protein-group ratios versus condition A after median-ratio
+    normalization. Markers summarize three seeds and error bars show their full
+    range; dotted lines show expected ratios.],
 ) <fig:matrixcohorts>
 
 #figure(
-  caption: [Astral accession coverage at matched empirical entrapment cutoffs.
-    Entries are three-seed medians with full ranges. MS/MS is cohort-level
-    corroboration of accepted human accessions, not sample-specific detection.
-    NA denotes an undefined estimate.],
-  tbl("tbl.koth-matrix-astral"),
-) <tbl:matrixastral>
-
-Astral corroboration uses the deposited DIA-NN report solely for evaluation,
-requiring target precursor and protein-group q at most #lit("0.01"). An
-accession must appear somewhere in the same cohort; absence is not proof of
-error, and cohort corroboration does not establish detection in every cell. The
-evidence bundle also records corroboration of accessions added by joint
-searching.
-
-#figure(
-  caption: [Accessions added and lost relative to the separate-search union at
-    each route's matched empirical cutoff. Jaccard compares the accepted
-    present-species sets; entries summarize all three seeds.],
-  tbl("tbl.koth-matrix-additional"),
-) <tbl:matrixadditional>
-
-For the #lit("20")-run IonStar cohort, joint searching recovered #s(
-  "matrix.ionstar_joint_median",
-) present-species accessions, or #s("matrix.ionstar_joint_cell_median") with
-cell summaries, versus #s("matrix.ionstar_union_median") for the separate union
-(@tbl:matrixidentification). These complementary results limit a general claim
-that pooling improves identification. Small accepted yeast counts also make the
-empirical FDP sensitive to individual errors.
-
-#figure(
-  caption: [IonStar matched-cutoff accession coverage and calibration. Present,
-    yeast, and FDP columns refer to the empirical cutoff at most #lit("1")%. The
-    final column separately evaluates each internally reported #lit("1")% list,
-    including the deduplicated union. Entries are medians and full ranges across
-    three seeds.],
+  caption: [Identification depth at empirical entrapment cutoffs, with medians
+    and full ranges across three seeds. Astral counts human accessions; IonStar
+    counts human and _E. coli_ accessions. The final column reports entrapment
+    FDP for the independently defined internal #lit("1")% lists.],
   tbl("tbl.koth-matrix-identification"),
 ) <tbl:matrixidentification>
 
-#block(sticky: true)[
-  *Extraction confidence and quantitative evaluation.*
-]
+== Quantitative checks
 
-Before identification, the #lit("20")-run IonStar bundle contains #s(
+IonStar quantitation uses summed protein-group abundances accepted at internal
+protein q at most #lit("0.01"), independently of the empirical accession
+cutoffs. Within each seed, complete protein groups determine label-independent
+median-ratio normalization factors. No values are imputed. Endpoint ratios and
+within-condition CV require at least #lit("2") positive replicates; the table
+reports eligible-group counts and positive protein-group cell coverage. Before
+identification and protein rollup, the IonStar matrix contains #s(
   "matrix.positive_cells_millions",
-) million positive extraction cells; #s("matrix.confident_positive_percent")%
-pass extraction q at most #lit("0.01"). Per-sample Astral counts distinguish
-direct and MBR cells (@tbl:matrixsamples). These counts do not imply peptide
-identity, and absolute calibration of extraction q has not been independently
-established.
+) million positive precursor cells, of which #s(
+  "matrix.confident_positive_percent",
+)% pass extraction q at most #lit("0.01"). Positive or extracted cells do not by
+themselves establish peptide identity in that sample.
+
+The median E/A ratio across seeds is #s("matrix.ecoli_ratio_consensus") for _E.
+coli_, compared with the expected #lit("3"), and #s(
+  "matrix.human_ratio_consensus",
+) for the constant human background. Ratio compression remains despite
+exclusive-signal extraction. The high protein-group coverage is conditional on
+identified groups and sums across precursors; it does not describe precursor
+completeness or sample-level identification confidence
+(@tbl:matrixquantification).
 
 #figure(
-  caption: [Upstream target extraction cells in the all-file Astral bundle.
-    Positive means intensity greater than zero; confident columns additionally
-    require koth extraction q at most #lit("0.01"). Counts precede UNO
-    identification and do not claim peptide identity or cell-level FDR
-    control.],
-  tbl("tbl.koth-matrix-sample-support"),
-) <tbl:matrixsamples>
-
-Quantitation uses integrated abundances for groups at internal protein q at most
-#lit("0.01"), separately from the empirical accession lists. Complete groups in
-the joint arm determine median-ratio normalization, reused for the cell arm
-within each seed. Both all-group and exact common-group comparisons use no
-imputation. Endpoint ratios and within-condition CV require at least #lit("2")
-positive replicates; coverage and eligible-group counts accompany these
-conditional metrics (@tbl:matrixquantification).
-
-Common _E. coli_ groups have median E/A ratios of #s("matrix.ecoli_ratio_joint")
-without cell summaries and #s("matrix.ecoli_ratio_joint_cell") with them,
-against the expected #lit("3"). Both arms use the same integrated cells, so
-differences can arise from identification and group selection. Added scoring
-covariates do not themselves correct integration bias.
-
-#figure(
-  caption: [IonStar #lit("20")-run quantitative evaluation, with three-seed
-    medians and full ranges. Absolute log2 error compares each group's observed
-    E/A ratio with the expected species ratio. CV summarizes eligible
-    group-condition pairs; positive coverage includes all sample columns.
-    Common-group comparisons share groups and normalization within each seed.],
+  caption: [IonStar consensus-matrix quantities, summarized by three-seed
+    medians and full ranges. Absolute log2 error compares each group's E/A ratio
+    with its species expectation. CV summarizes eligible group-condition pairs;
+    positive coverage includes all protein-group sample columns.],
   tbl("tbl.koth-matrix-quantification"),
 ) <tbl:matrixquantification>
 
-#block(sticky: true)[
-  *Resource measurements.*
-]
-
-Resource comparisons use a separate serialized repetition of the three Astral
-#lit("100") ng searches and one joint cell-summary search at seed #lit("0"),
-with #lit("8") threads and a warm shared RT cache. Outputs must match the study
-searches. The joint search took #s("matrix.search_speedup")-fold less wall time
-(@tbl:matrixresources). This single repetition excludes detection, alignment,
-and LFQ construction; concurrent job timings are not used for speed claims.
-
-#figure(
-  caption: [Dedicated serialized Astral #lit("100") ng search timings with #lit(
-      "8",
-    ) threads and a warm shared RT cache. Separate-route wall and CPU times sum
-    the three searches; peak RSS is their maximum process RSS. The joint route
-    performs one search. Upstream processing is excluded.],
-  tbl("tbl.koth-matrix-resources"),
-) <tbl:matrixresources>
+The complete commands, source and output hashes, accepted accession sets, and
+per-seed metrics are archived in `benchmark/results/matrix_20260915_koth070/`
+and `paper/figdata/koth_matrix_study.json`. A separate four-file IonStar pilot
+preceded the publication queue. Four seed-zero timing repetitions reproduced the
+corresponding protein outputs, but overlapped other work and do not support a
+speed comparison. The earlier joint-member, cell-summary, low-input matrix, and
+cohort-scaling experiments remain development records rather than part of this
+focused comparison.

@@ -96,6 +96,10 @@ def format_tables(path: Path) -> None:
             weights = [38, 30, 32]
         elif header.startswith("Program Revision / version"):
             weights = [34, 33, 33]
+        elif header.startswith("Cohort / input"):
+            weights = [24, 19, 19, 19, 19]
+        elif header.startswith("Species Ratio groups"):
+            weights = [14, 24, 23, 19, 20]
         elif header.startswith("Route Measurements used"):
             weights = [20, 60, 20]
         elif header.startswith("Astral cohort / arm"):

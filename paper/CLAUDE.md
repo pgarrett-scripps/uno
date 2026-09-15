@@ -12,10 +12,13 @@ Most of what looks like an error in this manuscript is already recorded there wi
 a decision attached. Main single-run identification numbers come from the pinned
 re-run of 2026-09-11 (`benchmark/publication_rerun.py`); re-run it and then
 `benchmark/refresh_summaries.py` if the engine changes again.
-The fresh matrix extension is separate: `figdata/koth_matrix_study.json` records
-the KOTH 0.6.0 LFQ update: 48 repeated matrix searches, 96 reused separate
-searches, eight regenerated bundles, and new serialized timing controls. Detection
-and UNO are unchanged; reused outputs, source snapshots, and runtime hashes are verified.
+The matrix extension is separate: `figdata/koth_matrix_study.json` records
+KOTH 0.7.0 with 23 fresh feature extractions, two LFQ matrices, and 75 searches
+(69 individual-file searches and six consensus-row searches across three seeds).
+`benchmark/matrix_koth070_report.py` verifies the frozen outputs and derives the
+replacement results. Four timing controls reproduce their identification outputs,
+but host overlap prevents a speed claim. The primary single-run and IM evidence
+retains its separately recorded versions pending those reruns.
 [`../TODO.md`](../TODO.md) is the code-side half.
 
 ## The contract for generated things

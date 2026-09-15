@@ -415,8 +415,9 @@ succeeds, and the first costs a second pass through the classifier stage.
 The main single-run comparison searches were executed by one build, pinned by
 commit and binary hash in Supporting Information @tbl:versions and recorded per
 search in `benchmark/results/publication_rerun/`. The re-execution inventory is
-given in @sec:si-reproducibility. The fresh matrix extension uses separate
-frozen builds and a complete three-seed comparison (@sec:si-matrix).
+given in @sec:si-reproducibility. The matrix extension uses a separately frozen
+koth #lit("0.7.0") build and three seeds per route (@sec:si-matrix). Other
+raw-mode and IM results retain their separately recorded software versions.
 
 Threshold sensitivity was evaluated on the complete ranked protein lists at
 entrapment-FDR cutoffs of #lit("0.5"), #lit("1"), #lit("2"), #lit("3"), #lit(
@@ -702,20 +703,23 @@ extension is excluded from that timing claim.
   ],
 ) <fig:rawmode>
 
-== Cohort-level joint searching <sec:results-matrix>
+== Identification from LFQ matrices <sec:results-matrix>
 
-Aligned koth LFQ bundles support one joint search over observations from several
-runs. With koth #lit("0.6.0") LFQ extraction, the Astral #lit("100") ng
-comparison recovered a median #s("matrix.astral_joint_median") human accessions
-across three seeds, versus #s("matrix.astral_union_median") for the
-separate-search union at matched empirical entrapment cutoffs. The #lit(
-  "20",
-)-run IonStar comparison instead favored separate searching: #s(
-  "matrix.ionstar_union_median",
-) versus #s("matrix.ionstar_joint_median") accessions. This exploratory gain is
-dataset dependent, and pooled identification does not establish detection in
-every sample. Complete cohort results, extraction-confidence scoring, and
-quantitative checks are reported in @sec:si-matrix.
+uno can search an aligned LFQ matrix by treating each consensus precursor row as
+one feature and retaining its per-run intensities for quantification. With fresh
+koth #lit("0.7.0") features and LFQ, consensus-row searching recovered a median
+#s("matrix.astral_consensus_median") human accessions in the Astral #lit("100")
+ng triplicate, versus #s("matrix.astral_union_median") for the union of
+individual searches at a matched empirical entrapment FDP of at most #lit("1")%.
+The #lit("20")-run IonStar comparison also favored the individual-search union:
+#s("matrix.ionstar_union_median") versus #s("matrix.ionstar_consensus_median")
+present-species accessions. IonStar matrix quantities recovered a median _E.
+coli_ highest-to-lowest concentration ratio of #s(
+  "matrix.ecoli_ratio_consensus",
+) against the expected #lit("3"). Direct matrix input therefore supported
+identification and quantification, with reduced identification depth in these
+two cohorts. The three-seed comparison and conditional quantitative checks are
+reported in @sec:si-matrix.
 
 = Discussion and limitations <sec:discussion>
 
@@ -735,12 +739,11 @@ stage accounts for the runtime difference. Conversely, the overlap analysis
 shows substantial common protein identity, alongside changes in which proteins
 pass the threshold across seeds in both engines.
 
-Matrix input changes the unit of analysis from a file to a cohort, and the
-opposing Astral and IonStar results place that change outside what this work
-establishes. These matrix settings were developed on the evaluated datasets, so
-the extension measures performance on those cohorts rather than validating a
-cohort-level method. It is reported for completeness and is not part of the
-engine comparison.
+Matrix input searches each aligned precursor row as one feature and retains a
+vector of sample quantities. The lower accession depth in both cohorts does not
+support an identification advantage over separate searches. These datasets
+informed development, and the focused comparison does not establish performance
+at lower inputs or across cohort sizes.
 
 The evidence does not establish universal superiority. The clearest boundary is
 low input. At 200 pg and 1 ng, one file searched under different seeds returns

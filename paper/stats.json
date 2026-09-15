@@ -6,9 +6,9 @@
       "analysis/scripts/entrapment_data.py": "sha256:09321c4bd3d861eee79922a1a63c0cf2485f863999d7466cce333f512bd245af",
       "analysis/scripts/style.py": "sha256:f6ef0d546154f13c7783e7f80f0fd0f156b4f4de1e51b8250efc262db16eecdf",
       "analysis/scripts/seed_data.py": "sha256:cbc4bfa9eb3c3d3f1886b51568d2b11593df9b9a9ae83281f51a16a468b69dcd",
-      "analysis/scripts/koth_matrix_stats.py": "sha256:f79275500c091aed3e9c0962b8f01ae0a2ea9e60f95377f4721bc38653b13466",
+      "analysis/scripts/koth_matrix_stats.py": "sha256:7c828ff843c0746f874999e61128c3e1eff1c695c500ebd1970c244c672b8059",
       "analysis/scripts/im_model_stats.py": "sha256:05f8e16c721c17a01e36dee8c5ece9e727f52ce920dcae7dc0295dc6fcf0dba1",
-      "figdata/koth_matrix_study.json": "sha256:dd0b218e55bdc159ea64b5ea3303c5252ecdcfe9a02390b010c8427ddc532008",
+      "figdata/koth_matrix_study.json": "sha256:01619178c03e70d29b701c7196d885fb3c86b92d1dccde68177eaf299c907017",
       "../benchmark/im_cnn_20260914.json": "sha256:24086700f3249dbb21b922c5b727c343f5312d7d423d8d61b7551771750e2a3c",
       "../benchmark/results/summary.tsv": "sha256:4ac95c86f60bc4bd6e7f328cffedb6e93498d7c3f9327cd3dd9ab16bd4ce10c4",
       "../benchmark/results/spread.tsv": "sha256:d8a0d1282bb7b56914c2839b586a78b3429d8452d8d9436e95cd6d307cc572e1",
@@ -1651,529 +1651,274 @@
         "at": "2026-09-14T18:24:38Z"
       }
     },
-    "matrix.astral_gain_percent": {
-      "value": 15.384615384615374,
-      "fmt": ".1f",
-      "unit": "",
-      "desc": "astral 100ng: median paired relative gain, joint + cells versus independent union, three seeds",
-      "expect": {
-        "min": -100,
-        "max": 10000
-      },
-      "checksum": "v2:a1f4f7e19c58f758",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
-      }
-    },
-    "matrix.astral_joint_cell_max": {
-      "value": 1643,
+    "matrix.astral_consensus_max": {
+      "value": 1138,
       "fmt": ".0f",
       "unit": "",
-      "desc": "astral 100ng joint_cell: max present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 astral 100ng consensus: max present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:1b9fc6751bc01563",
+      "checksum": "v2:41966e55400c17d8",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.astral_joint_cell_median": {
-      "value": 1618,
+    "matrix.astral_consensus_median": {
+      "value": 1045,
       "fmt": ".0f",
       "unit": "",
-      "desc": "astral 100ng joint_cell: median present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 astral 100ng consensus: median present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:ae92bee5080ffa35",
+      "checksum": "v2:40794500a2845c94",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.astral_joint_cell_min": {
-      "value": 1560,
+    "matrix.astral_consensus_min": {
+      "value": 913,
       "fmt": ".0f",
       "unit": "",
-      "desc": "astral 100ng joint_cell: min present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 astral 100ng consensus: min present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:c649b15e769148e6",
+      "checksum": "v2:1bee34b6262a7777",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.astral_joint_max": {
-      "value": 1819,
+    "matrix.astral_groups": {
+      "value": 31319,
       "fmt": ".0f",
       "unit": "",
-      "desc": "astral 100ng joint: max present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 astral: consensus feature rows",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:99cf15ac55d54e0c",
+      "checksum": "v2:958aba7fc97de416",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.astral_joint_median": {
-      "value": 1718,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 100ng joint: median present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:c0d2b0fe4d7671d1",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.astral_joint_min": {
-      "value": 1572,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 100ng joint: min present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:9c05d48bbde0b1ec",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.astral_low_gain_percent": {
-      "value": 45.50458715596331,
-      "fmt": ".1f",
-      "unit": "",
-      "desc": "astral 200pg: median paired relative gain, joint + cells versus independent union, three seeds",
-      "expect": {
-        "min": -100,
-        "max": 10000
-      },
-      "checksum": "v2:5668185d8a232e79",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
-      }
-    },
-    "matrix.astral_low_joint_cell_max": {
-      "value": 799,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg joint_cell: max present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:ce02d4b6d1aceeea",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
-      }
-    },
-    "matrix.astral_low_joint_cell_median": {
-      "value": 793,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg joint_cell: median present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:23c5910b8b10cfa8",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
-      }
-    },
-    "matrix.astral_low_joint_cell_min": {
-      "value": 517,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg joint_cell: min present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:5088c1bc42f5cc6a",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
-      }
-    },
-    "matrix.astral_low_joint_max": {
-      "value": 857,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg joint: max present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:22cdd352056c42ac",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.astral_low_joint_median": {
-      "value": 729,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg joint: median present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:509694b0a010c643",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.astral_low_joint_min": {
-      "value": 541,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg joint: min present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:5de664ef205f95d4",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.astral_low_union_max": {
-      "value": 545,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg union: max present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:68e476b5d5aeca7b",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.astral_low_union_median": {
-      "value": 410,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg union: median present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:612111a352a571cb",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.astral_low_union_min": {
-      "value": 339,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "astral 200pg union: min present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:fc95ce176603e9e1",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "matrix.astral_union_max": {
-      "value": 1544,
+      "value": 2007,
       "fmt": ".0f",
       "unit": "",
-      "desc": "astral 100ng union: max present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 astral individual-file union: max present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:194af3b3d7b00744",
+      "checksum": "v2:f1cfa5ebb149e809",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "matrix.astral_union_median": {
-      "value": 1352,
+      "value": 1653,
       "fmt": ".0f",
       "unit": "",
-      "desc": "astral 100ng union: median present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 astral individual-file union: median present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:9d551151d7152670",
+      "checksum": "v2:ef0d2e96b08cee59",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "matrix.astral_union_min": {
-      "value": 1344,
+      "value": 1565,
       "fmt": ".0f",
       "unit": "",
-      "desc": "astral 100ng union: min present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 astral individual-file union: min present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:aa13fda43018c393",
+      "checksum": "v2:956b130106fbc089",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "matrix.confident_positive_percent": {
-      "value": 9.140487679789523,
+      "value": 54.492853978746915,
       "fmt": ".1f",
       "unit": "%",
-      "desc": "Positive IonStar LFQ cells passing exported extraction q <= 0.01, percent",
+      "desc": "KOTH 0.7.0 positive IonStar target cells with extraction q ≤0.01, percent",
       "expect": {
         "min": 0,
         "max": 100
       },
-      "checksum": "v2:9c8ebd97c1c4444f",
+      "checksum": "v2:2e7d433ca77ec9ed",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.ecoli_ratio_joint": {
-      "value": 2.16604038062476,
+    "matrix.ecoli_ratio_consensus": {
+      "value": 2.6281237883418673,
       "fmt": ".2f",
       "unit": "",
-      "desc": "Median common-group E. coli E/A ratio, joint, three seeds",
+      "desc": "KOTH 0.7.0 consensus-row ECOLI median E/A protein-group ratio across three seeds",
       "expect": {
         "min": 0,
         "max": 10
       },
-      "checksum": "v2:f9e1802f400a5e3a",
+      "checksum": "v2:2304d44b5e3a674f",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.ecoli_ratio_joint_cell": {
-      "value": 2.172127313102999,
+    "matrix.human_ratio_consensus": {
+      "value": 0.9582369044027144,
       "fmt": ".2f",
       "unit": "",
-      "desc": "Median common-group E. coli E/A ratio, joint_cell, three seeds",
+      "desc": "KOTH 0.7.0 consensus-row HUMAN median E/A protein-group ratio across three seeds",
       "expect": {
         "min": 0,
         "max": 10
       },
-      "checksum": "v2:7eebff89552b01f4",
+      "checksum": "v2:bdcc4f3185b88d0b",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.ionstar_gain_percent": {
-      "value": -53.79382522239665,
-      "fmt": ".1f",
-      "unit": "",
-      "desc": "ionstar 20: median paired relative gain, joint + cells versus independent union, three seeds",
-      "expect": {
-        "min": -100,
-        "max": 10000
-      },
-      "checksum": "v2:40d08719682c731f",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
-      }
-    },
-    "matrix.ionstar_joint_cell_max": {
-      "value": 1120,
+    "matrix.ionstar_consensus_max": {
+      "value": 1697,
       "fmt": ".0f",
       "unit": "",
-      "desc": "ionstar 20 joint_cell: max present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 ionstar 20 consensus: max present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:829f00a11ddfdebb",
+      "checksum": "v2:d464f7141af4a42f",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.ionstar_joint_cell_median": {
-      "value": 883,
+    "matrix.ionstar_consensus_median": {
+      "value": 1644,
       "fmt": ".0f",
       "unit": "",
-      "desc": "ionstar 20 joint_cell: median present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 ionstar 20 consensus: median present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:3055e0d8130c7a19",
+      "checksum": "v2:f7d9615965e2b49c",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.ionstar_joint_cell_min": {
-      "value": 296,
+    "matrix.ionstar_consensus_min": {
+      "value": 1372,
       "fmt": ".0f",
       "unit": "",
-      "desc": "ionstar 20 joint_cell: min present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 ionstar 20 consensus: min present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:a0f8b2c4cb1ac82a",
+      "checksum": "v2:a2144767f33525b4",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
-    "matrix.ionstar_joint_max": {
-      "value": 1291,
+    "matrix.ionstar_groups": {
+      "value": 92621,
       "fmt": ".0f",
       "unit": "",
-      "desc": "ionstar 20 joint: max present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 ionstar: consensus feature rows",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:a9b9bd8e0ec83c83",
+      "checksum": "v2:235d1d3d7617e2a5",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.ionstar_joint_median": {
-      "value": 782,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "ionstar 20 joint: median present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:3da6ee6699da1eb5",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
-      }
-    },
-    "matrix.ionstar_joint_min": {
-      "value": 502,
-      "fmt": ".0f",
-      "unit": "",
-      "desc": "ionstar 20 joint: min present accessions at empirical FDP \u22641%, three seeds",
-      "expect": {
-        "min": 0,
-        "max": 1000000
-      },
-      "checksum": "v2:5344c4110f483793",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "matrix.ionstar_union_max": {
-      "value": 1930,
+      "value": 1791,
       "fmt": ".0f",
       "unit": "",
-      "desc": "ionstar 20 union: max present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 ionstar individual-file union: max present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:70fa656aa0391eb9",
+      "checksum": "v2:d62e1c294189ca3b",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "matrix.ionstar_union_median": {
-      "value": 1911,
+      "value": 1723,
       "fmt": ".0f",
       "unit": "",
-      "desc": "ionstar 20 union: median present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 ionstar individual-file union: median present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:dc4bc886825c446e",
+      "checksum": "v2:7c1c2745ec0ebb04",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "matrix.ionstar_union_min": {
-      "value": 1451,
+      "value": 1652,
       "fmt": ".0f",
       "unit": "",
-      "desc": "ionstar 20 union: min present accessions at empirical FDP \u22641%, three seeds",
+      "desc": "KOTH 0.7.0 ionstar individual-file union: min present accessions at empirical FDP ≤1%, three seeds",
       "expect": {
         "min": 0,
         "max": 1000000
       },
-      "checksum": "v2:2a3d253e5273a3e6",
+      "checksum": "v2:b3dfc696bb0a5008",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-13T19:58:03Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "matrix.positive_cells_millions": {
-      "value": 7.261199,
+      "value": 1.643432,
       "fmt": ".2f",
       "unit": "",
-      "desc": "Positive IonStar LFQ cells before UNO row filtering, millions",
+      "desc": "KOTH 0.7.0 positive IonStar target extraction cells, millions",
       "expect": {
         "min": 0,
         "max": 1000
       },
-      "checksum": "v2:c18024b803262282",
+      "checksum": "v2:82f696266b559879",
       "origin": {
         "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
-      }
-    },
-    "matrix.search_speedup": {
-      "value": 2.2084691777487344,
-      "fmt": ".1f",
-      "unit": "",
-      "desc": "Dedicated serialized Astral 100 ng triplicate search-only wall-time ratio, warm RT cache",
-      "expect": {
-        "min": 1,
-        "max": 1000
-      },
-      "checksum": "v2:c5f6e29ae5f7c4da",
-      "origin": {
-        "by": "analysis/scripts/gen_stats.py",
-        "at": "2026-09-14T03:11:42Z"
+        "at": "2026-09-15T05:34:46Z"
       }
     },
     "overlap.core_recovery_max": {

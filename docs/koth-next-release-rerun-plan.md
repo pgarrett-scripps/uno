@@ -1,6 +1,7 @@
 # UNO rerun with KOTH 0.7.0
 
-Status: execution authorized; 23-file scope uses consensus-row matrix search.
+Status: matrix execution, audited analysis, and manuscript update complete.
+Raw-mode and IM reruns remain pending. The 23-file scope uses consensus-row matrix search.
 This replaces the earlier 32-file/eight-matrix/144-search matrix proposal.
 Machine-readable selection: `benchmark/matrix_publication_koth070.json`.
 
@@ -200,6 +201,11 @@ statistics. Update software versions, Methods, captions and limitations. Run
 `just check-stats-deep` from `paper/`; visually inspect changed PDF/Word pages.
 Check manuscript paragraphs for repeated explanations and one-sentence fragments.
 
-Current manuscript numbers remain explicitly tied to the archived 0.6.0 LFQ /
-0.5.0 detection study until replacement results exist. Integration checks in
-this task do not count as the 75-search publication rerun.
+The replacement matrix evidence is complete in
+`benchmark/results/matrix_20260915_koth070/paper-report.json` and adopted by
+`paper/figdata/koth_matrix_study.json`. All 75 publication searches and 109 total
+job receipts passed the execution audit. Individual-file unions exceed consensus
+identification depth in both cohorts at matched 1% empirical FDP for every seed.
+Four timing-control identification outputs match publication outputs, but host
+overlap prevents a speed claim. The older raw-mode and IM evidence remains tied
+to its recorded builds until those separate queues run.
