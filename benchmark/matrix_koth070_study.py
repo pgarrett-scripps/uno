@@ -42,6 +42,21 @@ def hashes(paths):
     return {str(p): sha(p) for p in paths}
 
 
+def stage_run(batch, source):
+    """KOTH discovers real directories; individual tables may be symlinks."""
+    dest = batch / source.name
+    if dest.is_symlink():
+        assert dest.resolve() == source.resolve(), ('Unexpected batch link', dest)
+        dest.unlink()  # Remove only the old runner's link, never source data.
+    dest.mkdir(exist_ok=True)
+    for src in files(source):
+        link = dest / src.relative_to(source)
+        link.parent.mkdir(parents=True, exist_ok=True)
+        if not link.exists():
+            link.symlink_to(src)
+        assert link.resolve() == src.resolve()
+
+
 class Study:
     def __init__(self, out, threads=4, workers=2):
         self.out = out.resolve()
@@ -211,10 +226,7 @@ class Study:
         inputs = [self.out/'config/alignment.toml']
         for row in rows:
             src = d/'features'/row['run']
-            link = batch/row['run']
-            if not link.exists():
-                link.symlink_to(src, target_is_directory=True)
-            assert link.resolve() == src
+            stage_run(batch, src)
             inputs += files(src)
         assert len(list(batch.iterdir())) == len(rows)
         out = d/'aligned'/name

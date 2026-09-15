@@ -1,11 +1,12 @@
 import json
+import os
 from pathlib import Path
 import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from matrix_koth070_study import Study
+from matrix_koth070_study import Study, stage_run
 
 
 class DriverTests(unittest.TestCase):
@@ -13,6 +14,22 @@ class DriverTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.study = Study(Path(self.tmp.name))
+
+    def test_batch_discovery_sees_real_directories_and_preserves_sources(self):
+        source = self.study.out / 'features/run'
+        source.mkdir(parents=True)
+        for name in ['features.tsv', 'hills.tsv', 'config.toml']:
+            (source / name).write_text(name)
+        batch = self.study.out / 'batch'
+        batch.mkdir()
+        (batch / 'run').symlink_to(source, target_is_directory=True)
+        stage_run(batch, source)
+        stage_run(batch, source)  # Also safe when resuming a repaired batch.
+        with os.scandir(batch) as entries:
+            self.assertTrue(next(entries).is_dir(follow_symlinks=False))
+        for src in source.iterdir():
+            self.assertEqual((batch / 'run' / src.name).read_text(), src.name)
+            self.assertEqual(src.read_text(), src.name)
 
     def test_consensus_search_never_expands_members(self):
         matrix = self.study.out / 'aligned'
