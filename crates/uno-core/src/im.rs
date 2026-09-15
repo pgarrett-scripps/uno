@@ -275,12 +275,12 @@ mod soft_tests {
             std::process::id(), std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
         let mut model = ImModel::bundled().unwrap();
-        let path = dir.join(format!("{}.tsv", model.fingerprint()));
+        let path = dir.join(model.fingerprint());
         model.cache = std::sync::Mutex::new(crate::im_cache::PredictionCache::isolated(path.clone(), true));
         let queries = [("PEPTIDEK", 2), ("AAAAAAAR", 3), ("PEPTIDEK", 3), ("AAAAAAAR", 2)];
         let direct = model.predict_many(&queries);
         model.precompute_library(&["PEPTIDEK", "AAAAAAAR", "PEPTIDEK"], &[2, 3, 2, 0]);
-        let bytes = std::fs::read(&path).unwrap();
+        let bytes = crate::im_cache::tests::disk_snapshot(&path);
         // A backend that cannot infer proves both memory and fresh-model disk hits.
         model.backend = ImBackend::Gbdt(GBDT::new(&gbdt::config::Config::new()));
         let cached = model.predict_many_cached(&queries);
@@ -297,7 +297,7 @@ mod soft_tests {
                 .map(|(&(_, z), &p)| (z, p * scale, p))).collect();
             assert_eq!(soft_residuals(&reloaded, &rows), calibrated_residuals(&expected));
         }
-        assert_eq!(std::fs::read(&path).unwrap(), bytes);
+        assert_eq!(crate::im_cache::tests::disk_snapshot(&path), bytes);
         std::fs::remove_dir_all(dir).unwrap();
     }
 

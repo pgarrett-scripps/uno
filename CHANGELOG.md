@@ -5,6 +5,7 @@
 - Added charge-aware IM training and fine-tuning using the shared RT sequence CNN, with Rust inspection, prediction, and independent evaluation.
 - The bundled IM CNN supplies a default soft classifier feature (`--no-im` disables it; `--im-model` overrides it) after RT/mass shortlisting; there is no IM cutoff. Incompatible legacy feature schemas are rejected.
 - IM search precomputes the target/decoy library at observed IM charges and caches raw predictions across runs and calibration attempts, keyed by model, sequence, and charge. `UNO_IM_CACHE_DIR` sets storage; `UNO_IM_CACHE=0` disables caching. Shortlist calibration remains run-specific.
+- IM caches now use Zstd-compressed Parquet chunks in reusable, per-user OS temporary storage. `UNO_IM_CACHE_DIR` can select persistent storage. Atomic publication keeps incomplete writes invisible; old TSV caches remain untouched.
 - The [27-search trial](docs/im-cnn-results-20260914.md) improved six of nine CNN/off pairs, lost two, and tied one. Median depth increased in all three acquisitions, but the predefined consistency rule was not met; the default promotion retains this limitation.
 
 ## Unreleased — top_k throttle fix + ms1searchpy-comparable peptide metric
