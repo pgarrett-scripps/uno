@@ -135,17 +135,30 @@ pub fn load(
                 "invalid peptide decoy flag"
             );
             let decoy = row["decoy"] == "1";
-            let all: Vec<_> = row["proteins"].split(';').collect();
-            ensure!(
-                all.iter()
-                    .all(|p| p.starts_with(&cfg.decoy_prefix) == decoy),
-                "decoy flag/prefix mismatch; configure the actual search decoy prefix"
-            );
-            let proteins: Vec<_> = all
-                .into_iter()
-                .filter(|p| admitted.contains(*p))
-                .map(str::to_owned)
-                .collect();
+            // Uno strips decoy tags from accessions and uses (decoy, accession)
+            // as the identity. The authoritative flag must define the null namespace.
+            let mut proteins = Vec::new();
+            for accession in row["proteins"].split(';') {
+                ensure!(!accession.is_empty(), "empty protein accession");
+                let name = if decoy {
+                    format!(
+                        "{}{}",
+                        cfg.decoy_prefix,
+                        accession
+                            .strip_prefix(&cfg.decoy_prefix)
+                            .unwrap_or(accession)
+                    )
+                } else {
+                    ensure!(
+                        !accession.starts_with(&cfg.decoy_prefix),
+                        "target accession collides with the quantitative decoy namespace"
+                    );
+                    accession.to_owned()
+                };
+                if admitted.contains(&name) {
+                    proteins.push(name);
+                }
+            }
             let sequence = &row["sequence"];
             if proteins.is_empty() || sequence.len() < cfg.min_length {
                 continue;

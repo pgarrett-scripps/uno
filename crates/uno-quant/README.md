@@ -48,12 +48,16 @@ Export each single-run uno search without changing its identification settings:
 manifest. Include at least two independent files per condition. Evidence files
 are schema 1 and preserve feature/peptide indices, charge, native mobility,
 observed mass/RT, intensity, explicit decoy labels, and the identity evidence type.
+The `run` field retains the input loader's quantitative column label (for example
+`intensityApex`); the sample manifest assigns the biological run name explicitly.
 The exporter supports single-run input only; use uno's existing matrix path for
 the separate KOTH-LFQ matrix option.
 
 The adapter admits proteins identified in any run at the specified protein
 ID threshold (`--max-protein-qvalue`, default 0.01) and their prefix-matched decoy
-counterparts. Set `--decoy-prefix` to the actual search convention. It uses uno's
+counterparts. Uno stores target and decoy proteins under the same accession;
+the authoritative `decoy` flag creates a separate quantitative namespace using
+`--decoy-prefix`. No peptide confidence is inferred from that label. It uses uno's
 RT/mass-gated assignments instead of inventing an upstream PFM-ML qpred score.
 This is an explicit methodological adaptation requiring independent biological
 calibration; the union is not claimed to have cohort-wide 1% identification FDR.

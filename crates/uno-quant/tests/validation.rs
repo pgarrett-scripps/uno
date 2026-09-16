@@ -55,10 +55,10 @@ fn uno_evidence_retains_decoys_and_drops_zero_signal() {
     for i in 0..4 {
         fs::write(
             tmp.path().join(format!("p{i}.tsv")),
-            "accession\tdecoy\tq_value\nP\t0\t0.001\nDECOY_P\t1\t0.8\n",
+            "accession\tdecoy\tq_value\nP\t0\t0.001\nP\t1\t0.8\n",
         )
         .unwrap();
-        let rows=format!("{headers}1\tr{i}\t0\t0\tPEPTIDE\t0\tP\t2\t\t900\t12\t100\tuno_ms1_rt_mass_assignment\n1\tr{i}\t1\t1\tEDITPEP\t1\tDECOY_P\t2\t\t900\t12\t50\tuno_ms1_rt_mass_assignment\n1\tr{i}\t2\t2\tZEROROW\t0\tP\t2\t\t900\t12\t0\tuno_ms1_rt_mass_assignment\n");
+        let rows=format!("{headers}1\tr{i}\t0\t0\tPEPTIDE\t0\tP\t2\t\t900\t12\t100\tuno_ms1_rt_mass_assignment\n1\tr{i}\t1\t1\tEDITPEP\t1\tP\t2\t\t900\t12\t50\tuno_ms1_rt_mass_assignment\n1\tr{i}\t2\t2\tZEROROW\t0\tP\t2\t\t900\t12\t0\tuno_ms1_rt_mass_assignment\n");
         fs::write(tmp.path().join(format!("e{i}.tsv")), rows).unwrap();
         manifest += &format!("r{i}\tS{}\te{i}.tsv\tp{i}.tsv\n", if i < 2 { 1 } else { 2 });
     }
