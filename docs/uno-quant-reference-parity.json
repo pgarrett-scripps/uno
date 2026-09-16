@@ -1,6 +1,6 @@
 {
   "scope": "Numerical fixtures only; not biological LFQ validation",
-  "binary_sha256": "025e1a42d9a9d90039e5fdbb01dd0c2e71c3023b431a5e292bf3120e27ea7135",
+  "binary_sha256": "677ddae21379528096cb210c8d3ac95c76b638fdc98d4fc32e118279271f02c2",
   "source_hashes": {
     "Cargo.lock": "5245ebcd5450347e0c9c484de1394852b06f8ea0ade0e1e93951592e270d5104",
     "crates/uno-quant/src/rng.rs": "75d645d343ae3e2eef33d1576e27749de15dd277ba51d72a56fab143d8cf180d",
@@ -10,7 +10,7 @@
     "crates/uno-quant/src/input.rs": "12d281bb6c62dadb50c06ec1e518c2c7657ba8b12940d0ec7d480f2c9b01323e",
     "crates/uno-quant/src/stats.rs": "2631d5dc12c7e2d35155d73dec5ba99cd2457e2667065ba7002ad7daeefd20de",
     "crates/uno-quant/src/main.rs": "800494e665feba221fb90bf6c92b52c764165f0bb3ead8ffe45fc2969036bd4e",
-    "crates/uno-quant/src/uno_adapter.rs": "be7153646d31a9c56008fd9f76c50ef2adc095e3a28e8be58a88c57f3fe63fb0",
+    "crates/uno-quant/src/uno_adapter.rs": "34a3b5d6bca516ef0831b0b12ba0ff9eb2a194de900037f66900b156c8567b02",
     "tools/quant-reference/uv.lock": "3516a9f1b4bce6e66cbe7645f4b14eaaa89da0aed9d1a13cc8a22b1dfa009f49",
     "tools/quant-reference/check_parity.py": "8e8091153f26dbf35aab129de7041365fdcc324af4c57bd22fdebd05bb4805c5"
   },
@@ -98,7 +98,7 @@
       },
       "group_partition_equal": true,
       "scope": "Synthetic numerical parity, not biological accuracy or FDR validation",
-      "evidence_directory": "target/parity-release-baseline"
+      "evidence_directory": "target/parity-final-baseline"
     },
     {
       "status": "pass",
@@ -183,7 +183,7 @@
       },
       "group_partition_equal": true,
       "scope": "Synthetic numerical parity, not biological accuracy or FDR validation",
-      "evidence_directory": "target/parity-release-median"
+      "evidence_directory": "target/parity-final-median"
     },
     {
       "status": "pass",
@@ -268,7 +268,7 @@
       },
       "group_partition_equal": true,
       "scope": "Synthetic numerical parity, not biological accuracy or FDR validation",
-      "evidence_directory": "target/parity-release-none"
+      "evidence_directory": "target/parity-final-none"
     },
     {
       "status": "pass",
@@ -353,7 +353,7 @@
       },
       "group_partition_equal": true,
       "scope": "Synthetic numerical parity, not biological accuracy or FDR validation",
-      "evidence_directory": "target/parity-release-structural"
+      "evidence_directory": "target/parity-final-structural"
     }
   ],
   "tests": {
