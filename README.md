@@ -89,7 +89,7 @@ are returned unchanged. Validation showed fewer empty low-input runs with
 
 - `crates/` — the Rust workspace.
 - `models/` — distilled RT/IM models used at search time.
-- `paper/` — the manuscript (Typst source + PDF).
+- [uno-paper](https://github.com/pgarrett-scripps/uno-paper) — the separate manuscript repository; `paper/` is a compatibility link to the sibling checkout.
 - `figures/` — figures for the paper.
 
 Build artifacts (`target/`), the Python virtualenv (`.venv/`), RT training data
