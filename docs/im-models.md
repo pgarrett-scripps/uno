@@ -190,4 +190,4 @@ entrapment FDP, with whole tied-score blocks and same-species group expansion.
 All nine paired CNN outcomes are retained. Improved prediction error alone
 does not establish improved protein identification.
 
-The [completed 27-search comparison](../docs/im-cnn-results-20260914.md) found six CNN gains, two losses, and one tie, with higher medians in all three files; the predefined consistency rule was not met.
+The [completed 27-search comparison](https://github.com/pgarrett-scripps/uno-paper/blob/main/docs/im-cnn-results-20260914.md) found six CNN gains, two losses, and one tie, with higher medians in all three files; the predefined consistency rule was not met.

@@ -28,3 +28,6 @@ experiments_archive/
 # paper/references.bib, not in the tree. Root-level only, so the tracked
 # paper/paper.pdf is unaffected.
 /*.pdf
+
+# Optional large regression-test inputs
+/tests/data/

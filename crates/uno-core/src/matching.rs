@@ -226,8 +226,8 @@ mod tests {
     #[test]
     fn matches_real_data() {
         let (Some(features), Some(fasta)) = (
-            crate::test_input("benchmark/data/09744.features.tsv"),
-            crate::test_input("benchmark/data/entrap_human_yeast.fasta"),
+            crate::test_input("tests/data/09744.features.tsv"),
+            crate::test_input("tests/data/entrap_human_yeast.fasta"),
         ) else {
             return;
         };
