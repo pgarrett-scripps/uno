@@ -13,6 +13,7 @@ use uno_core::{
 mod koth_ingest;
 mod rt_cli;
 mod im_cli;
+mod quant_export;
 
 #[cfg(test)]
 mod rt_command_tests {
@@ -156,6 +157,11 @@ struct Cli {
     /// peptide, decoy, proteins, charge, mass, rt, <run1..runN>.
     #[arg(long)]
     out_peptides: Option<PathBuf>,
+
+    /// Export single-run target/decoy MS1 evidence for experimental uno-quant.
+    /// Preserves feature IDs and mobility; does not claim peptide-level q-values.
+    #[arg(long, conflicts_with_all = ["matrix", "matrix_long", "matrix_batch_out"])]
+    out_quant_evidence: Option<PathBuf>,
 
     /// Write the precursor × sample LFQ matrix to TSV (`--matrix` only), Sage-lfq
     /// style: one row per precursor (peptide + charge) with its intensity in each
@@ -526,6 +532,10 @@ fn search_loaded(cli:&Cli,config:&Config,matrix:&FeatureMatrix,db:&PeptideDb,mod
             result.peptides.len(),
             path.display()
         );
+    }
+
+    if let Some(path) = &cli.out_quant_evidence {
+        quant_export::write(path, &matrix, &db, &result.peptides)?;
     }
 
     // Multi-sample quant. Correct the peptide→feature assignment (feature
