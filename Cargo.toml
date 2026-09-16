@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/uno-core", "crates/uno", "crates/uno-rt-train", "crates/uno-lightgbm-sys"]
+members = ["crates/uno-core", "crates/uno", "crates/uno-rt-train", "crates/uno-lightgbm-sys", "crates/uno-quant"]
 
 [profile.release]
 # Whole-program optimization for the numeric hot paths (matching, RT/MLP
@@ -36,6 +36,6 @@ sage-core = { path = "../sage/crates/sage" }
 # In-process feature finding straight from raw data (mzML / Bruker .d / Thermo
 # .raw), so uno can run without a prior biosaur2 pass. `tdf` (Bruker) is on by
 # default; `thermo` (native .raw) is opt-in (needs a .NET 8 runtime).
-# KOTH v0.7.0: 88f9e7c54c9ad3d6ca5a56a906703a3d46982f43.
+# LFQ-only KOTH candidate: dce83d5f2f01281d9464cbdc147d8759d78e0834.
 # Keep the sibling-source workflow, but reject an accidental release mismatch.
-koth_ff = { path = "../koth_rust/koth_ff", version = "=0.7.0" }
+koth_ff = { path = "../koth_rust/.worktrees/release-0.8.0/koth_ff", version = "=0.8.0" }

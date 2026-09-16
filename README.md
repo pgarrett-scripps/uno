@@ -13,12 +13,21 @@ intensities but omits some quality descriptors from individual feature tables.
 Digestion is reused from [sage-core](../sage); retention-time prediction is a
 pure-Rust learned model, with an on-data calibration step per run.
 
+## Experimental quantitative options (LFQ branch)
+
+This branch adds [uno-quant](crates/uno-quant/README.md), a Rust
+DirectMS1Quant-style contrast analyzer, and opt-in `--out-quant-evidence` exports
+from independent uno searches. The existing KOTH-matrix route remains the second
+quantitative option. Native-reference parity is tested; biological accuracy and
+error calibration are pending. Development is isolated on `codex/uno-lfq`.
+
 ## Workspace layout
 
 | crate | purpose |
 | --- | --- |
 | `uno-core` | search, scoring, and FDR library |
 | `uno` | command-line binary |
+| `uno-quant` | experimental quantitative contrast analysis |
 | `uno-rt-train/python` | shared optional PyTorch sequence-CNN trainer for `uno rt train` and `uno im train` |
 | `uno-rt-train` | legacy RT/IM tree-model research tools |
 | `uno-lightgbm-sys` | FFI bindings to a vendored LightGBM |
@@ -29,10 +38,11 @@ pure-Rust learned model, with an on-data calibration step per run.
 - **A sibling `sage` checkout.** The workspace has a path dependency
   `sage-core = { path = "../sage/crates/sage" }`, so `sage` must be cloned next
   to this repo before it will build.
-- **A sibling `koth_rust` checkout at `v0.7.0`** (commit
-  `88f9e7c54c9ad3d6ca5a56a906703a3d46982f43`) and the existing sibling `Sequoia`
-  checkout. Cargo enforces KOTH version `=0.7.0`; its source is still a local path
-  dependency. See [the LFQ migration](docs/matrix-input.md#koth-070-compatibility)
+- **KOTH 0.8.0 candidate source** at
+  `../koth_rust/.worktrees/release-0.8.0` (commit
+  `dce83d5f2f01281d9464cbdc147d8759d78e0834`) and the sibling `Sequoia`
+  checkout. This LFQ branch enforces KOTH version `=0.8.0`; the source remains a
+  local path dependency. See [the LFQ migration](docs/matrix-input.md#koth-070-compatibility)
   for new settings and schema-3 support.
 
 ```
