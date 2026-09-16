@@ -94,11 +94,11 @@ Leave them absent for shared-seed behavior; see `example_config.toml` for exampl
 Changing decoys also changes downstream peptide indexing, so an individual seed
 intervention is not a pure variance-component estimate.
 
-The [stability study](docs/stability-study.md) records the low-input failure
+The [stability study](https://github.com/pgarrett-scripps/uno-paper/blob/main/docs/stability-study.md) records the low-input failure
 mechanism, paired evaluation, and calibration checks. Historical manuscript
 outputs remain archived separately from new engine experiments.
 
-The current search includes [bounded RT recovery](docs/bounded-rt-recovery.md):
+The current search includes [bounded RT recovery](https://github.com/pgarrett-scripps/uno-paper/blob/main/docs/bounded-rt-recovery.md):
 when the usual search and its evidence-retention retry find no target proteins
 at 1% FDR, UNO attempts one additional broad RT calibration. Successful results
 are returned unchanged. Validation showed fewer empty low-input runs with
@@ -109,7 +109,9 @@ are returned unchanged. Validation showed fewer empty low-input runs with
 - `crates/` — the Rust workspace.
 - `models/` — sequence CNNs and historical RT/IM tree models.
 - [uno-paper](https://github.com/pgarrett-scripps/uno-paper) — the separate manuscript repository; `paper/` is a compatibility link to the sibling checkout.
-- `figures/` — figures for the paper.
+- [uno-lfq-paper](https://github.com/pgarrett-scripps/uno-lfq-paper) — LFQ manuscript and workflow studies.
+- Study analysis, figure/table generators, and evidence live with their respective papers.
+- `tests/fixtures/` — software regression-test configurations.
 
 Build artifacts (`target/`), the Python virtualenv (`.venv/`), RT training data
 (`data/`), and scratch outputs (`experiments/`) are intentionally not tracked.

@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn loads_single_run_features() {
-        let Some(path) = crate::test_input("benchmark/data/09744.features.tsv") else {
+        let Some(path) = crate::test_input("tests/data/09744.features.tsv") else {
             return;
         };
         let m = FeatureMatrix::load(&path).expect("load features");

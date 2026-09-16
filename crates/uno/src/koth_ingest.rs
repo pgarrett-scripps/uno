@@ -62,9 +62,9 @@ mod tests {
             assert_eq!(cfg.features.isotope_evidence_ratio_sigma, 0.75);
             assert_eq!(cfg.features.isotope_evidence_cosine_shape, 2.0);
         }
-        let standalone: KothConfig = toml::from_str(include_str!("../../../benchmark/koth_uno.toml")).unwrap();
+        let standalone: KothConfig = toml::from_str(include_str!("../../../tests/fixtures/koth_uno.toml")).unwrap();
         assert_eq!(toml::to_string(&standalone).unwrap(), toml::to_string(&orbitrap).unwrap());
-        let align: koth_ff::config::AlignConfig = toml::from_str(include_str!("../../../benchmark/koth_align.toml")).unwrap();
+        let align: koth_ff::config::AlignConfig = toml::from_str(include_str!("../../../tests/fixtures/koth_align.toml")).unwrap();
         align.lfq.consensus.validate().unwrap();
         assert_eq!(align.lfq.consensus.max_group_qvalue, 0.05);
         assert_eq!(align.lfq.rt_window_pct, 0.005);

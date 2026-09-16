@@ -1,5 +1,0 @@
-# Versions used by the fresh 2026-09-12 matrix analysis. Rust locks and binary
-# hashes are captured separately in benchmark/results/matrix_20260912/.
-numpy==1.26.4
-scipy==1.11.4
-pyarrow==24.0.0

@@ -28,8 +28,8 @@ the artifact loads with pure Rust and includes architecture, output
 normalization, label units, training settings and peptide lineage hashes.
 
 See [training and usage](../docs/im-models.md) and the reproducible scripts
-`benchmark/im_cnn_{prepare,study,diagnostics,check}.py`. Prediction accuracy and
+`../uno-paper/benchmark/im_cnn_{prepare,study,diagnostics,check}.py`. Prediction accuracy and
 search identification depth are separate outcomes; the experimental search
 comparison retains all three runs and three seeds for each arm.
 
-The [completed 27-search comparison](../docs/im-cnn-results-20260914.md) found six CNN gains, two losses, and one tie, with higher medians in all three files; the predefined consistency rule was not met.
+The [completed 27-search comparison](https://github.com/pgarrett-scripps/uno-paper/blob/main/docs/im-cnn-results-20260914.md) found six CNN gains, two losses, and one tie, with higher medians in all three files; the predefined consistency rule was not met.

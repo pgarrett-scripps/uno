@@ -403,7 +403,7 @@ mod tests {
     fn builds_human_ecoli_db() {
         // The two-proteome entrapment FASTA the benchmark uses. Portable and
         // in-repo (gitignored), rather than a path into a sibling checkout.
-        let Some(f) = crate::test_input("benchmark/data/entrap_human_yeast.fasta") else {
+        let Some(f) = crate::test_input("tests/data/entrap_human_yeast.fasta") else {
             return;
         };
         let cfg = DigestConfig::default();

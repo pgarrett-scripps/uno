@@ -1,8 +1,0 @@
-# uno digest aligned to ms1searchpy's defaults, so the benchmark isolates the
-# ENGINES (matching, RT, scoring) — not incidental digest differences.
-# ms1searchpy defaults: -lmin 7 -lmax 30 -mc 0 -fmods Carbamidomethyl@C.
-
-[digest]
-min_len = 7
-max_len = 30
-missed_cleavages = 0
