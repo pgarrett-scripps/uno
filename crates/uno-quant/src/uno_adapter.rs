@@ -4,6 +4,7 @@ use crate::{
     Config, Dataset, InputPeptide,
 };
 use anyhow::{ensure, Context, Result};
+use serde::Serialize;
 use std::{
     collections::{BTreeMap, BTreeSet},
     path::{Path, PathBuf},
@@ -16,11 +17,50 @@ fn relative(base: &Path, value: &str) -> PathBuf {
         base.join(p)
     }
 }
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct AdmissionPolicy {
+    pub exclusive_features: bool,
+    pub min_per_condition: usize,
+}
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct RunAudit {
+    pub sample: String,
+    pub candidate_assignments: usize,
+    pub candidate_features: usize,
+    pub ambiguous_features: usize,
+    pub excluded_ambiguous_assignments: usize,
+    pub retained_precursors: usize,
+}
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct AdmissionAudit {
+    pub policy: AdmissionPolicy,
+    pub runs: Vec<RunAudit>,
+    pub precursors_before_condition_filter: usize,
+    pub precursors_after_condition_filter: usize,
+}
 pub fn load(
     manifest: &Path,
     cfg: &Config,
     max_protein_qvalue: f64,
 ) -> Result<(Dataset, Vec<InputHash>)> {
+    let (data, hashes, _) = load_with_policy(
+        manifest,
+        cfg,
+        max_protein_qvalue,
+        &AdmissionPolicy::default(),
+    )?;
+    Ok((data, hashes))
+}
+pub fn load_with_policy(
+    manifest: &Path,
+    cfg: &Config,
+    max_protein_qvalue: f64,
+    policy: &AdmissionPolicy,
+) -> Result<(Dataset, Vec<InputHash>, AdmissionAudit)> {
+    let mut audit = AdmissionAudit {
+        policy: policy.clone(),
+        ..AdmissionAudit::default()
+    };
     ensure!(
         max_protein_qvalue.is_finite() && (0. ..=1.).contains(&max_protein_qvalue),
         "invalid protein identification qvalue threshold"
@@ -63,6 +103,10 @@ pub fn load(
     ensure!(
         n_s1 >= 2 && samples.len() - n_s1 >= 2,
         "at least two runs per condition required"
+    );
+    ensure!(
+        policy.min_per_condition <= n_s1 && policy.min_per_condition <= samples.len() - n_s1,
+        "minimum per-condition support exceeds replicate count"
     );
     let mut admitted = BTreeSet::new();
     for (_, _, _, path) in &samples {
@@ -111,6 +155,8 @@ pub fn load(
         let mut run_names = BTreeSet::new();
         let mut observations = BTreeSet::new();
         let mut best: BTreeMap<String, (f64, InputPeptide)> = BTreeMap::new();
+        let mut candidates = Vec::new();
+        let mut feature_keys: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for row in table {
             ensure!(
                 row["schema_version"] == "1"
@@ -192,15 +238,44 @@ pub fn load(
                 proteins,
                 values: vec![None; samples.len()],
             };
+            feature_keys
+                .entry(row["feature_id"].clone())
+                .or_default()
+                .insert(key.clone());
+            candidates.push((row["feature_id"].clone(), key, intensity, p));
+        }
+        let mut run_audit = RunAudit {
+            sample: samples[sample].0.clone(),
+            candidate_assignments: candidates.len(),
+            candidate_features: feature_keys.len(),
+            ambiguous_features: feature_keys.values().filter(|keys| keys.len() > 1).count(),
+            ..RunAudit::default()
+        };
+        // Symmetric target/decoy exclusion, before choosing the best remaining
+        // feature for a precursor. This permits an unambiguous lower-intensity
+        // observation to replace an excluded ambiguous maximum.
+        for (feature, key, intensity, p) in candidates {
+            if policy.exclusive_features && feature_keys[&feature].len() > 1 {
+                run_audit.excluded_ambiguous_assignments += 1;
+                continue;
+            }
             if best.get(&key).is_none_or(|(old, _)| intensity > *old) {
                 best.insert(key, (intensity, p));
             }
         }
+        run_audit.retained_precursors = best.len();
+        audit.runs.push(run_audit);
         for (key, (value, row)) in best {
             let dest = merged.entry(key).or_insert(row);
             dest.values[sample] = Some(value);
         }
     }
+    audit.precursors_before_condition_filter = merged.len();
+    merged.retain(|_, row| {
+        row.values[..n_s1].iter().flatten().count() >= policy.min_per_condition
+            && row.values[n_s1..].iter().flatten().count() >= policy.min_per_condition
+    });
+    audit.precursors_after_condition_filter = merged.len();
     Ok((
         Dataset {
             samples: samples.into_iter().map(|s| s.0).collect(),
@@ -208,5 +283,6 @@ pub fn load(
             rows: merged.into_values().collect(),
         },
         reader.hashes,
+        audit,
     ))
 }

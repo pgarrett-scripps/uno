@@ -96,3 +96,18 @@ sample files, and degenerate calibration panels fail explicitly instead of
 creating confidence values. FASTA gene annotation, experimental protein shifts,
 and multi-condition DirectMS1QuantMulti are not implemented. Cross-platform
 floating-point parity and biological calibration remain validation tasks.
+
+
+### Optional evidence admission gates
+
+`--exclusive-features` excludes a physical feature if it supports more than one
+admitted precursor identity, treating target and decoy candidates symmetrically.
+Exclusion precedes maximum-intensity selection, so an unambiguous alternative
+observation can still represent the precursor. This resolves signal ownership
+among admitted candidates; it does not establish peptide identification FDR.
+
+`--min-per-condition N` requires at least N positive observed runs in each
+condition before normalization and reference statistics. Both flags require
+`--samples`; both are off by default. The output manifest records the policy,
+per-run ambiguity exclusions, and precursor counts before/after support filtering.
+The native DirectMS1Quant input mode and default statistical method are unchanged.

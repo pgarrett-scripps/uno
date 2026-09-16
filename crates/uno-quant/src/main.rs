@@ -18,6 +18,12 @@ struct Args {
     /// Uno manifest: sample, condition (S1/S2), evidence, proteins. Experimental adaptation.
     #[arg(long, conflicts_with_all=["all_proteins","all_pfms","allowed_proteins","allowed_peptides"])]
     samples: Option<PathBuf>,
+    /// Reject features supporting more than one admitted precursor identity (symmetric target/decoy).
+    #[arg(long, requires = "samples")]
+    exclusive_features: bool,
+    /// Require this many observed runs in EACH condition before reference statistics.
+    #[arg(long, requires = "samples", default_value_t = 0)]
+    min_per_condition: usize,
     #[arg(long, default_value_t = 0.01)]
     max_protein_qvalue: f64,
     #[arg(long)]
@@ -65,15 +71,20 @@ fn main() -> Result<()> {
         allowed_proteins: a.allowed_proteins,
         allowed_peptides: a.allowed_peptides,
     };
-    let (data, hashes, mode) = if let Some(path) = &a.samples {
-        let (data, hashes) = uno_quant::uno_adapter::load(path, &cfg, a.max_protein_qvalue)?;
-        (data, hashes, "uno_ms1_adaptation")
+    let (data, hashes, mode, admission) = if let Some(path) = &a.samples {
+        let policy = uno_quant::uno_adapter::AdmissionPolicy {
+            exclusive_features: a.exclusive_features,
+            min_per_condition: a.min_per_condition,
+        };
+        let (data, hashes, audit) =
+            uno_quant::uno_adapter::load_with_policy(path, &cfg, a.max_protein_qvalue, &policy)?;
+        (data, hashes, "uno_ms1_adaptation", Some(audit))
     } else {
         let (data, hashes) = input::reference(&a.s1, &a.s2, &cfg, &options)?;
-        (data, hashes, "native_directms1quant")
+        (data, hashes, "native_directms1quant", None)
     };
     let analysis = uno_quant::analyze(&data, &cfg)?;
-    uno_quant::output::write(&a.out, &analysis, &hashes, mode)?;
+    uno_quant::output::write_with_admission(&a.out, &analysis, &hashes, mode, admission.as_ref())?;
     eprintln!(
         "{} eligible precursors; {} target proteins; {} significant (experimental, unvalidated)",
         analysis.eligible_precursors,

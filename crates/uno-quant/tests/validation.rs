@@ -94,3 +94,54 @@ fn tied_intensity_panel_is_explicitly_unsupported() {
         .to_string()
         .contains("quintile"));
 }
+
+#[test]
+fn exclusive_feature_gate_is_symmetric_and_keeps_alternative_observations() {
+    let tmp = tempfile::tempdir().unwrap();
+    let header = "schema_version\trun\tfeature_id\tpeptide_id\tsequence\tdecoy\tproteins\tcharge\tion_mobility\tobserved_mass\trt_minutes\tintensity\tidentity_evidence\n";
+    let mut design = "sample\tcondition\tevidence\tproteins\n".to_string();
+    for i in 0..4 {
+        fs::write(
+            tmp.path().join(format!("p{i}.tsv")),
+            "accession\tdecoy\tq_value\nP\t0\t0.001\n",
+        )
+        .unwrap();
+        // The strongest feature is shared by target and decoy. Both must lose
+        // that signal; the target has an independent lower-intensity feature.
+        let mut text = format!("{header}1\tr\t0\t0\tPEPTIDE\t0\tP\t2\t\t900\t12\t100\tuno_ms1_rt_mass_assignment\n1\tr\t0\t1\tEDITPEP\t1\tP\t2\t\t900\t12\t100\tuno_ms1_rt_mass_assignment\n1\tr\t1\t0\tPEPTIDE\t0\tP\t2\t\t900\t12\t50\tuno_ms1_rt_mass_assignment\n");
+        if i < 2 {
+            text.push_str(
+                "1\tr\t2\t2\tONESIDE\t0\tP\t2\t\t900\t12\t30\tuno_ms1_rt_mass_assignment\n",
+            );
+        }
+        fs::write(tmp.path().join(format!("e{i}.tsv")), text).unwrap();
+        design.push_str(&format!(
+            "r{i}\tS{}\te{i}.tsv\tp{i}.tsv\n",
+            if i < 2 { 1 } else { 2 }
+        ));
+    }
+    let path = tmp.path().join("samples.tsv");
+    fs::write(&path, design).unwrap();
+    let (baseline, _) = uno_adapter::load(&path, &Config::default(), 0.01).unwrap();
+    assert_eq!(baseline.rows.len(), 3);
+    let policy = uno_adapter::AdmissionPolicy {
+        exclusive_features: true,
+        min_per_condition: 2,
+    };
+    let (data, _, audit) =
+        uno_adapter::load_with_policy(&path, &Config::default(), 0.01, &policy).unwrap();
+    assert_eq!(data.rows.len(), 1);
+    assert_eq!(data.rows[0].sequence, "PEPTIDE");
+    assert_eq!(data.rows[0].values, vec![Some(50.); 4]);
+    assert_eq!(audit.precursors_before_condition_filter, 2);
+    assert_eq!(audit.precursors_after_condition_filter, 1);
+    assert!(audit
+        .runs
+        .iter()
+        .all(|r| r.ambiguous_features == 1 && r.excluded_ambiguous_assignments == 2));
+    let impossible = uno_adapter::AdmissionPolicy {
+        min_per_condition: 3,
+        ..policy
+    };
+    assert!(uno_adapter::load_with_policy(&path, &Config::default(), 0.01, &impossible).is_err());
+}
