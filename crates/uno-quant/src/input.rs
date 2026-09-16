@@ -78,7 +78,9 @@ fn float(row: &Row, key: &str) -> Result<f64> {
         .with_context(|| format!("invalid {key}: {}", row[key]))
 }
 fn py_float(value: f64) -> String {
-    if value.fract() == 0. {
+    if value.is_nan() {
+        "nan".to_string()
+    } else if value.fract() == 0. {
         format!("{value:.1}")
     } else {
         value.to_string()
@@ -195,8 +197,14 @@ pub fn reference(
             ensure!(intensity.is_finite() && intensity>0.,"nonpositive/nonfinite reference intensity for {seq}; supply missing rows rather than zeros");
             let charge: u8 = row["charge"].parse().context("invalid precursor charge")?;
             ensure!(charge > 0, "charge must be positive");
-            let im = float(row, "ion_mobility")?;
-            ensure!(im.is_finite(), "invalid mobility");
+            // pandas.read_table represents absent native mobility as NaN; its
+            // string "nan" is part of the reference precursor key.
+            let im = if row["ion_mobility"].trim().is_empty() {
+                f64::NAN
+            } else {
+                float(row, "ion_mobility")?
+            };
+            ensure!(!im.is_infinite(), "invalid mobility");
             let key = format!("{seq}{charge}{}", py_float(im));
             let entry = InputPeptide {
                 key: key.clone(),

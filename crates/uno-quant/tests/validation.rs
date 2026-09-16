@@ -145,3 +145,38 @@ fn exclusive_feature_gate_is_symmetric_and_keeps_alternative_observations() {
     };
     assert!(uno_adapter::load_with_policy(&path, &Config::default(), 0.01, &impossible).is_err());
 }
+
+#[test]
+fn native_missing_mobility_uses_pandas_nan_key_without_merging_zero() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut paths = Vec::new();
+    for i in 0..4 {
+        let base = tmp.path().join(format!("run{i}"));
+        let base = base.to_str().unwrap();
+        for suffix in ["_proteins.tsv", "_proteins_full.tsv"] {
+            fs::write(format!("{base}{suffix}"), "dbname\nP\n").unwrap();
+        }
+        fs::write(
+            format!("{base}_PFMs_ML.tsv"),
+            "seqs\tqpreds\tplen\nPEPTIDE\t0\t7\n",
+        )
+        .unwrap();
+        fs::write(format!("{base}_PFMs.tsv"),
+            "sequence\tproteins\tcharge\tion_mobility\tIntensity\tRT\nPEPTIDE\tP\t2\t\t100\t1\nPEPTIDE\tP\t2\tNaN\t200\t1\nPEPTIDE\tP\t2\t0.0\t50\t1\n").unwrap();
+        paths.push(std::path::PathBuf::from(format!(
+            "{base}_proteins_full.tsv"
+        )));
+    }
+    let (data, _) = input::reference(
+        &paths[..2],
+        &paths[2..],
+        &Config::default(),
+        &ReferenceOptions::default(),
+    )
+    .unwrap();
+    assert_eq!(data.rows.len(), 2);
+    let absent = data.rows.iter().find(|r| r.key == "PEPTIDE2nan").unwrap();
+    assert_eq!(absent.values, vec![Some(200.); 4]);
+    let zero = data.rows.iter().find(|r| r.key == "PEPTIDE20.0").unwrap();
+    assert_eq!(zero.values, vec![Some(50.); 4]);
+}
