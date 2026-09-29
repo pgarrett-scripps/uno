@@ -16,9 +16,32 @@ pub struct InputHash {
 pub struct Reader {
     pub hashes: Vec<InputHash>,
 }
-pub type Row = BTreeMap<String, String>;
+/// One TSV record addressed by column name. Records share their header index,
+/// so a row costs one `StringRecord` rather than a map of owned strings.
+pub struct Row {
+    columns: std::rc::Rc<BTreeMap<String, usize>>,
+    record: csv::StringRecord,
+}
+impl Row {
+    /// The value of an optional column, `None` when the file lacks it.
+    pub fn get(&self, name: &str) -> Option<&str> {
+        self.columns.get(name).map(|&i| &self.record[i])
+    }
+}
+impl std::ops::Index<&str> for Row {
+    type Output = str;
+    fn index(&self, name: &str) -> &str {
+        &self.record[self.columns[name]]
+    }
+}
 impl Reader {
-    pub fn table(&mut self, path: &Path, required: &[&str]) -> Result<Vec<Row>> {
+    /// Hash `path`, check its header, and hand each record to `each` in file order.
+    pub fn each(
+        &mut self,
+        path: &Path,
+        required: &[&str],
+        mut each: impl FnMut(&Row) -> Result<()>,
+    ) -> Result<()> {
         let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
         self.hashes.push(InputHash {
             path: path.to_path_buf(),
@@ -40,16 +63,32 @@ impl Reader {
                 path.display()
             );
         }
-        reader
-            .records()
-            .map(|r| {
-                Ok(headers
-                    .iter()
-                    .map(str::to_owned)
-                    .zip(r?.iter().map(str::to_owned))
-                    .collect())
-            })
-            .collect()
+        let columns = std::rc::Rc::new(
+            headers
+                .iter()
+                .enumerate()
+                .map(|(i, h)| (h.to_owned(), i))
+                .collect::<BTreeMap<_, _>>(),
+        );
+        let mut row = Row {
+            columns,
+            record: csv::StringRecord::new(),
+        };
+        while reader.read_record(&mut row.record)? {
+            each(&row)?;
+        }
+        Ok(())
+    }
+    pub fn table(&mut self, path: &Path, required: &[&str]) -> Result<Vec<Row>> {
+        let mut rows = Vec::new();
+        self.each(path, required, |r| {
+            rows.push(Row {
+                columns: r.columns.clone(),
+                record: r.record.clone(),
+            });
+            Ok(())
+        })?;
+        Ok(rows)
     }
     pub fn lines(&mut self, path: &Path) -> Result<BTreeSet<String>> {
         let bytes = std::fs::read(path)?;
@@ -75,7 +114,7 @@ fn companion(path: &Path, suffix: &str) -> Result<PathBuf> {
 fn float(row: &Row, key: &str) -> Result<f64> {
     row[key]
         .parse()
-        .with_context(|| format!("invalid {key}: {}", row[key]))
+        .with_context(|| format!("invalid {key}: {}", &row[key]))
 }
 fn py_float(value: f64) -> String {
     if value.is_nan() {
@@ -123,7 +162,7 @@ pub fn reference(
                 companion(path, "_proteins.tsv")?
             };
             for row in reader.table(&p, &["dbname"])? {
-                let name = row["dbname"].clone();
+                let name = row["dbname"].to_owned();
                 if !options.all_proteins {
                     allowed_proteins.insert(format!("{}{name}", cfg.decoy_prefix));
                 }
@@ -138,7 +177,7 @@ pub fn reference(
                 if (options.all_pfms || float(&row, "qpreds")? <= 10.)
                     && float(&row, "plen")? >= cfg.min_length as f64
                 {
-                    allowed_peptides.insert(row["seqs"].clone());
+                    allowed_peptides.insert(row["seqs"].to_owned());
                 }
             }
         }
@@ -208,7 +247,7 @@ pub fn reference(
             let key = format!("{seq}{charge}{}", py_float(im));
             let entry = InputPeptide {
                 key: key.clone(),
-                sequence: seq.clone(),
+                sequence: seq.to_owned(),
                 proteins,
                 values: vec![None; paths.len()],
             };
