@@ -28,6 +28,21 @@ pub struct QuantArgs {
     /// Require this many observed runs in EACH condition before reference statistics.
     #[arg(long, requires = "samples", default_value_t = 0)]
     min_per_condition: usize,
+    /// Give each feature only to its best row by per-run protein binomial score (the matrix-path rule).
+    #[arg(long, requires = "samples")]
+    feature_competition: bool,
+    /// Keep only confident assignments from the manifest's `peptide_scores` (uno --out-peptide-scores).
+    #[arg(long, requires = "samples", default_value = "none")]
+    peptide_confidence: uno_adapter::PeptideConfidence,
+    /// Per-run target-decoy q-value threshold on `ml` for `--peptide-confidence qvalue`.
+    #[arg(long, requires = "samples", default_value_t = 0.01)]
+    peptide_qvalue: f64,
+    /// `apex` (exported intensity) or `integrated` (intensitySum from the manifest's `features`).
+    #[arg(long, requires = "samples", default_value = "apex")]
+    intensity: uno_adapter::IntensityKind,
+    /// Representative observation per precursor and run: `max-intensity` or `min-deviation`.
+    #[arg(long, requires = "samples", default_value = "max-intensity")]
+    reduction: uno_adapter::Reduction,
     #[arg(long, default_value_t = 0.01)]
     max_protein_qvalue: f64,
     #[arg(long)]
@@ -79,6 +94,15 @@ pub fn run(a: QuantArgs) -> Result<()> {
         let policy = uno_adapter::AdmissionPolicy {
             exclusive_features: a.exclusive_features,
             min_per_condition: a.min_per_condition,
+            feature_competition: a.feature_competition,
+            peptide_confidence: a.peptide_confidence,
+            peptide_qvalue: if a.peptide_confidence == uno_adapter::PeptideConfidence::Qvalue {
+                a.peptide_qvalue
+            } else {
+                0.
+            },
+            intensity: a.intensity,
+            reduction: a.reduction,
         };
         let (data, hashes, audit) =
             uno_adapter::load_with_policy(path, &cfg, a.max_protein_qvalue, &policy)?;
