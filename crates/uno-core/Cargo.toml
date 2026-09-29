@@ -21,6 +21,10 @@ sequoia-boost.workspace = true
 sha2 = "0.10"
 parquet = { version = "53.4", default-features = false, features = ["zstd"] }
 tempfile = "3"
+# DirectMS1Quant statistics (quant::directms1).
+statrs = "0.18"
+nalgebra = "0.33"
+levenberg-marquardt = { version = "0.14", features = ["minpack-compat"] }
 
 [target.'cfg(unix)'.dependencies]
 rustix = { version = "1", features = ["process"] }

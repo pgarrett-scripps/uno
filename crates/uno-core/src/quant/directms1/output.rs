@@ -1,4 +1,4 @@
-use crate::{input::InputHash, Analysis};
+use super::{input::InputHash, Analysis};
 use anyhow::{Context, Result};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -17,7 +17,7 @@ pub fn write_with_admission(
     a: &Analysis,
     inputs: &[InputHash],
     mode: &str,
-    admission: Option<&crate::uno_adapter::AdmissionAudit>,
+    admission: Option<&super::uno_adapter::AdmissionAudit>,
 ) -> Result<()> {
     // Exclusive directory creation prevents accidental replacement of a previous analysis.
     std::fs::create_dir(out)

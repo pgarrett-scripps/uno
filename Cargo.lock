@@ -2897,7 +2897,9 @@ dependencies = [
  "anyhow",
  "csv",
  "gbdt",
+ "levenberg-marquardt",
  "log",
+ "nalgebra",
  "parquet",
  "rayon",
  "rustc-hash 2.1.3",
@@ -2907,6 +2909,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "statrs",
  "tempfile",
  "uno-lightgbm-sys",
 ]
@@ -2916,22 +2919,6 @@ name = "uno-lightgbm-sys"
 version = "0.1.0"
 dependencies = [
  "anyhow",
-]
-
-[[package]]
-name = "uno-quant"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "csv",
- "levenberg-marquardt",
- "nalgebra",
- "serde",
- "serde_json",
- "sha2",
- "statrs",
- "tempfile",
 ]
 
 [[package]]

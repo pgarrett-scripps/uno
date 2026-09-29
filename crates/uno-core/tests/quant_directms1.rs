@@ -1,5 +1,5 @@
 use std::fs;
-use uno_quant::{
+use uno_core::quant::directms1::{
     analyze,
     input::{self, ReferenceOptions},
     uno_adapter, Config, Dataset, InputPeptide,

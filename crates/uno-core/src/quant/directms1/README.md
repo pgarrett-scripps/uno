@@ -1,14 +1,14 @@
-# uno-quant (experimental)
+# uno quant (experimental DirectMS1Quant port)
 
 Rust implementation of the two-condition DirectMS1Quant workflow, pinned to
-ms1searchpy `9df4a941a901aac657b1c9ab5229cb49671e3c7d`. It is separate from the
-uno identification CLI; no existing search behavior is changed by default.
+ms1searchpy `9df4a941a901aac657b1c9ab5229cb49671e3c7d`. It runs as the
+`uno quant` subcommand; no existing search behavior is changed by default.
 
 ## Native reference inputs
 
 ```sh
-cargo build --release -p uno-quant
-./target/release/uno-quant \
+cargo build --release -p uno
+./target/release/uno quant \
   --s1 runA1_proteins_full.tsv runA2_proteins_full.tsv \
   --s2 runB1_proteins_full.tsv runB2_proteins_full.tsv \
   --out new-quant-directory
@@ -40,7 +40,7 @@ Export each single-run uno search without changing its identification settings:
 ```sh
 ./target/release/uno --features run.tsv --fasta database.fasta \
   --out-proteins run.proteins.tsv --out-quant-evidence run.evidence.tsv
-./target/release/uno-quant --samples samples.tsv --out new-uno-quant-directory
+./target/release/uno quant --samples samples.tsv --out new-uno-quant-directory
 ```
 
 `samples.tsv` has tab-separated columns `sample`, `condition`, `evidence`, and
@@ -73,7 +73,7 @@ uv run --project tools/quant-reference python tools/quant-reference/check_parity
   --out target/parity-new
 uv run --project tools/quant-reference python tools/quant-reference/check_parity.py \
   --out target/parity-missing-new --missing --structural
-cargo test -p uno-quant
+cargo test -p uno-core --test quant_directms1
 ```
 
 The harness verifies the unmodified reference source hash, creates deterministic

@@ -14,6 +14,7 @@ mod koth_ingest;
 mod rt_cli;
 mod im_cli;
 mod quant_export;
+mod quant_cli;
 
 #[cfg(test)]
 mod rt_command_tests {
@@ -158,10 +159,17 @@ struct Cli {
     #[arg(long)]
     out_peptides: Option<PathBuf>,
 
-    /// Export single-run target/decoy MS1 evidence for experimental uno-quant.
+    /// Export single-run target/decoy MS1 evidence for experimental `uno quant`.
     /// Preserves feature IDs and mobility; does not claim peptide-level q-values.
     #[arg(long, conflicts_with_all = ["matrix", "matrix_long", "matrix_batch_out"])]
     out_quant_evidence: Option<PathBuf>,
+
+    /// Write the selected calibration's per-peptide ML score, mass+RT deviation,
+    /// rank fraction and ensemble membership (one row per scored peptide, target
+    /// and decoy). Read by `uno quant --peptide-confidence`. Output only: the
+    /// identification result is unchanged.
+    #[arg(long, conflicts_with_all = ["matrix", "matrix_long", "matrix_batch_out"])]
+    out_peptide_scores: Option<PathBuf>,
 
     /// Write the precursor × sample LFQ matrix to TSV (`--matrix` only), Sage-lfq
     /// style: one row per precursor (peptide + charge) with its intensity in each
@@ -234,6 +242,9 @@ fn main() -> Result<()> {
         None => Config::default(),
     };
     config.apply_cli_seed(cli.seed);
+    if let Some(path) = &cli.out_peptide_scores {
+        config.scoring.diagnostic_peptides_path = Some(path.to_string_lossy().into_owned());
+    }
 
     if let Some(out)=&cli.matrix_batch_out { return search_batch(&cli,&config,out); }
 

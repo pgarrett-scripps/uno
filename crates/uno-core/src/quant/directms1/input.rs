@@ -1,4 +1,4 @@
-use crate::{Config, Dataset, InputPeptide};
+use super::{Config, Dataset, InputPeptide};
 use anyhow::{bail, ensure, Context, Result};
 use serde::Serialize;
 use sha2::{Digest, Sha256};

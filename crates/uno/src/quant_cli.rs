@@ -1,16 +1,20 @@
+//! `uno quant`: DirectMS1Quant-style two-condition contrast inside uno.
+//!
+//! Native mode (`--s1/--s2`) reads ms1searchpy tables and reproduces the pinned
+//! reference. Uno mode (`--samples`) reads uno per-run searches
+//! (`--out-proteins`, `--out-quant-evidence`); with no option flags it is the
+//! `reference` adaptation that the former `uno-quant` binary implemented.
 use anyhow::Result;
-use clap::Parser;
+use clap::Args;
 use std::path::PathBuf;
-use uno_quant::{
+use uno_core::quant::directms1::{
+    self as dms1,
     input::{self, ReferenceOptions},
-    Config,
+    uno_adapter, Config,
 };
-#[derive(Parser)]
-#[command(
-    version,
-    about = "Experimental Rust DirectMS1Quant-style contrast analysis on native reference evidence"
-)]
-struct Args {
+
+#[derive(Debug, Args)]
+pub struct QuantArgs {
     #[arg(long,num_args=1..,required_unless_present="samples",conflicts_with="samples")]
     s1: Vec<PathBuf>,
     #[arg(long,num_args=1..,required_unless_present="samples",conflicts_with="samples")]
@@ -53,8 +57,8 @@ struct Args {
     #[arg(long)]
     allowed_peptides: Option<PathBuf>,
 }
-fn main() -> Result<()> {
-    let a = Args::parse();
+
+pub fn run(a: QuantArgs) -> Result<()> {
     let cfg = Config {
         min_samples: a.min_samples,
         min_length: a.min_length,
@@ -72,19 +76,19 @@ fn main() -> Result<()> {
         allowed_peptides: a.allowed_peptides,
     };
     let (data, hashes, mode, admission) = if let Some(path) = &a.samples {
-        let policy = uno_quant::uno_adapter::AdmissionPolicy {
+        let policy = uno_adapter::AdmissionPolicy {
             exclusive_features: a.exclusive_features,
             min_per_condition: a.min_per_condition,
         };
         let (data, hashes, audit) =
-            uno_quant::uno_adapter::load_with_policy(path, &cfg, a.max_protein_qvalue, &policy)?;
+            uno_adapter::load_with_policy(path, &cfg, a.max_protein_qvalue, &policy)?;
         (data, hashes, "uno_ms1_adaptation", Some(audit))
     } else {
         let (data, hashes) = input::reference(&a.s1, &a.s2, &cfg, &options)?;
         (data, hashes, "native_directms1quant", None)
     };
-    let analysis = uno_quant::analyze(&data, &cfg)?;
-    uno_quant::output::write_with_admission(&a.out, &analysis, &hashes, mode, admission.as_ref())?;
+    let analysis = dms1::analyze(&data, &cfg)?;
+    dms1::output::write_with_admission(&a.out, &analysis, &hashes, mode, admission.as_ref())?;
     eprintln!(
         "{} eligible precursors; {} target proteins; {} significant (experimental, unvalidated)",
         analysis.eligible_precursors,

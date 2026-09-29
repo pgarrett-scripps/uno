@@ -1,4 +1,4 @@
-//! Experimental Rust reimplementation of pinned DirectMS1Quant contrast analysis.
+//! Rust reimplementation of pinned DirectMS1Quant contrast analysis, part of uno-core.
 //! Adapted from Mark Ivanov's Apache-2.0 implementation; see THIRD_PARTY.md.
 pub mod input;
 pub mod order;

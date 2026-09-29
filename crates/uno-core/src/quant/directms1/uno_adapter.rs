@@ -1,5 +1,5 @@
 //! Uno-specific admission policy; deliberately distinct from native-reference mode.
-use crate::{
+use super::{
     input::{InputHash, Reader},
     Config, Dataset, InputPeptide,
 };
