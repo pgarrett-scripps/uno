@@ -111,7 +111,7 @@ def compare(reference, rust, numeric, categorical, abs_tol, rel_tol):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out', type=Path, required=True)
-    parser.add_argument('--binary', type=Path, default=ROOT/'target/debug/uno-quant')
+    parser.add_argument('--binary', type=Path, default=ROOT/'target/debug/uno')
     parser.add_argument('--missing', action='store_true')
     parser.add_argument('--structural', action='store_true')
     parser.add_argument('--normalization', type=int, choices=(0, 1, 2), default=2)
@@ -123,7 +123,7 @@ def main():
     paths = fixture(out/'inputs', missing=args.missing, structural=args.structural)
     commands = [
         [sys.executable, str(REFERENCE), '-S1', *paths[:3], '-S2', *paths[3:], '-out', str(out/'reference'), '-intensity_norm', str(args.normalization)],
-        [str(args.binary.resolve()), '--s1', *paths[:3], '--s2', *paths[3:], '--out', str(out/'rust'), '--normalization', str(args.normalization)]
+        [str(args.binary.resolve()), 'quant', '--s1', *paths[:3], '--s2', *paths[3:], '--out', str(out/'rust'), '--normalization', str(args.normalization)]
     ]
     if args.absolute_fold_change:
         commands[0] += ['-fold_change_abs']

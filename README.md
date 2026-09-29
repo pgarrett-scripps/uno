@@ -15,8 +15,8 @@ pure-Rust learned model, with an on-data calibration step per run.
 
 ## Experimental quantitative options (LFQ branch)
 
-This branch adds [uno-quant](crates/uno-quant/README.md), a Rust
-DirectMS1Quant-style contrast analyzer, and opt-in `--out-quant-evidence` exports
+This branch adds `uno quant` ([details](crates/uno-core/src/quant/directms1/README.md)), a Rust
+DirectMS1Quant-style contrast analyzer in `uno-core`, and opt-in `--out-quant-evidence` exports
 from independent uno searches. The existing KOTH-matrix route remains the second
 quantitative option. Native-reference parity is tested; biological accuracy and
 error calibration are pending. Development is isolated on `codex/uno-lfq`.
@@ -25,9 +25,8 @@ error calibration are pending. Development is isolated on `codex/uno-lfq`.
 
 | crate | purpose |
 | --- | --- |
-| `uno-core` | search, scoring, and FDR library |
+| `uno-core` | search, scoring, FDR, and quantitative contrast library |
 | `uno` | command-line binary |
-| `uno-quant` | experimental quantitative contrast analysis |
 | `uno-rt-train/python` | shared optional PyTorch sequence-CNN trainer for `uno rt train` and `uno im train` |
 | `uno-rt-train` | legacy RT/IM tree-model research tools |
 | `uno-lightgbm-sys` | FFI bindings to a vendored LightGBM |

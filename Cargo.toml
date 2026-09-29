@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/uno-core", "crates/uno", "crates/uno-rt-train", "crates/uno-lightgbm-sys", "crates/uno-quant"]
+members = ["crates/uno-core", "crates/uno", "crates/uno-rt-train", "crates/uno-lightgbm-sys"]
 
 [profile.release]
 # Whole-program optimization for the numeric hot paths (matching, RT/MLP
