@@ -111,7 +111,9 @@ pub fn run(a: QuantArgs) -> Result<()> {
         let (data, hashes) = input::reference(&a.s1, &a.s2, &cfg, &options)?;
         (data, hashes, "native_directms1quant", None)
     };
+    log::info!("quant input: {} precursor rows", data.rows.len());
     let analysis = dms1::analyze(&data, &cfg)?;
+    log::info!("quant analysis done");
     dms1::output::write_with_admission(&a.out, &analysis, &hashes, mode, admission.as_ref())?;
     eprintln!(
         "{} eligible precursors; {} target proteins; {} significant (experimental, unvalidated)",

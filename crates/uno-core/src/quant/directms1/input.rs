@@ -40,44 +40,34 @@ impl Reader {
         &mut self,
         path: &Path,
         required: &[&str],
-        mut each: impl FnMut(&Row) -> Result<()>,
+        each: impl FnMut(&Row) -> Result<()>,
     ) -> Result<()> {
         let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
         self.hashes.push(InputHash {
             path: path.to_path_buf(),
             sha256: format!("{:x}", Sha256::digest(&bytes)),
         });
-        let mut reader = csv::ReaderBuilder::new()
-            .delimiter(b'\t')
-            .from_reader(bytes.as_slice());
-        let headers = reader.headers()?.clone();
+        scan(path, &bytes, required, each)
+    }
+    /// A second pass over a file this reader already hashed. The file must be
+    /// unchanged, and it is not recorded again, so the manifest's input list
+    /// is the same as for a single pass.
+    pub fn reread(
+        &self,
+        path: &Path,
+        required: &[&str],
+        each: impl FnMut(&Row) -> Result<()>,
+    ) -> Result<()> {
+        let bytes = std::fs::read(path).with_context(|| format!("reading {}", path.display()))?;
+        let sha256 = format!("{:x}", Sha256::digest(&bytes));
         ensure!(
-            headers.iter().collect::<BTreeSet<_>>().len() == headers.len(),
-            "duplicate columns in {}",
+            self.hashes
+                .iter()
+                .any(|h| h.path == path && h.sha256 == sha256),
+            "{} changed between passes",
             path.display()
         );
-        for name in required {
-            ensure!(
-                headers.iter().any(|h| h == *name),
-                "missing column {name} in {}",
-                path.display()
-            );
-        }
-        let columns = std::rc::Rc::new(
-            headers
-                .iter()
-                .enumerate()
-                .map(|(i, h)| (h.to_owned(), i))
-                .collect::<BTreeMap<_, _>>(),
-        );
-        let mut row = Row {
-            columns,
-            record: csv::StringRecord::new(),
-        };
-        while reader.read_record(&mut row.record)? {
-            each(&row)?;
-        }
-        Ok(())
+        scan(path, &bytes, required, each)
     }
     pub fn table(&mut self, path: &Path, required: &[&str]) -> Result<Vec<Row>> {
         self.table_where(path, required, |_| true)
@@ -114,6 +104,45 @@ impl Reader {
             .map(str::to_owned)
             .collect())
     }
+}
+/// Check the header of the TSV `bytes` and hand each record to `each` in file order.
+fn scan(
+    path: &Path,
+    bytes: &[u8],
+    required: &[&str],
+    mut each: impl FnMut(&Row) -> Result<()>,
+) -> Result<()> {
+    let mut reader = csv::ReaderBuilder::new()
+        .delimiter(b'\t')
+        .from_reader(bytes);
+    let headers = reader.headers()?.clone();
+    ensure!(
+        headers.iter().collect::<BTreeSet<_>>().len() == headers.len(),
+        "duplicate columns in {}",
+        path.display()
+    );
+    for name in required {
+        ensure!(
+            headers.iter().any(|h| h == *name),
+            "missing column {name} in {}",
+            path.display()
+        );
+    }
+    let columns = std::rc::Rc::new(
+        headers
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (h.to_owned(), i))
+            .collect::<BTreeMap<_, _>>(),
+    );
+    let mut row = Row {
+        columns,
+        record: csv::StringRecord::new(),
+    };
+    while reader.read_record(&mut row.record)? {
+        each(&row)?;
+    }
+    Ok(())
 }
 fn companion(path: &Path, suffix: &str) -> Result<PathBuf> {
     let name = path.to_str().context("non-UTF8 reference path")?;
@@ -202,23 +231,25 @@ pub fn reference(
     if let Some(p) = &options.allowed_peptides {
         allowed_peptides = reader.lines(p)?;
     }
-    let mut tables = Vec::new();
+    log::info!(
+        "native input: {} allowed proteins, {} allowed peptides",
+        allowed_proteins.len(),
+        allowed_peptides.len()
+    );
+    const PFM_COLUMNS: [&str; 6] = [
+        "sequence",
+        "proteins",
+        "charge",
+        "ion_mobility",
+        "Intensity",
+        "RT",
+    ];
+    // Two passes over the PFM tables, so only one file is held at a time:
+    // the first collects the proteins of every eligible match, the second
+    // (hash-checked, not re-recorded) keeps each sample's best precursors.
     let mut expanded = BTreeSet::new();
-    // Rows of disallowed peptides are never used below, so they are not kept.
     for path in &paths {
-        let rows = reader.table_where(
-            &companion(path, "_PFMs.tsv")?,
-            &[
-                "sequence",
-                "proteins",
-                "charge",
-                "ion_mobility",
-                "Intensity",
-                "RT",
-            ],
-            |row| allowed_peptides.contains(&row["sequence"]),
-        )?;
-        for row in &rows {
+        reader.each(&companion(path, "_PFMs.tsv")?, &PFM_COLUMNS, |row| {
             if allowed_peptides.contains(&row["sequence"])
                 && row["proteins"]
                     .split(';')
@@ -226,16 +257,20 @@ pub fn reference(
             {
                 expanded.extend(row["proteins"].split(';').map(str::to_owned));
             }
-        }
-        tables.push(rows);
+            Ok(())
+        })?;
     }
+    log::info!(
+        "native input: {} proteins in eligible matches",
+        expanded.len()
+    );
     let mut merged: BTreeMap<String, InputPeptide> = BTreeMap::new();
-    for (sample, table) in tables.iter().enumerate() {
+    for (sample, path) in paths.iter().enumerate() {
         let mut best: BTreeMap<String, (f64, InputPeptide)> = BTreeMap::new();
-        for row in table {
+        reader.reread(&companion(path, "_PFMs.tsv")?, &PFM_COLUMNS, |row| {
             let seq = &row["sequence"];
             if !allowed_peptides.contains(seq) {
-                continue;
+                return Ok(());
             }
             let proteins: Vec<_> = row["proteins"]
                 .split(';')
@@ -243,7 +278,7 @@ pub fn reference(
                 .map(str::to_owned)
                 .collect();
             if proteins.is_empty() {
-                continue;
+                return Ok(());
             }
             let intensity = float(row, "Intensity")?;
             ensure!(intensity.is_finite() && intensity>0.,"nonpositive/nonfinite reference intensity for {seq}; supply missing rows rather than zeros");
@@ -270,11 +305,12 @@ pub fn reference(
                     "ambiguous reference composite precursor identity"
                 );
                 if intensity <= *v {
-                    continue;
+                    return Ok(());
                 }
             }
             best.insert(key, (intensity, entry));
-        }
+            Ok(())
+        })?;
         for (key, (intensity, row)) in best {
             let p = merged.entry(key).or_insert(row);
             p.values[sample] = Some(intensity);
