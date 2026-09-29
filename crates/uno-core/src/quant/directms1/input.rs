@@ -80,12 +80,23 @@ impl Reader {
         Ok(())
     }
     pub fn table(&mut self, path: &Path, required: &[&str]) -> Result<Vec<Row>> {
+        self.table_where(path, required, |_| true)
+    }
+    /// Like [`Reader::table`], keeping only the rows `keep` accepts.
+    pub fn table_where(
+        &mut self,
+        path: &Path,
+        required: &[&str],
+        keep: impl Fn(&Row) -> bool,
+    ) -> Result<Vec<Row>> {
         let mut rows = Vec::new();
         self.each(path, required, |r| {
-            rows.push(Row {
-                columns: r.columns.clone(),
-                record: r.record.clone(),
-            });
+            if keep(r) {
+                rows.push(Row {
+                    columns: r.columns.clone(),
+                    record: r.record.clone(),
+                });
+            }
             Ok(())
         })?;
         Ok(rows)
@@ -193,8 +204,9 @@ pub fn reference(
     }
     let mut tables = Vec::new();
     let mut expanded = BTreeSet::new();
+    // Rows of disallowed peptides are never used below, so they are not kept.
     for path in &paths {
-        let rows = reader.table(
+        let rows = reader.table_where(
             &companion(path, "_PFMs.tsv")?,
             &[
                 "sequence",
@@ -204,6 +216,7 @@ pub fn reference(
                 "Intensity",
                 "RT",
             ],
+            |row| allowed_peptides.contains(&row["sequence"]),
         )?;
         for row in &rows {
             if allowed_peptides.contains(&row["sequence"])
