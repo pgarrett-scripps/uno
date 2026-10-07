@@ -21,6 +21,10 @@ use crate::input::FeatureMatrix;
 use crate::score::PeptideHit;
 use std::collections::{HashMap, HashSet};
 
+/// DirectMS1Quant two-condition statistics (reference port) and the uno
+/// per-run evidence adapter. Exposed as `uno quant`.
+pub mod directms1;
+
 /// Feature-level competition for quant: each consensus feature may quantify for
 /// only ONE protein — the best-scoring one whose peptide claims it. uno's ID stage
 /// already does this (parsimony: one peak → one protein), but the per-peptide
@@ -49,15 +53,29 @@ pub fn resolve_feature_competition(
                 .fold(f64::NEG_INFINITY, f64::max)
         })
         .collect();
+    let features: Vec<u32> = peptides.iter().map(|h| h.feature_idx).collect();
+    feature_winners(&features, &scores)
+        .into_iter()
+        .map(|i| peptides[i])
+        .collect()
+}
+
+/// The one-feature-one-protein claim behind [`resolve_feature_competition`],
+/// on plain `(feature, score)` columns so per-run quantitative evidence can
+/// replay exactly the same rule. Returns the winning row indices in ascending
+/// (input) order. A feature goes to its highest-scoring row; ties keep the
+/// lower index; rows with a non-finite score never win.
+pub fn feature_winners(features: &[u32], scores: &[f64]) -> Vec<usize> {
+    assert_eq!(features.len(), scores.len());
     let mut winner: std::collections::HashMap<u32, usize> = std::collections::HashMap::new();
-    for (i, h) in peptides.iter().enumerate() {
+    for (i, &feature) in features.iter().enumerate() {
         if !scores[i].is_finite() {
             continue;
         }
-        match winner.get(&h.feature_idx) {
+        match winner.get(&feature) {
             Some(&j) if scores[j] >= scores[i] => {}
             _ => {
-                winner.insert(h.feature_idx, i);
+                winner.insert(feature, i);
             }
         }
     }
@@ -69,7 +87,7 @@ pub fn resolve_feature_competition(
     // bits between two runs on identical input.
     let mut idx: Vec<usize> = winner.values().copied().collect();
     idx.sort_unstable();
-    idx.into_iter().map(|i| peptides[i]).collect()
+    idx
 }
 
 /// Single-pass profile-guided reassignment (combines ID and quant).

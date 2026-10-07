@@ -1,0 +1,97 @@
+{
+  "status": "pass",
+  "reference_sha256": "cb15b7c43b276eb45e77da2b8cf7cd97cd20765f95264202283212fde85cfc90",
+  "reference_environment": {
+    "NPY_DISABLE_CPU_FEATURES": "AVX512F,AVX2"
+  },
+  "fixture_seed": 76109,
+  "missing": true,
+  "structural": true,
+  "normalization": 2,
+  "absolute_fold_change": false,
+  "peptides": {
+    "passed": true,
+    "n_reference": 963,
+    "n_rust": 963,
+    "mismatch_counts": {
+      "FC_raw": 0,
+      "FC": 0,
+      "FC_corrected": 0,
+      "p-value": 0,
+      "FC_gr_mean": 0,
+      "intensity_median": 0,
+      "peptide": 0,
+      "decoy": 0,
+      "nummissing": 0,
+      "nonmissing_S1": 0,
+      "nonmissing_S2": 0,
+      "iq": 0,
+      "sign": 0,
+      "up": 0,
+      "down": 0
+    },
+    "max_absolute_error": {
+      "FC_raw": 6.661338147750939e-16,
+      "FC": 1.5543122344752192e-15,
+      "FC_corrected": 2.2329560422917893e-10,
+      "p-value": 1.3200551762793111e-13,
+      "FC_gr_mean": 2.2329527116227155e-10,
+      "intensity_median": 1.3877787807814457e-17
+    },
+    "examples": []
+  },
+  "resampling": {
+    "passed": true,
+    "n_reference": 963,
+    "n_rust": 963,
+    "mismatch_counts": {
+      "bp": 0
+    },
+    "max_absolute_error": {
+      "bp": 0.0
+    },
+    "examples": []
+  },
+  "proteins": {
+    "passed": true,
+    "n_reference": 61,
+    "n_rust": 61,
+    "mismatch_counts": {
+      "score": 0,
+      "p-value": 0,
+      "log2FoldChange(S2/S1)": 0,
+      "log2FoldChange(S2/S1) no normalization": 0,
+      "log2FoldChange(S2/S1) using all peptides": 0,
+      "log2FoldChange(S2/S1) using all peptides and no normalization": 0,
+      "differentially expressed peptides": 0,
+      "identified peptides": 0,
+      "FC_pass": 0,
+      "FDR_pass": 0,
+      "BH_pass": 0
+    },
+    "max_absolute_error": {
+      "score": 2.1316282072803006e-14,
+      "p-value": 1.3400738851920835e-16,
+      "log2FoldChange(S2/S1)": 2.2329560422917893e-10,
+      "log2FoldChange(S2/S1) no normalization": 4.440892098500626e-16,
+      "log2FoldChange(S2/S1) using all peptides": 2.2329516013996908e-10,
+      "log2FoldChange(S2/S1) using all peptides and no normalization": 4.440892098500626e-16
+    },
+    "examples": []
+  },
+  "group_partition_equal": true,
+  "scope": "Synthetic numerical parity, not biological accuracy or FDR validation",
+  "binary_sha256": "5ebe08164d0a44b5c9ced9d57f81a7d16b9ffa769aaaa89723dbae6206d8cc40",
+  "source_hashes": {
+    "crates/uno-quant/src/rng.rs": "75d645d343ae3e2eef33d1576e27749de15dd277ba51d72a56fab143d8cf180d",
+    "crates/uno-quant/src/lib.rs": "3d29363eeb9b4c8c3bdbab8076cb75095f172f47b6f7efbe2d2732d96d167ce1",
+    "crates/uno-quant/src/order.rs": "2ad912aad6cbcfd7c14dbb21be669fb7fdf99bbb45b6996ca7f79482e6b94b33",
+    "crates/uno-quant/src/output.rs": "664c01d80639d986bc356e40a94be8298df4bfb201d128ec7ae01999d56359d8",
+    "crates/uno-quant/src/input.rs": "12d281bb6c62dadb50c06ec1e518c2c7657ba8b12940d0ec7d480f2c9b01323e",
+    "crates/uno-quant/src/stats.rs": "2631d5dc12c7e2d35155d73dec5ba99cd2457e2667065ba7002ad7daeefd20de",
+    "crates/uno-quant/src/main.rs": "ba645c87c782b7bb3e7ffb62e3b35ceb2094e8a0f474a1e0aed58e212bd9e141",
+    "crates/uno-quant/src/uno_adapter.rs": "1fc44fe536feb89f952b869b2b1f689e31f7d579edfb22cd3d8b4cd94db8241b"
+  },
+  "default_real_pilot_outputs": "byte-identical peptides.tsv and proteins.tsv to pre-gate pilot",
+  "admission_test": "exclusive ambiguity exclusion is target/decoy symmetric; independent lower-intensity fallback and per-condition support tested"
+}

@@ -20,6 +20,9 @@ pub enum Command {
         #[command(subcommand)]
         command: RtCommand,
     },
+    /// Two-condition DirectMS1Quant-style contrast (experimental) on native
+    /// ms1searchpy tables or on uno per-run evidence.
+    Quant(Box<crate::quant_cli::QuantArgs>),
 }
 
 #[derive(Debug, Subcommand)]
@@ -112,6 +115,7 @@ pub fn run(command: Command) -> Result<()> {
     let command = match command {
         Command::Rt { command } => command,
         Command::Im { command } => return crate::im_cli::run(command),
+        Command::Quant(args) => return crate::quant_cli::run(*args),
     };
     match command {
         RtCommand::Train(args) => train(args),

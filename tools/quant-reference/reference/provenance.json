@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/markmipt/ms1searchpy",
+  "commit": "9df4a941a901aac657b1c9ab5229cb49671e3c7d",
+  "path": "ms1searchpy/directms1quant.py",
+  "sha256": "cb15b7c43b276eb45e77da2b8cf7cd97cd20765f95264202283212fde85cfc90",
+  "license": "Apache-2.0",
+  "note": "Unmodified reference file verified against git show HEAD; unrelated local upstream modifications excluded."
+}
