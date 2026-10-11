@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-10-11
 
 First public release, on crates.io as `uno-ms` (command `uno`).
 
@@ -26,13 +26,13 @@ First public release, on crates.io as `uno-ms` (command `uno`).
 
 ## Pre-release development history
 
-## Unreleased — KOTH 0.7.0 compatibility
+### Unreleased — KOTH 0.7.0 compatibility
 
 - Require the sibling KOTH dependency at version 0.7.0 and record the released source revision. Pin additive isotope-evidence defaults in both raw profiles and update the standalone feature configuration.
 - Accept long-bundle schemas 2/3 alongside legacy schema 1, validate group confidence and exclusive-signal provenance, and retain suppressed-cell zeros. New group admission replaces the removed seed floor; original anchor-quality checks remain.
 - Add the current LFQ configuration using `max_group_qvalue = 0.05`. The approved publication rerun is 23 extractions, two alignments and 75 searches; current manuscript results remain the archived 0.6.0 evidence until rerun.
 
-## Unreleased — experimental RT-first IM sequence CNN
+### Unreleased — experimental RT-first IM sequence CNN
 
 - Added charge-aware IM training and fine-tuning using the shared RT sequence CNN, with Rust inspection, prediction, and independent evaluation.
 - The bundled IM CNN supplies a default soft classifier feature (`--no-im` disables it; `--im-model` overrides it) after RT/mass shortlisting; there is no IM cutoff. Incompatible legacy feature schemas are rejected.
@@ -40,7 +40,7 @@ First public release, on crates.io as `uno-ms` (command `uno`).
 - IM caches now use Zstd-compressed Parquet chunks in reusable, per-user OS temporary storage. `UNO_IM_CACHE_DIR` can select persistent storage. Atomic publication keeps incomplete writes invisible; old TSV caches remain untouched.
 - A 27-search trial improved six of nine CNN/off pairs, lost two, and tied one. Median depth increased in all three acquisitions, but the predefined consistency rule was not met; the default promotion retains this limitation.
 
-## Unreleased — top_k throttle fix + ms1searchpy-comparable peptide metric
+### Unreleased — top_k throttle fix + ms1searchpy-comparable peptide metric
 
 Head-to-head on ms1searchpy's exact single-run input (koth HeLa `.features.tsv`,
 same target FASTA, matched digest: mc=0, len 7–30, no variable mods, 10 ppm,
@@ -62,7 +62,7 @@ fewer "peptides" — a metric artifact plus a candidate-depth throttle.
 - RT model (pure-Rust CNN vs feeding ms1searchpy's own DeepLC predictions) makes
   no material difference to the result; the throttle was the lever.
 
-## Unreleased — DirectMS1 single-run + mass-anchor rewrite (major)
+### Unreleased — DirectMS1 single-run + mass-anchor rewrite (major)
 
 uno was ~20x behind ms1searchpy on single runs and weak on aligned matrices (62
 proteins on koth human+E.coli). Root cause: decoys were mass-twins (interior
@@ -114,9 +114,9 @@ multiplier. (An on-data MLP-readout fine-tune was tried in the mass-anchor stage
 did NOT help — the robust calibration already captures the run-level RT shift and a
 129-d readout refit overfits the confident subset; left out.)
 
-## Unreleased
+### Unreleased
 
-### Added
+#### Added
 - ~~**On-data RT fine-tuning** (`scoring.ondata_rt_finetune`, on by default). Freezes
   the distilled MLP's penultimate embedding and refits only its linear readout on
   the run's confident hits (ridge, closed-form, deterministic). Keeps the pretrained
@@ -130,23 +130,23 @@ did NOT help — the robust calibration already captures the run-level RT shift 
   anywhere"). The +51% figure was measured on the earlier development configuration
   and is retired to the manuscript's Supporting Information.
 
-### Performance
+#### Performance
 - Protein inference reworked: parallel threshold-optimization grid (rayon),
   memoized binomial tail, and best-first greedy parsimony with lazy invalidation.
   Protein phase ~40 s → ~1 s single-threaded (~40× algorithmic); full search
   43 s → 3.4 s (~13×). **Output byte-identical** to the prior implementation.
 - Release profile: thin LTO + single codegen unit.
 
-### Docs
+#### Docs
 - Paper ported to Typst (`paper/paper.typ`, arkheion template); adds RT-fine-tune
   and performance results.
 
-## 0.1.0 (unreleased) — initial MS1-only search engine
+### 0.1.0 (unreleased) — initial MS1-only search engine
 
 A complete DirectMS1-style MS1-only protein identification pipeline in Rust,
 consuming a single-run biosaur2 feature file (the same input ms1searchpy uses).
 
-### Pipeline (crates/uno-core)
+#### Pipeline (crates/uno-core)
 - **input** — reads a single-run biosaur2 `*.features.tsv` into a `FeatureMatrix`.
 - **database** — in-silico digest via `sage-core` (enzyme, missed cleavages, mods, decoys);
   f64 mass recompute; mass-sorted binary-search candidate lookup. Mass-shifted decoys
@@ -159,16 +159,16 @@ consuming a single-run biosaur2 feature file (the same input ms1searchpy uses).
 - **protein** — binomial (Poisson-tail) protein scoring over searchable peptides; protein FDR.
 - **quant** — rollup of koth per-sample intensities to peptide and protein matrices.
 
-### Tools
+#### Tools
 - **uno** (CLI) — runs the full pipeline; TOML config; TSV outputs.
 - **uno-rt-train** — distills a DeepLC label TSV into a gbdt RT model; `--predict-seqs` for validation.
 
-### Validation highlights
+#### Validation highlights
 - RT model: R² 0.93 vs DeepLC; **Pearson 0.94 vs observed RT** on 5,000 Sage-confirmed peptides.
 - RANSAC calibration: median residual ~1.1 min (from contaminated best-mass seeds).
 - Protein FDR controlled (0 decoys at the top); the most abundant proteins identified.
 
-### Ion mobility (CCS) — added
+#### Ion mobility (CCS) — added
 - **im** module: gbdt 1/K0 model distilled from **im2deep** (charge-aware features).
   338k-label library generated by im2deep; distilled student R² **0.992** vs im2deep.
 - `uno-rt-train --im-labels` trains it; `uno --im-model` enables IM scoring.
@@ -178,7 +178,7 @@ consuming a single-run biosaur2 feature file (the same input ms1searchpy uses).
 - On the rapidms1 timsTOF data IM measurably cut the random hit rate (e.g. 4.2%→1.9%,
   up to ~6×) — the orthogonality works.
 
-### Known limitation
+#### Known limitation
 PSM- and protein-level depth is constrained by MS1's inherent random mass+RT coincidence
 floor on this no-ion-mobility, two-proteome benchmark — the hardest case. (Was documented in
 `PLAN.md`, deleted 2026-07-31 as superseded; the manuscript's Limitations section carries
