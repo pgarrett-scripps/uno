@@ -12,7 +12,7 @@
 //!   - `RandomFreq`     — residues drawn from the proteome AA frequency (order-0)
 //!   - `Markov{order}`  — order-k residue Markov chain (local di/tri-peptide stats)
 //!   - `DeBruijn{k}`    — random walk over the k-mer de Bruijn graph (recombines
-//!                        real k-mers; dead-ends restart at a random observed node)
+//!     real k-mers; dead-ends restart at a random observed node)
 //!   - `Reverse`        — reverse each protein (classic; exact per-protein mass)
 //!
 //! Every generator is fully deterministic (seeded xorshift, no clock/RNG entropy)
@@ -32,14 +32,20 @@ pub enum DecoyMethod {
     Reverse,
     RandomUniform,
     RandomFreq,
-    Markov { order: usize },
-    DeBruijn { k: usize },
+    Markov {
+        order: usize,
+    },
+    DeBruijn {
+        k: usize,
+    },
     /// Cleavage-site-preserving de Bruijn: K/R/P stay at their exact positions
     /// (so the tryptic peptide lengths/count match the target exactly), and the
     /// remaining positions are filled by a back-off Markov walk (orders k..1..0)
     /// over real sequence — every residue drawn from real high-order context, no
     /// abrupt restarts. The most realistic decoy that still isn't a plain reversal.
-    DeBruijnCleave { k: usize },
+    DeBruijnCleave {
+        k: usize,
+    },
 }
 
 impl DecoyMethod {
@@ -372,8 +378,14 @@ mod seed_tests {
 
     fn targets() -> Vec<(Arc<str>, String)> {
         vec![
-            (Arc::from("P00001"), "MKWVTFISLLLLFSSAYSRGVFRRDTHKSEIAHRFKDLGEENFK".to_string()),
-            (Arc::from("P00002"), "MSDAAVDTSSEITTKDLKEKKEVVEEAENGRDAPANGNANEENGEQEADNEVDEE".to_string()),
+            (
+                Arc::from("P00001"),
+                "MKWVTFISLLLLFSSAYSRGVFRRDTHKSEIAHRFKDLGEENFK".to_string(),
+            ),
+            (
+                Arc::from("P00002"),
+                "MSDAAVDTSSEITTKDLKEKKEVVEEAENGRDAPANGNANEENGEQEADNEVDEE".to_string(),
+            ),
         ]
     }
 
@@ -392,7 +404,10 @@ mod seed_tests {
         ] {
             let t = targets();
             // Salt 0 must reproduce the historical constants byte for byte.
-            assert_eq!(generate(&t, method, "DECOY_", 0), generate(&t, method, "DECOY_", 0));
+            assert_eq!(
+                generate(&t, method, "DECOY_", 0),
+                generate(&t, method, "DECOY_", 0)
+            );
         }
     }
 

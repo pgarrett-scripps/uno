@@ -66,7 +66,9 @@ impl<'a> Cur<'a> {
         let e = self.p + 4 * n;
         let v = self.b.get(self.p..e).context("truncated (f32 array)")?;
         self.p = e;
-        Ok(v.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect())
+        Ok(v.chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect())
     }
 }
 
@@ -100,13 +102,27 @@ impl RtMlp {
             }
             let w = c.f32s(out_dim * in_d)?;
             let b = c.f32s(out_dim)?;
-            layers.push(Layer { out_dim, in_dim: in_d, w, b, relu });
+            layers.push(Layer {
+                out_dim,
+                in_dim: in_d,
+                w,
+                b,
+                relu,
+            });
             prev_in = out_dim;
         }
         if layers.last().map(|l| l.out_dim) != Some(1) {
             bail!("final layer must have out_dim 1");
         }
-        Ok(RtMlp { y_mean, y_std, x_mean, x_std, in_dim, feature_kind, layers })
+        Ok(RtMlp {
+            y_mean,
+            y_std,
+            x_mean,
+            x_std,
+            in_dim,
+            feature_kind,
+            layers,
+        })
     }
 
     /// Featurize+standardize into `x` (len in_dim), dispatching on `feature_kind`.
@@ -129,7 +145,11 @@ impl RtMlp {
         for (j, &v) in raw.iter().enumerate() {
             if (20..26).contains(&j) {
                 let vi = v as i32;
-                let bin = if vi < 0 { 20usize } else { (vi as usize).min(20) };
+                let bin = if vi < 0 {
+                    20usize
+                } else {
+                    (vi as usize).min(20)
+                };
                 for k in 0..21 {
                     x.push(if k == bin { 1.0 } else { 0.0 });
                 }
@@ -153,9 +173,7 @@ impl RtMlp {
         let l0 = &self.layers[0];
         a.clear();
         a.resize(l0.out_dim, 0.0);
-        for o in 0..l0.out_dim {
-            a[o] = l0.b[o];
-        }
+        a.copy_from_slice(&l0.b[..l0.out_dim]);
         for (pos, &c) in seq.as_bytes().iter().take(POS_MAXLEN).enumerate() {
             if let Some(aa) = POS_AA.iter().position(|&p| p == c) {
                 let idx = pos * POS_NAA + aa;

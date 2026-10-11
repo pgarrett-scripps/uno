@@ -11,8 +11,12 @@ First public release, on crates.io as `uno-ms` (command `uno`).
   `uno-core` -> `uno-ms-core`, `uno-lightgbm-sys` -> `uno-ms-lightgbm-sys`,
   `uno-rt-train` -> `uno-ms-rt-train` (not published; binary still
   `uno-rt-train`). Library names are unchanged (`uno_core`, `uno_lightgbm_sys`).
-- sequoia-boost comes from crates.io (0.2) and Sage from its upstream git
-  repository; no sibling checkouts are needed to build.
+- sequoia-boost comes from crates.io (0.2); no sibling checkouts are needed
+  to build.
+- Digestion no longer depends on `sage-core`: `uno_core::digest` ports Sage's
+  database builder (FASTA parsing, enzymatic cleavage, static and variable
+  modifications, reversed decoys). On two entrapment FASTAs and six digest
+  configurations the peptide database is identical to the sage-core build.
 - The bundled RT and IM CNN weights moved into `crates/uno-core/models/`
   (symlinked from `models/`) so they ship inside the crate.
 - The `uno` binary finds the vendored LightGBM library through the sys crate's
@@ -34,7 +38,7 @@ First public release, on crates.io as `uno-ms` (command `uno`).
 - The bundled IM CNN supplies a default soft classifier feature (`--no-im` disables it; `--im-model` overrides it) after RT/mass shortlisting; there is no IM cutoff. Incompatible legacy feature schemas are rejected.
 - IM search precomputes the target/decoy library at observed IM charges and caches raw predictions across runs and calibration attempts, keyed by model, sequence, and charge. `UNO_IM_CACHE_DIR` sets storage; `UNO_IM_CACHE=0` disables caching. Shortlist calibration remains run-specific.
 - IM caches now use Zstd-compressed Parquet chunks in reusable, per-user OS temporary storage. `UNO_IM_CACHE_DIR` can select persistent storage. Atomic publication keeps incomplete writes invisible; old TSV caches remain untouched.
-- The [27-search trial](https://github.com/pgarrett-scripps/uno-paper/blob/main/docs/im-cnn-results-20260914.md) improved six of nine CNN/off pairs, lost two, and tied one. Median depth increased in all three acquisitions, but the predefined consistency rule was not met; the default promotion retains this limitation.
+- A 27-search trial improved six of nine CNN/off pairs, lost two, and tied one. Median depth increased in all three acquisitions, but the predefined consistency rule was not met; the default promotion retains this limitation.
 
 ## Unreleased — top_k throttle fix + ms1searchpy-comparable peptide metric
 

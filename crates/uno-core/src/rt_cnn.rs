@@ -136,9 +136,7 @@ impl Conv {
         let (kc, ic, oc) = (self.k, self.in_ch, self.out_ch);
         for t in 0..len {
             let obase = t * oc;
-            for c in 0..oc {
-                out[obase + c] = self.b[c];
-            }
+            out[obase..obase + oc].copy_from_slice(&self.b[..oc]);
             for j in 0..kc {
                 let p = t + j * self.dil;
                 if p < pad {
@@ -207,10 +205,16 @@ impl<'a> Cur<'a> {
         Ok(f32::from_le_bytes(v.try_into().unwrap()))
     }
     fn f32s(&mut self, n: usize) -> Result<Vec<f32>> {
-        let e = n.checked_mul(4).and_then(|n| self.p.checked_add(n)).context("URTC array size overflow")?;
+        let e = n
+            .checked_mul(4)
+            .and_then(|n| self.p.checked_add(n))
+            .context("URTC array size overflow")?;
         let v = self.b.get(self.p..e).context("truncated (f32 array)")?;
         self.p = e;
-        let values: Vec<f32> = v.chunks_exact(4).map(|c| f32::from_le_bytes(c.try_into().unwrap())).collect();
+        let values: Vec<f32> = v
+            .chunks_exact(4)
+            .map(|c| f32::from_le_bytes(c.try_into().unwrap()))
+            .collect();
         if values.iter().any(|x| !x.is_finite()) {
             bail!("URTC contains nonfinite weights");
         }
@@ -231,7 +235,14 @@ fn load_conv(c: &mut Cur, out_ch: usize, in_ch: usize, k: usize, dil: usize) -> 
         }
     }
     let b = c.f32s(out_ch)?;
-    Ok(Conv { out_ch, in_ch, k, dil, w, b })
+    Ok(Conv {
+        out_ch,
+        in_ch,
+        k,
+        dil,
+        w,
+        b,
+    })
 }
 
 impl RtCnn {
@@ -270,8 +281,12 @@ impl RtCnn {
         let ch = c.u32()?;
         let k = c.u32()?;
         let n_blocks = c.u32()?;
-        if !(1..=1024).contains(&emb) || !(1..=1024).contains(&ch)
-            || !(1..=31).contains(&k) || k % 2 == 0 || n_blocks > 32 {
+        if !(1..=1024).contains(&emb)
+            || !(1..=1024).contains(&ch)
+            || !(1..=31).contains(&k)
+            || k % 2 == 0
+            || n_blocks > 32
+        {
             bail!("invalid or unsupported CNN dimensions");
         }
         let dils: Vec<usize> = (0..n_blocks).map(|_| c.u32()).collect::<Result<_>>()?;
@@ -285,25 +300,41 @@ impl RtCnn {
         // (v2) set is a strict PREFIX of the 11-feature (v3) set (same order/
         // formulas), so any model with n_global <= N_GLOBAL loads by slicing the
         // computed features to the header's declared count (see `pool`).
-        if if im { version != 3 || n_global != 12 } else { !matches!(n_global, 0 | 5 | N_GLOBAL) } {
-            bail!("URTC declares {n_global} global features, this build computes at most {N_GLOBAL}");
+        if if im {
+            version != 3 || n_global != 12
+        } else {
+            !matches!(n_global, 0 | 5 | N_GLOBAL)
+        } {
+            bail!(
+                "URTC declares {n_global} global features, this build computes at most {N_GLOBAL}"
+            );
         }
         let metadata = if version == 3 {
             let len = c.u32()?;
             if len > 64 * 1024 * 1024 {
                 bail!("URTC metadata exceeds 64 MiB");
             }
-            let end = c.p.checked_add(len).context("URTC metadata length overflow")?;
-            let metadata: serde_json::Value = serde_json::from_slice(
-                bytes.get(c.p..end).context("truncated URTC metadata")?
-            ).context("invalid URTC metadata JSON")?;
+            let end =
+                c.p.checked_add(len)
+                    .context("URTC metadata length overflow")?;
+            let metadata: serde_json::Value =
+                serde_json::from_slice(bytes.get(c.p..end).context("truncated URTC metadata")?)
+                    .context("invalid URTC metadata JSON")?;
             c.p = end;
-            if metadata["feature_schema"] != if im { "uno-aa-global-charge-v1" } else { "uno-aa-global-v1" }
-                || metadata["sequence_encoding"] != "canonical-aa-fixed-cam" {
+            if metadata["feature_schema"]
+                != if im {
+                    "uno-aa-global-charge-v1"
+                } else {
+                    "uno-aa-global-v1"
+                }
+                || metadata["sequence_encoding"] != "canonical-aa-fixed-cam"
+            {
                 bail!("unsupported URTC feature schema or sequence encoding");
             }
             metadata
-        } else { serde_json::json!({}) };
+        } else {
+            serde_json::json!({})
+        };
         let info = serde_json::json!({
             "format": if im { "UIMC" } else { "URTC" }, "version": version,
             "architecture": {"emb": emb, "ch": ch, "k": k, "blocks": dils, "head": head, "n_global": n_global},
@@ -319,23 +350,47 @@ impl RtCnn {
             let c2 = load_conv(&mut c, ch, ch, k, dil)?;
             blocks.push(Block { c1, c2 });
         }
-        let head0 = Linear { out_dim: head, in_dim: head_in, w: c.f32s(head * head_in)?, b: c.f32s(head)? };
-        let head2 = Linear { out_dim: 1, in_dim: head, w: c.f32s(head)?, b: c.f32s(1)? };
+        let head0 = Linear {
+            out_dim: head,
+            in_dim: head_in,
+            w: c.f32s(head * head_in)?,
+            b: c.f32s(head)?,
+        };
+        let head2 = Linear {
+            out_dim: 1,
+            in_dim: head,
+            w: c.f32s(head)?,
+            b: c.f32s(1)?,
+        };
         if c.p != bytes.len() {
             bail!("URTC: {} trailing bytes", bytes.len() - c.p);
         }
-        Ok(RtCnn { y_mean, y_std, emb, ch, emb_w, stem, blocks, head0, head2, n_global, info })
+        Ok(RtCnn {
+            y_mean,
+            y_std,
+            emb,
+            ch,
+            emb_w,
+            stem,
+            blocks,
+            head0,
+            head2,
+            n_global,
+            info,
+        })
     }
 
     /// Architecture, normalization and recorded training provenance.
-    pub fn info(&self) -> &serde_json::Value { &self.info }
+    pub fn info(&self) -> &serde_json::Value {
+        &self.info
+    }
 
     /// Pooled 2*ch feature vector for a sequence (masked mean ++ masked max),
     /// written into `buf.pooled`.
     fn pool(&self, seq: &str, buf: &mut Buffers) {
         let ch = self.ch;
         let bytes = seq.as_bytes();
-        let len = bytes.len().min(MAXLEN).max(1);
+        let len = bytes.len().clamp(1, MAXLEN);
         // tokens -> embedding (L, emb); PAD rows are zero by construction.
         let x = &mut buf.x;
         x.clear();
@@ -415,14 +470,20 @@ impl RtCnn {
 
     /// Charge-aware IM head on the same sequence CNN. Charge is scaled by four.
     pub(crate) fn predict_im_many(&self, items: &[(&str, u8)]) -> Vec<f64> {
-        items.par_chunks(2048).flat_map(|chunk| {
-            let mut buf = Buffers::default();
-            chunk.iter().map(|&(s, z)| {
-                self.pool(s, &mut buf);
-                buf.pooled.push(z as f32 / 4.0);
-                self.head(&buf.pooled, &mut buf.hid)
-            }).collect::<Vec<_>>()
-        }).collect()
+        items
+            .par_chunks(2048)
+            .flat_map(|chunk| {
+                let mut buf = Buffers::default();
+                chunk
+                    .iter()
+                    .map(|&(s, z)| {
+                        self.pool(s, &mut buf);
+                        buf.pooled.push(z as f32 / 4.0);
+                        self.head(&buf.pooled, &mut buf.hid)
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect()
     }
 
     /// Predict abstract RT (iRT units) for one sequence.
@@ -454,7 +515,10 @@ impl RtCnn {
     /// runs `pool` once per peptide and derives both the head prediction and the
     /// pooled embedding from it. Byte-identical to calling `predict_many` and
     /// `embed_many` separately (same `pool`, same `head`, same pooled+1.0).
-    pub fn predict_embed_many<S: AsRef<str> + Sync>(&self, seqs: &[S]) -> (Vec<f64>, Vec<Vec<f64>>) {
+    pub fn predict_embed_many<S: AsRef<str> + Sync>(
+        &self,
+        seqs: &[S],
+    ) -> (Vec<f64>, Vec<Vec<f64>>) {
         let both: Vec<(f64, Vec<f64>)> = seqs
             .par_chunks(2048)
             .flat_map(|chunk| {

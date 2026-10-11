@@ -1,5 +1,5 @@
 //! Show example decoy peptides from each method, side by side with the target.
-//! Run: cargo run --release -p uno-core --example decoy_show
+//! Run: cargo run --release -p uno-ms-core --example decoy_show -- PROTEINS.fasta
 
 use std::sync::Arc;
 use uno_core::decoy::{generate, DecoyMethod};
@@ -25,8 +25,10 @@ fn digest(seq: &str) -> Vec<String> {
 fn main() {
     // Load a chunk of real proteins so the Markov/de Bruijn models learn real
     // amino-acid statistics, but only DISPLAY one chosen protein's decoys.
-    let path = "/home/patrick-garrett/Repos/koth_rust/benchmark/data/fasta/human_ecoli.fasta";
-    let contents = std::fs::read_to_string(path).expect("fasta");
+    let path = std::env::args()
+        .nth(1)
+        .expect("usage: decoy_show PROTEINS.fasta");
+    let contents = std::fs::read_to_string(&path).expect("fasta");
     let mut targets: Vec<(Arc<str>, String)> = Vec::new();
     let mut acc = String::new();
     let mut seq = String::new();
@@ -53,12 +55,16 @@ fn main() {
         .iter()
         .position(|(_, s)| {
             let n = digest(s).len();
-            n >= 4 && n <= 8 && s.len() < 350
+            (4..=8).contains(&n) && s.len() < 350
         })
         .unwrap_or(0);
     let (show_acc, show_seq) = &targets[show_idx];
 
-    println!("=== TARGET protein: {} ({} aa) ===", show_acc, show_seq.len());
+    println!(
+        "=== TARGET protein: {} ({} aa) ===",
+        show_acc,
+        show_seq.len()
+    );
     println!("seq: {}\n", show_seq);
     let tpeps = digest(show_seq);
     println!("TARGET tryptic peptides ({}):", tpeps.len());
@@ -74,7 +80,10 @@ fn main() {
         ("markov (order 1)", DecoyMethod::Markov { order: 1 }),
         ("markov (order 2)", DecoyMethod::Markov { order: 2 }),
         ("debruijn (k=4)", DecoyMethod::DeBruijn { k: 4 }),
-        ("debruijn_cleave (k=4, keep K/R/P)", DecoyMethod::DeBruijnCleave { k: 4 }),
+        (
+            "debruijn_cleave (k=4, keep K/R/P)",
+            DecoyMethod::DeBruijnCleave { k: 4 },
+        ),
     ];
 
     for (name, m) in methods {

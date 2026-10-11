@@ -12,8 +12,8 @@ name: Release
 # CARGO_REGISTRY_TOKEN. Zenodo mints its DOI from the published release
 # through its GitHub integration.
 #
-# crates.io rejects git dependencies: koth-ms and sage-core must be crates.io
-# versions before the first release, or the package job fails (on purpose)
+# crates.io rejects git dependencies: koth-ms must be a crates.io version
+# before the first release, or the package job fails (on purpose)
 # before anything is published.
 on:
   release:

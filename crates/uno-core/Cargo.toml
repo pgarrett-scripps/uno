@@ -24,7 +24,6 @@ rayon.workspace = true
 rustc-hash.workspace = true
 anyhow.workspace = true
 log.workspace = true
-sage-core.workspace = true
 gbdt.workspace = true
 uno-lightgbm-sys.workspace = true
 sequoia-boost.workspace = true

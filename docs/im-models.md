@@ -51,7 +51,7 @@ storage is wanted; `XDG_CACHE_HOME` no longer selects the IM cache location.
 returning to uncached prediction of the shortlist. For example:
 
 ```sh
-UNO_IM_CACHE_DIR=benchmark/results/current/im-cache uno --features run.features.tsv --fasta proteins.fasta
+UNO_IM_CACHE_DIR=$HOME/.cache/uno-im uno --features run.features.tsv --fasta proteins.fasta
 ```
 
 Under the selected root, `parquet-v2/<model-fingerprint>/` contains immutable
@@ -99,9 +99,6 @@ library check/load took 8.7 seconds with zero misses. Shortlist lookups took
 0.24 seconds versus 12.9 seconds of uncached prediction. Total search wall
 times were 43.2 seconds uncached, 413.0 seconds cold, and 32.4 seconds warm.
 These are single-run observations, not a repeated performance benchmark.
-
-The verification driver, binary, input/output hashes, timings, logs, and
-`report.json` are archived in `benchmark/results/im_cache_verification/`.
 
 ## Train or adapt
 
@@ -167,27 +164,3 @@ absolute 1/K0 or CCS. Its labels are the prior experiment's measured public
 CCS labels converted to `CCS * sqrt(reduced_mass) / charge / 1000`; a scale
 calibration is required for measured 1/K0. It was trained on charges 2–4 and
 lengths 7–30; predictions outside that training domain are extrapolations.
-
-## Reproduce the experiment
-
-`benchmark/im_cnn_prepare.py` selects a deterministic subset of the existing
-public training data: 100,000 training sequences, 10,000 validation sequences,
-and 37,101 independent test sequences. All their charge observations are kept.
-The model used 20 epochs with seed 0 and selected epoch 19 by validation MAE.
-Source identities, hashes, the training log, model, source archive and every
-search receipt are in `benchmark/results/im_cnn_20260914`.
-
-`benchmark/im_cnn_study.py` implements the frozen 27-search comparison: IM off,
-the previous compatible tree as a soft feature, and the new CNN as a soft
-feature, across A2/B2/C2 and seeds 0–2. The existing RT model, KOTH features,
-quality filters, and HYE-plus-absent-Arabidopsis FASTA are identical within
-pairs. A1 is used only for prediction diagnostics. Public training peptides
-can occur in the independent search acquisitions; the peptide-disjoint public
-test is the separate check of unseen-sequence prediction performance.
-
-The primary outcome is retrospective accession depth at 1% empirical
-entrapment FDP, with whole tied-score blocks and same-species group expansion.
-All nine paired CNN outcomes are retained. Improved prediction error alone
-does not establish improved protein identification.
-
-The [completed 27-search comparison](https://github.com/pgarrett-scripps/uno-paper/blob/main/docs/im-cnn-results-20260914.md) found six CNN gains, two losses, and one tie, with higher medians in all three files; the predefined consistency rule was not met.

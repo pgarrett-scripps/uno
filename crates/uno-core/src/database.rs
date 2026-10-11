@@ -1,14 +1,13 @@
 //! Phase 2: in-silico peptide database.
 //!
-//! Digestion, peptide-mass and decoy generation are delegated to `sage-core`.
-//! We keep only the lean subset an MS1 engine needs — stripped sequence, neutral
+//! Digestion and modification expansion come from [`crate::digest`] (a port of
+//! the Sage database builder); decoys are generated here. We keep only the lean subset an MS1 engine needs — stripped sequence, neutral
 //! mass, target/decoy flag, source proteins — recompute the mass in f64 for
 //! precision, and sort by mass for binary-search candidate lookup.
 
+use crate::digest::{self, DigestParams, Fasta, Peptide};
 use crate::mass;
 use anyhow::{Context, Result};
-use sage_core::database::{Builder, EnzymeBuilder};
-use sage_core::fasta::Fasta;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
@@ -69,10 +68,7 @@ pub struct DigestConfig {
 /// mass-twins of their targets. That is what keeps the per-protein binomial's
 /// random rate p low and the FDR honest. Nothing here enforces non-collision with
 /// a target: decoys are deduplicated against each other only.
-fn global_shuffle_decoy_db(
-    sage_peptides: Vec<sage_core::peptide::Peptide>,
-    cfg: &DigestConfig,
-) -> Vec<TheoPeptide> {
+fn global_shuffle_decoy_db(peptides_in: Vec<Peptide>, cfg: &DigestConfig) -> Vec<TheoPeptide> {
     // Per-residue static modification delta (e.g. C +57.021).
     let static_mod = |aa: u8| -> f64 {
         cfg.static_mods
@@ -88,17 +84,17 @@ fn global_shuffle_decoy_db(
         m
     };
 
-    // Targets only (drop sage's own reversed decoys). Group each target peptide
+    // Targets only (drop the digest's reversed decoys). Group each target peptide
     // under its FIRST protein so the interior pool is built PER PROTEIN — this
     // preserves each organism's residue composition, so a decoy of a human protein
     // has human-like masses and coincides with features at the same rate an absent
     // human peptide does. A global pool would average organisms and make the
     // binomial p under-estimate the in-organism random rate.
-    let mut targets: Vec<TheoPeptide> = Vec::with_capacity(sage_peptides.len());
+    let mut targets: Vec<TheoPeptide> = Vec::with_capacity(peptides_in.len());
     // per-protein: accession -> Vec<(seq, mc)>; plus a stable protein order.
     let mut by_prot: HashMap<Arc<str>, Vec<(Vec<u8>, u8)>> = HashMap::new();
     let mut prot_order: Vec<Arc<str>> = Vec::new();
-    for p in sage_peptides.into_iter().filter(|p| !p.decoy) {
+    for p in peptides_in.into_iter().filter(|p| !p.decoy) {
         let mass = mass::neutral_mass(&p.sequence, &p.modifications, p.nterm, p.cterm)
             .unwrap_or(p.monoisotopic as f64);
         let seq_vec = p.sequence.to_vec();
@@ -111,10 +107,13 @@ fn global_shuffle_decoy_db(
             proteins: p.proteins.clone(),
         });
         if let Some(first) = p.proteins.first() {
-            by_prot.entry(first.clone()).or_insert_with(|| {
-                prot_order.push(first.clone());
-                Vec::new()
-            }).push((seq_vec, p.missed_cleavages));
+            by_prot
+                .entry(first.clone())
+                .or_insert_with(|| {
+                    prot_order.push(first.clone());
+                    Vec::new()
+                })
+                .push((seq_vec, p.missed_cleavages));
         }
     }
     prot_order.sort();
@@ -128,7 +127,9 @@ fn global_shuffle_decoy_db(
     // first, map each unique decoy sequence to the union of proteins it should
     // carry (mirror of the target peptide->proteins map).
     for t in &targets {
-        decoy_prot.entry(t.sequence.as_bytes().to_vec()).or_insert_with(|| t.proteins.clone());
+        decoy_prot
+            .entry(t.sequence.as_bytes().to_vec())
+            .or_insert_with(|| t.proteins.clone());
     }
     for acc in &prot_order {
         let peps = &by_prot[acc];
@@ -141,13 +142,16 @@ fn global_shuffle_decoy_db(
         if pool.is_empty() {
             continue;
         }
-        let mut h: u64 = 0x9e37_79b9_7f4a_7c15 ^ (pool.len() as u64) ^ crate::seed_mix(cfg.decoy_seed);
+        let mut h: u64 =
+            0x9e37_79b9_7f4a_7c15 ^ (pool.len() as u64) ^ crate::seed_mix(cfg.decoy_seed);
         for b in acc.bytes() {
             h ^= b as u64;
             h = h.wrapping_mul(1099511628211);
         }
         for i in (1..pool.len()).rev() {
-            h ^= h << 13; h ^= h >> 7; h ^= h << 17;
+            h ^= h << 13;
+            h ^= h >> 7;
+            h ^= h << 17;
             pool.swap(i, (h % (i as u64 + 1)) as usize);
         }
         let mut cur = 0usize;
@@ -179,11 +183,75 @@ fn global_shuffle_decoy_db(
         let mass = seq_mass(dseq);
         let proteins = decoy_prot.get(tseq).cloned().unwrap_or_default();
         let sequence: Arc<str> = Arc::from(std::str::from_utf8(dseq).unwrap_or("").to_owned());
-        decoys.push(TheoPeptide { sequence, mass, decoy: true, missed_cleavages: *mc, proteins });
+        decoys.push(TheoPeptide {
+            sequence,
+            mass,
+            decoy: true,
+            missed_cleavages: *mc,
+            proteins,
+        });
     }
 
     targets.extend(decoys);
     targets
+}
+
+/// Digest a FASTA text with `cfg`. For protein-level decoy methods, whole decoy
+/// proteins are synthesized from the targets, appended tagged "DECOY_", and the
+/// combined set is digested with decoy generation OFF: target peptides come out
+/// decoy=false, DECOY_ peptides decoy=true, and decoy peptides equal to a target
+/// digest are dropped. Returns (peptides, protein_level, decoy tag used).
+fn digest_fasta(contents: &str, cfg: &DigestConfig) -> Result<(Vec<Peptide>, bool, String)> {
+    use crate::decoy::DecoyMethod;
+    let method = DecoyMethod::parse(&cfg.decoy_method, cfg.decoy_order);
+    let protein_level = cfg.generate_decoys && method.is_protein_level();
+    let (fasta, gen_decoys, decoy_tag) = if protein_level {
+        let tfasta = Fasta::parse(contents, "DECOY_", false)?;
+        let decoy_prots = crate::decoy::generate(&tfasta.targets, method, "DECOY_", cfg.decoy_seed);
+        let mut combined = contents.to_string();
+        if !combined.ends_with('\n') {
+            combined.push('\n');
+        }
+        for (acc, seq) in &decoy_prots {
+            combined.push('>');
+            combined.push_str(acc);
+            combined.push('\n');
+            combined.push_str(seq);
+            combined.push('\n');
+        }
+        log::info!(
+            "protein-level decoys ({:?}): {} target proteins -> {} decoy proteins",
+            method,
+            tfasta.targets.len(),
+            decoy_prots.len()
+        );
+        (
+            Fasta::parse(&combined, "DECOY_", false)?,
+            false,
+            "DECOY_".to_string(),
+        )
+    } else {
+        (
+            Fasta::parse(contents, &cfg.decoy_tag, cfg.generate_decoys)?,
+            cfg.generate_decoys,
+            cfg.decoy_tag.clone(),
+        )
+    };
+    let params = DigestParams {
+        missed_cleavages: cfg.missed_cleavages,
+        min_len: cfg.min_len,
+        max_len: cfg.max_len,
+        cleave_at: cfg.cleave_at.clone(),
+        restrict: cfg.restrict.clone(),
+        c_terminal: cfg.c_terminal,
+        peptide_min_mass: cfg.peptide_min_mass,
+        peptide_max_mass: cfg.peptide_max_mass,
+        static_mods: cfg.static_mods.clone(),
+        variable_mods: cfg.variable_mods.clone(),
+        max_variable_mods: cfg.max_variable_mods,
+        generate_decoys: gen_decoys,
+    };
+    Ok((digest::digest(&fasta, &params)?, protein_level, decoy_tag))
 }
 
 impl Default for DigestConfig {
@@ -222,13 +290,13 @@ impl Default for DigestConfig {
 /// (`sequence`, `mass`): two variable-mod forms of one sequence differ in mass.
 #[derive(Debug, Clone)]
 pub struct TheoPeptide {
-    /// Stripped amino-acid sequence (decoys are already reversed by Sage).
+    /// Stripped amino-acid sequence (reverse-path decoys have their interior reversed).
     pub sequence: Arc<str>,
     /// Neutral monoisotopic mass (Da), recomputed in f64.
     pub mass: f64,
     pub decoy: bool,
     pub missed_cleavages: u8,
-    /// Source protein accessions (shared `Arc`s from Sage; cheap to clone).
+    /// Source protein accessions (shared `Arc`s; cheap to clone).
     pub proteins: Vec<Arc<str>>,
 }
 
@@ -243,140 +311,80 @@ pub struct PeptideDb {
 impl PeptideDb {
     /// Build the database from a FASTA file using the given digest config.
     pub fn build(fasta_path: impl AsRef<Path>, cfg: &DigestConfig) -> Result<Self> {
-        use crate::decoy::DecoyMethod;
         let fasta_path = fasta_path.as_ref();
         let contents = std::fs::read_to_string(fasta_path)
             .with_context(|| format!("reading fasta {}", fasta_path.display()))?;
+        let (peptides_in, protein_level, decoy_tag) = digest_fasta(&contents, cfg)?;
+        Ok(Self::assemble(peptides_in, cfg, protein_level, &decoy_tag))
+    }
 
-        let method = DecoyMethod::parse(&cfg.decoy_method, cfg.decoy_order);
-        let protein_level = cfg.generate_decoys && method.is_protein_level();
-
-        // For protein-level decoy methods we synthesize whole decoy proteins from
-        // the targets, append them to the FASTA tagged "DECOY_", and let Sage
-        // digest the combined set with its own decoy generation OFF. The target
-        // peptides come out decoy=false, the DECOY_ proteins decoy=true, and Sage's
-        // collision filter drops any decoy peptide that equals a target peptide.
-        let (fasta, gen_decoys, decoy_tag) = if protein_level {
-            let tfasta = Fasta::parse(contents.clone(), "DECOY_", false);
-            let decoy_prots = crate::decoy::generate(&tfasta.targets, method, "DECOY_", cfg.decoy_seed);
-            let mut combined = contents.clone();
-            if !combined.ends_with('\n') {
-                combined.push('\n');
-            }
-            for (acc, seq) in &decoy_prots {
-                combined.push('>');
-                combined.push_str(acc);
-                combined.push('\n');
-                combined.push_str(seq);
-                combined.push('\n');
-            }
-            log::info!(
-                "protein-level decoys ({:?}): {} target proteins -> {} decoy proteins",
-                method,
-                tfasta.targets.len(),
-                decoy_prots.len()
-            );
-            (
-                Fasta::parse(combined, "DECOY_", false),
-                false,
-                "DECOY_".to_string(),
-            )
-        } else {
-            (
-                Fasta::parse(contents, cfg.decoy_tag.clone(), cfg.generate_decoys),
-                cfg.generate_decoys,
-                cfg.decoy_tag.clone(),
-            )
-        };
-
-        let builder = Builder {
-            enzyme: Some(EnzymeBuilder {
-                missed_cleavages: Some(cfg.missed_cleavages),
-                min_len: Some(cfg.min_len),
-                max_len: Some(cfg.max_len),
-                cleave_at: Some(cfg.cleave_at.clone()),
-                restrict: Some(cfg.restrict.clone()),
-                c_terminal: Some(cfg.c_terminal),
-                semi_enzymatic: Some(false),
-            }),
-            peptide_min_mass: Some(cfg.peptide_min_mass),
-            peptide_max_mass: Some(cfg.peptide_max_mass),
-            static_mods: Some(cfg.static_mods.clone()),
-            variable_mods: Some(
-                cfg.variable_mods
-                    .iter()
-                    .map(|(k, v)| (k.clone(), v.clone()))
-                    .collect(),
-            ),
-            max_variable_mods: Some(cfg.max_variable_mods),
-            decoy_tag: Some(decoy_tag.clone()),
-            generate_decoys: Some(gen_decoys),
-            // digest() does not build the fragment index, but a fasta path is
-            // required by make_parameters().
-            fasta: Some(fasta_path.to_string_lossy().into_owned()),
-            ..Default::default()
-        };
-        let params = builder.make_parameters();
-        let sage_peptides = params.digest(&fasta);
-
-        let mut peptides: Vec<TheoPeptide> = if cfg.decoy_shuffle && cfg.generate_decoys && !protein_level {
-            global_shuffle_decoy_db(sage_peptides, cfg)
-        } else {
-            sage_peptides
-                .into_iter()
-                .map(|p| {
-                    let mut mass = mass::neutral_mass(&p.sequence, &p.modifications, p.nterm, p.cterm)
-                        .unwrap_or(p.monoisotopic as f64);
-                    // Protein-level decoys carry real digestion masses; only the
-                    // reverse+mass-shift path applies an artificial offset.
-                    if p.decoy && !protein_level {
-                        mass += cfg.decoy_mass_shift;
-                    }
-                    let sequence: Arc<str> =
-                        Arc::from(std::str::from_utf8(&p.sequence).unwrap_or("").to_owned());
-                    // Strip the decoy_tag prefix from decoy protein accessions so they
-                    // read IDENTICALLY to their target counterpart's accession (only
-                    // the `decoy` flag distinguishes them). Sage's own Fasta::parse
-                    // keeps the tag baked into the accession string when reading an
-                    // already-decoy-tagged FASTA (generate_decoys=false); without this,
-                    // a decoy accession can never equal any target accession, so the
-                    // (decoy, accession) pair-competition FDR step never fires for ANY
-                    // protein in the run -- silently inflating the reported q-values
-                    // (measured: 713 nominal @q<=1% vs 167 true on yeast entrapment).
-                    // uno's own decoy_shuffle path already satisfies this by cloning
-                    // the target's Arc<str> directly (see global_shuffle_decoy_db).
-                    let proteins = if p.decoy {
-                        p.proteins
-                            .iter()
-                            .map(|a| {
-                                a.strip_prefix(decoy_tag.as_str())
-                                    .map(Arc::from)
-                                    .unwrap_or_else(|| a.clone())
-                            })
-                            .collect()
-                    } else {
-                        p.proteins
-                    };
-                    TheoPeptide {
-                        sequence,
-                        mass,
-                        decoy: p.decoy,
-                        missed_cleavages: p.missed_cleavages,
-                        proteins,
-                    }
-                })
-                .collect()
-        };
+    /// Turn digested peptides into the sorted uno database (decoy handling + f64 masses).
+    fn assemble(
+        peptides_in: Vec<Peptide>,
+        cfg: &DigestConfig,
+        protein_level: bool,
+        decoy_tag: &str,
+    ) -> Self {
+        let mut peptides: Vec<TheoPeptide> =
+            if cfg.decoy_shuffle && cfg.generate_decoys && !protein_level {
+                global_shuffle_decoy_db(peptides_in, cfg)
+            } else {
+                peptides_in
+                    .into_iter()
+                    .map(|p| {
+                        let mut mass =
+                            mass::neutral_mass(&p.sequence, &p.modifications, p.nterm, p.cterm)
+                                .unwrap_or(p.monoisotopic as f64);
+                        // Protein-level decoys carry real digestion masses; only the
+                        // reverse+mass-shift path applies an artificial offset.
+                        if p.decoy && !protein_level {
+                            mass += cfg.decoy_mass_shift;
+                        }
+                        let sequence: Arc<str> =
+                            Arc::from(std::str::from_utf8(&p.sequence).unwrap_or("").to_owned());
+                        // Strip the decoy_tag prefix from decoy protein accessions so they
+                        // read IDENTICALLY to their target counterpart's accession (only
+                        // the `decoy` flag distinguishes them). Sage's own Fasta::parse
+                        // keeps the tag baked into the accession string when reading an
+                        // already-decoy-tagged FASTA (generate_decoys=false); without this,
+                        // a decoy accession can never equal any target accession, so the
+                        // (decoy, accession) pair-competition FDR step never fires for ANY
+                        // protein in the run -- silently inflating the reported q-values
+                        // (measured: 713 nominal @q<=1% vs 167 true on yeast entrapment).
+                        // uno's own decoy_shuffle path already satisfies this by cloning
+                        // the target's Arc<str> directly (see global_shuffle_decoy_db).
+                        let proteins = if p.decoy {
+                            p.proteins
+                                .iter()
+                                .map(|a| {
+                                    a.strip_prefix(decoy_tag)
+                                        .map(Arc::from)
+                                        .unwrap_or_else(|| a.clone())
+                                })
+                                .collect()
+                        } else {
+                            p.proteins
+                        };
+                        TheoPeptide {
+                            sequence,
+                            mass,
+                            decoy: p.decoy,
+                            missed_cleavages: p.missed_cleavages,
+                            proteins,
+                        }
+                    })
+                    .collect()
+            };
 
         peptides.sort_by(|a, b| a.mass.partial_cmp(&b.mass).unwrap());
 
         let n_decoys = peptides.iter().filter(|p| p.decoy).count();
         let n_targets = peptides.len() - n_decoys;
-        Ok(PeptideDb {
+        PeptideDb {
             peptides,
             n_targets,
             n_decoys,
-        })
+        }
     }
 
     pub fn len(&self) -> usize {

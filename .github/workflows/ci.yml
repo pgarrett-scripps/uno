@@ -45,13 +45,8 @@ jobs:
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
-      # TODO: make these blocking. main predates rustfmt/clippy enforcement
-      # (31 files unformatted, ~80 clippy warnings); a mass reformat is left out
-      # of the release-prep PR so it does not collide with in-flight work.
       - run: cargo fmt --all -- --check
-        continue-on-error: true
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-        continue-on-error: true
       - run: cargo check -p uno-ms --locked --no-default-features
 
   test:
@@ -69,8 +64,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.97.1
-      # `cargo publish --dry-run` cannot pass while koth-ms and sage-core are
-      # git dependencies; listing the packaged files still catches anything
+      # `cargo publish --dry-run` cannot pass while koth-ms is a
+      # git dependency; listing the packaged files still catches anything
       # that would be left out of (or leak into) the crates.
       - name: List packaged files
         run: |

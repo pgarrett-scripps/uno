@@ -20,7 +20,7 @@ cite-check:
     [ "$crate" = "$cff" ] || { echo "CITATION.cff version $cff != Cargo.toml $crate: run just cite-sync"; exit 1; }
     echo "CITATION.cff matches Cargo.toml ($crate)"
 
-# Format, lint and test the workspace (fmt and clippy are not yet clean on main)
+# Format, lint and test the workspace (same gates as CI)
 check:
     cargo fmt --all -- --check
     cargo clippy --workspace --all-targets --locked -- -D warnings

@@ -10,21 +10,19 @@ See [matrix input](docs/matrix-input.md) for multi-run searching and the
 experimental confidence-aware matrix schema. Matrix input retains cross-run
 intensities but omits some quality descriptors from individual feature tables.
 
-Digestion is reused from [Sage](https://github.com/lazear/sage)'s core library; retention-time prediction is a
+Digestion follows [Sage](https://github.com/lazear/sage)'s database builder (ported into `uno-core`); retention-time prediction is a
 pure-Rust learned model, with an on-data calibration step per run.
 
-## Experimental quantitative options (LFQ branch)
+## Experimental quantitative options
 
-This branch adds `uno quant` ([details](crates/uno-core/src/quant/directms1/README.md)), a Rust
+`uno` includes `uno quant` ([details](crates/uno-core/src/quant/directms1/README.md)), a Rust
 DirectMS1Quant-style contrast analyzer in `uno-core`, and opt-in `--out-quant-evidence` exports
 from independent uno searches. The existing KOTH-matrix route remains the second
 quantitative option. Native-reference parity is tested; biological accuracy and
-error calibration are pending. Development is isolated on `codex/uno-lfq`.
+error calibration are pending.
 
 ## Workspace layout
 
-| crate | purpose |
-| --- | --- |
 | directory | crates.io package | purpose |
 | --- | --- | --- |
 | `crates/uno-core` | `uno-ms-core` | search, scoring, FDR, and quantitative contrast library |
@@ -45,8 +43,8 @@ cargo install uno-ms
 This needs Rust 1.97 or newer. Bruker `.d` and Thermo `.raw` input (through
 [koth-ms](https://github.com/pgarrett-scripps/koth), pure Rust, no .NET runtime)
 are built in; `cargo install uno-ms --no-default-features` drops `.raw`.
-LightGBM is linked from a vendored prebuilt `lib_lightgbm.so`, so builds
-currently target Linux x86_64 only.
+**Platform:** `cargo install uno-ms` currently supports Linux x86_64 only.
+LightGBM is linked from a vendored prebuilt `lib_lightgbm.so`.
 
 ## Build from source
 
@@ -107,11 +105,7 @@ Leave them absent for shared-seed behavior; see `example_config.toml` for exampl
 Changing decoys also changes downstream peptide indexing, so an individual seed
 intervention is not a pure variance-component estimate.
 
-The [stability study](https://github.com/pgarrett-scripps/uno-paper/blob/main/docs/stability-study.md) records the low-input failure
-mechanism, paired evaluation, and calibration checks. Historical manuscript
-outputs remain archived separately from new engine experiments.
-
-The current search includes [bounded RT recovery](https://github.com/pgarrett-scripps/uno-paper/blob/main/docs/bounded-rt-recovery.md):
+The current search includes bounded RT recovery:
 when the usual search and its evidence-retention retry find no target proteins
 at 1% FDR, UNO attempts one additional broad RT calibration. Successful results
 are returned unchanged. Validation showed fewer empty low-input runs with
@@ -120,10 +114,9 @@ are returned unchanged. Validation showed fewer empty low-input runs with
 ## Repository contents
 
 - `crates/` — the Rust workspace.
-- `models/` — sequence CNNs and historical RT/IM tree models.
-- [uno-paper](https://github.com/pgarrett-scripps/uno-paper) — the separate manuscript repository; `paper/` is a compatibility link to the sibling checkout.
-- [uno-lfq-paper](https://github.com/pgarrett-scripps/uno-lfq-paper) — LFQ manuscript and workflow studies.
-- Study analysis, figure/table generators, and evidence live with their respective papers.
+- `models/` — notes on the bundled RT and IM CNNs (the weights ship in `crates/uno-core/models/`).
+- `docs/` — model, matrix-input and quantification notes.
+- `tools/quant-reference/` — the DirectMS1Quant reference used for parity checks.
 - `tests/fixtures/` — software regression-test configurations.
 
 Build artifacts (`target/`), the Python virtualenv (`.venv/`), RT training data
