@@ -1,17 +1,27 @@
 [package]
-name = "uno"
+name = "uno-ms"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "MS1-only peptide and protein identification from LC-MS features, with target-decoy FDR"
+keywords = ["mass-spectrometry","proteomics","ms1","search-engine","lc-ms"]
+categories = ["science","command-line-utilities"]
+readme = "../../README.md"
 
 [[bin]]
 name = "uno"
 path = "src/main.rs"
 
 [dependencies]
-uno-core = { path = "../uno-core" }
-koth_ff.workspace = true
+uno-core.workspace = true
+koth-ms.workspace = true
+# Not used from Rust code here: a direct dependency so build.rs receives the
+# vendored LightGBM directory (DEP_LIGHTGBM_VENDOR_DIR) and can set the rpath.
+uno-lightgbm-sys.workspace = true
 clap.workspace = true
 anyhow.workspace = true
 log.workspace = true
@@ -24,7 +34,8 @@ sha2 = "0.10"
 tempfile = "3"
 
 [features]
-# Native Thermo .raw input in the built-in feature finder. Forwards to
-# koth_ff's `thermo` feature: requires a .NET 8 runtime at build and run time.
-# mzML works with no feature; Bruker .d works via koth_ff's default `tdf`.
-thermo = ["koth_ff/thermo"]
+default = ["thermo"]
+# Native Thermo .raw input in the built-in feature finder, through koth-ms's
+# pure-Rust sage-plus-raw reader (no .NET runtime). mzML needs no feature;
+# Bruker .d comes from koth-ms's `tdf`. `--no-default-features` drops .raw.
+thermo = ["koth-ms/thermo"]

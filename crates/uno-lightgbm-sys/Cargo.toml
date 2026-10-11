@@ -1,10 +1,24 @@
 [package]
-name = "uno-lightgbm-sys"
+name = "uno-ms-lightgbm-sys"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "FFI bindings to a vendored prebuilt LightGBM shared library (Linux x86_64), used by uno-ms"
+keywords = ["lightgbm","ffi","gradient-boosting"]
+categories = ["science","external-ffi-bindings"]
+readme = "vendor/README.md"
 build = "build.rs"
+# `links` lets dependents read the vendored library directory from
+# DEP_LIGHTGBM_VENDOR_DIR (uno-ms uses it to set the binary rpath).
+links = "lightgbm"
+
+# The library keeps its original name, so code says `uno_lightgbm_sys::`.
+[lib]
+name = "uno_lightgbm_sys"
 
 [dependencies]
 anyhow.workspace = true

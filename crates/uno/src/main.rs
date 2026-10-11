@@ -78,7 +78,7 @@ struct Cli {
 
     /// Raw run to find features from in-process, with no intermediate biosaur2
     /// pass: mzML (`.mzML`/`.mzML.gz`), Bruker `.d`, or Thermo `.raw` (the last
-    /// needs uno built with `--features thermo`). koth's feature finder runs with
+    /// needs the default `thermo` feature). koth's feature finder runs with
     /// the bundled biosaur2-matching config unless the uno config has a `[koth]`
     /// table. Mutually exclusive with `--features`.
     #[arg(long)]
@@ -215,7 +215,7 @@ struct Config {
     protein: ProteinConfig,
     /// Optional override for the built-in koth feature finder (`--raw` only).
     /// Absent → the bundled biosaur2-matching profile is used.
-    koth: Option<koth_ff::config::KothConfig>,
+    koth: Option<koth_ms::config::KothConfig>,
 }
 
 impl Config {

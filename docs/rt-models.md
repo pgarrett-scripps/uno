@@ -1,6 +1,6 @@
 # Custom retention-time CNNs
 
-Uno embeds `models/rt_cnn_chrono_global_v3_ch32.urtc` in the search binary. A
+Uno embeds `crates/uno-core/models/rt_cnn_chrono_global_v3_ch32.urtc` (symlinked at `models/`) in the search binary. A
 normal search needs no model path, Python, network access, or runtime download.
 Use `--rt-model custom.urtc` to select a custom CNN. Search still calibrates its
 predictions to each run; it does not train or overwrite reusable model files.

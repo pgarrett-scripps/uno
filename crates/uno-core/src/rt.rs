@@ -146,7 +146,7 @@ enum RtBackend {
 }
 
 /// The supported pretrained CNN, embedded so installed binaries work anywhere.
-pub const DEFAULT_RT_CNN: &[u8] = include_bytes!("../../../models/rt_cnn_chrono_global_v3_ch32.urtc");
+pub const DEFAULT_RT_CNN: &[u8] = include_bytes!("../models/rt_cnn_chrono_global_v3_ch32.urtc");
 
 #[cfg(test)]
 mod cnn_workflow_tests {

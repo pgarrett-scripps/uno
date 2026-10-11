@@ -1,16 +1,21 @@
 [package]
-name = "uno-rt-train"
+name = "uno-ms-rt-train"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Research tools for training uno retention-time and ion-mobility tree models"
+publish = false
 
 [[bin]]
 name = "uno-rt-train"
 path = "src/main.rs"
 
 [dependencies]
-uno-core = { path = "../uno-core" }
+uno-core.workspace = true
 sequoia-boost.workspace = true
 clap.workspace = true
 anyhow.workspace = true

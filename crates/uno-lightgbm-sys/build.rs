@@ -17,5 +17,10 @@ fn main() {
     // and this package only has a lib target (this crate's own `cargo test`
     // picks up the rpath fine; a downstream binary like `uno` would not). The
     // actual `uno` binary's build.rs sets its own rpath to this vendor dir.
+    // This crate's own test binaries need the rpath too (cargo only puts
+    // native search paths inside target/ on the loader path).
+    println!("cargo:rustc-link-arg=-Wl,-rpath,{}", vendor_dir.display());
+    // Exposed to direct dependents as DEP_LIGHTGBM_VENDOR_DIR.
+    println!("cargo:vendor_dir={}", vendor_dir.display());
     println!("cargo:rerun-if-changed=vendor/lib_lightgbm.so");
 }

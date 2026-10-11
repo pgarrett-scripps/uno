@@ -10,9 +10,9 @@
 //! feature membership therefore does not guarantee identical search outputs.
 //!
 //! Input routing (mzML / Bruker `.d` / Thermo `.raw`) is handled inside
-//! `koth_ff::run_hills_streaming` by file extension. `.raw` needs uno built with
-//! `--features thermo` (a .NET 8 runtime); `.d` needs koth's default `tdf`
-//! feature (on by default); mzML always works.
+//! `koth_ms::run_pipeline` by file extension. `.raw` needs uno's `thermo`
+//! feature (on by default; koth-ms's pure-Rust reader, no .NET runtime); `.d`
+//! uses koth-ms's `tdf` feature (always enabled here); mzML always works.
 //!
 //! The default koth config is the biosaur2-matching profile (`min_scans = 2` +
 //! `min_scan_overlap = 1`), bundled from `koth_default.toml`. Those two knobs
@@ -24,7 +24,7 @@ use anyhow::{Context, Result};
 use std::path::Path;
 use std::time::Instant;
 
-use koth_ff::config::KothConfig;
+use koth_ms::config::KothConfig;
 use uno_core::{Feature, FeatureMatrix};
 
 /// The biosaur2-matching koth config used when the uno config has no `[koth]`
@@ -64,7 +64,7 @@ mod tests {
         }
         let standalone: KothConfig = toml::from_str(include_str!("../../../tests/fixtures/koth_uno.toml")).unwrap();
         assert_eq!(toml::to_string(&standalone).unwrap(), toml::to_string(&orbitrap).unwrap());
-        let align: koth_ff::config::AlignConfig = toml::from_str(include_str!("../../../tests/fixtures/koth_align.toml")).unwrap();
+        let align: koth_ms::config::AlignConfig = toml::from_str(include_str!("../../../tests/fixtures/koth_align.toml")).unwrap();
         align.lfq.consensus.validate().unwrap();
         assert_eq!(align.lfq.consensus.max_group_qvalue, 0.05);
         assert_eq!(align.lfq.rt_window_pct, 0.005);
@@ -77,7 +77,7 @@ mod tests {
         for setting in ["min_group_size = 1", "allow_replicated_weak_seeds = true",
             "min_seed_combined_score = 0.75", "min_member_combined_score = 0.5"] {
             let text = format!("[lfq.consensus]\n{setting}\n");
-            assert!(toml::from_str::<koth_ff::config::AlignConfig>(&text).is_err());
+            assert!(toml::from_str::<koth_ms::config::AlignConfig>(&text).is_err());
         }
     }
 }
@@ -113,10 +113,10 @@ pub fn features_from_raw(path: &Path, config: &KothConfig) -> Result<FeatureMatr
     // documents it as exactly reproducing the historic MS1-only `run_pipeline`);
     // uno is an MS1-only engine and never reads MS2 hills. The field was added
     // upstream after `7f2cece` and broke this build until it was named here.
-    let out = koth_ff::run_pipeline(
+    let out = koth_ms::run_pipeline(
         path,
         &cfg,
-        &koth_ff::PipelineOptions { scoring: true, emit_ms2: false },
+        &koth_ms::PipelineOptions { scoring: true, emit_ms2: false },
     )
         .with_context(|| format!("koth feature finding on {}", path.display()))?;
     log::info!(

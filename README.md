@@ -10,7 +10,7 @@ See [matrix input](docs/matrix-input.md) for multi-run searching and the
 experimental confidence-aware matrix schema. Matrix input retains cross-run
 intensities but omits some quality descriptors from individual feature tables.
 
-Digestion is reused from [sage-core](../sage); retention-time prediction is a
+Digestion is reused from [Sage](https://github.com/lazear/sage)'s core library; retention-time prediction is a
 pure-Rust learned model, with an on-data calibration step per run.
 
 ## Experimental quantitative options (LFQ branch)
@@ -25,43 +25,47 @@ error calibration are pending. Development is isolated on `codex/uno-lfq`.
 
 | crate | purpose |
 | --- | --- |
-| `uno-core` | search, scoring, FDR, and quantitative contrast library |
-| `uno` | command-line binary |
-| `uno-rt-train/python` | shared optional PyTorch sequence-CNN trainer for `uno rt train` and `uno im train` |
-| `uno-rt-train` | legacy RT/IM tree-model research tools |
-| `uno-lightgbm-sys` | FFI bindings to a vendored LightGBM |
+| directory | crates.io package | purpose |
+| --- | --- | --- |
+| `crates/uno-core` | `uno-ms-core` | search, scoring, FDR, and quantitative contrast library |
+| `crates/uno` | `uno-ms` | command-line binary `uno` |
+| `crates/uno-lightgbm-sys` | `uno-ms-lightgbm-sys` | FFI bindings to a vendored LightGBM |
+| `crates/uno-rt-train` | not published | legacy RT/IM tree-model research tools (`uno-rt-train` binary) |
+| `crates/uno-rt-train/python` | not published | optional PyTorch sequence-CNN trainer for `uno rt train` and `uno im train` |
 
-## Prerequisites
+## Install
 
-- A recent stable Rust toolchain (`rustup`, edition 2021).
-- **A sibling `sage` checkout.** The workspace has a path dependency
-  `sage-core = { path = "../sage/crates/sage" }`, so `sage` must be cloned next
-  to this repo before it will build.
-- **KOTH 0.8.0 candidate source** at
-  `../koth_rust/.worktrees/release-0.8.0` (commit
-  `dce83d5f2f01281d9464cbdc147d8759d78e0834`) and the sibling `Sequoia`
-  checkout. This LFQ branch enforces KOTH version `=0.8.0`; the source remains a
-  local path dependency. See [the LFQ migration](docs/matrix-input.md#koth-070-compatibility)
-  for new settings and schema-3 support.
-
-```
-Repos/
-├── sage/    # https://github.com/lazear/sage
-├── koth_rust/ # https://github.com/tacular-omics/koth_rust, tag v0.7.0
-├── Sequoia/ # sequoia-boost dependency
-└── uno/     # this repo
-```
-
-## Build
+uno is published on crates.io as `uno-ms` (the `uno` name there belongs to an
+unrelated crate); the installed command is still `uno`:
 
 ```sh
-cargo build --release
+cargo install uno-ms
 ```
+
+This needs Rust 1.97 or newer. Bruker `.d` and Thermo `.raw` input (through
+[koth-ms](https://github.com/pgarrett-scripps/koth), pure Rust, no .NET runtime)
+are built in; `cargo install uno-ms --no-default-features` drops `.raw`.
+LightGBM is linked from a vendored prebuilt `lib_lightgbm.so`, so builds
+currently target Linux x86_64 only.
+
+## Build from source
+
+```sh
+git clone https://github.com/pgarrett-scripps/uno
+cd uno
+cargo build --release   # binary at target/release/uno
+```
+
+All dependencies are fetched by Cargo; no sibling checkouts are needed.
+
+## Citation
+
+If you use uno, please cite it using the metadata in [CITATION.cff](CITATION.cff).
 
 ## Run
 
 ```sh
-cargo run --release -p uno -- \
+cargo run --release -p uno-ms -- \
   --features path/to/run.features.tsv \
   --fasta path/to/proteins.fasta \
   --config example_config.toml \

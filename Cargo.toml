@@ -14,7 +14,10 @@ codegen-units = 1
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
-authors = ["Patrick Garrett"]
+authors = ["Patrick Garrett <pgarrett@scripps.edu>"]
+repository = "https://github.com/pgarrett-scripps/uno"
+homepage = "https://github.com/pgarrett-scripps/uno"
+rust-version = "1.97"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -28,14 +31,22 @@ anyhow = "1"
 log = "0.4"
 env_logger = "0.11"
 gbdt = "0.1.3"
-uno-lightgbm-sys = { path = "crates/uno-lightgbm-sys" }
+# Workspace crates. Published as `uno-ms-*` (`uno` and the generic `uno-core`
+# name are taken or ambiguous on crates.io); the dependency keys keep the
+# original names, so code still says `uno_core::` and `uno_lightgbm_sys::`.
+uno-core = { package = "uno-ms-core", path = "crates/uno-core", version = "0.1.0" }
+uno-lightgbm-sys = { package = "uno-ms-lightgbm-sys", path = "crates/uno-lightgbm-sys", version = "0.1.0" }
 # Pure-Rust XGBoost reimplementation (A/B vs LightGBM; kept for pure-Rust option).
-sequoia-boost = { path = "../Sequoia/crates/sequoia-boost" }
-# Digestion / peptide mass / decoys — reuse Sage's core library.
-sage-core = { path = "../sage/crates/sage" }
+sequoia-boost = "0.2"
+# Digestion / peptide mass / decoys from Sage's core library. Upstream Sage is
+# not on crates.io (the `sage-core` name there belongs to an unrelated crate),
+# so this git dependency blocks publishing uno-core and uno-ms until a Sage core
+# crate is published under its own name.
+# TODO(release): switch to a crates.io release of the Sage core library.
+sage-core = { git = "https://github.com/lazear/sage", rev = "0639176e58b788a35c0b163e9cfdbdbede0e99c2" }
 # In-process feature finding straight from raw data (mzML / Bruker .d / Thermo
-# .raw), so uno can run without a prior biosaur2 pass. `tdf` (Bruker) is on by
-# default; `thermo` (native .raw) is opt-in (needs a .NET 8 runtime).
-# LFQ-only KOTH candidate: dce83d5f2f01281d9464cbdc147d8759d78e0834.
-# Keep the sibling-source workflow, but reject an accidental release mismatch.
-koth_ff = { path = "../koth_rust/.worktrees/release-0.8.0/koth_ff", version = "=0.8.0" }
+# .raw), so uno can run without a prior biosaur2 pass. Bruker .d (`tdf`) is on by
+# default; Thermo .raw (`thermo`) uses koth-ms's pure-Rust sage-plus-raw reader.
+# TODO(release): koth-ms 0.12.0 is not on crates.io yet (koth PR #6); switch to
+# `koth-ms = { version = "0.12.0", default-features = false, features = ["tdf"] }`.
+koth-ms = { git = "https://github.com/pgarrett-scripps/koth", branch = "deps/sage-plus-0.12.0", default-features = false, features = ["tdf"] }

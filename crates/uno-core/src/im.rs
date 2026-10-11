@@ -6,7 +6,7 @@ use gbdt::gradient_boost::GBDT;
 use std::path::Path;
 
 /// Portable sequence CNN, trained on public measured TIMS labels.
-pub const DEFAULT_IM_CNN: &[u8] = include_bytes!("../../../models/im_cnn_public_20260914.uimc");
+pub const DEFAULT_IM_CNN: &[u8] = include_bytes!("../models/im_cnn_public_20260914.uimc");
 
 /// Tree-model inputs: RT composition descriptors plus charge.
 pub const IM_N_FEATURES: usize = crate::rt::RT_N_FEATURES + 1;

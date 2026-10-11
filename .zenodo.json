@@ -1,0 +1,33 @@
+{
+  "title": "uno: MS1-only peptide and protein identification",
+  "upload_type": "software",
+  "description": "uno is a Rust MS1-only search engine in the spirit of DirectMS1 and ms1searchpy. It searches LC-MS peptide features (from biosaur2, koth, or built-in koth feature finding on mzML, Bruker timsTOF and Thermo RAW files), scores candidates with retention-time and ion-mobility prediction, and estimates FDR with target-decoy competition.",
+  "creators": [
+    {
+      "name": "Garrett, Patrick T.",
+      "affiliation": "The Scripps Research Institute",
+      "orcid": "0000-0002-8434-9693"
+    },
+    {
+      "name": "Yates, John R., III",
+      "affiliation": "The Scripps Research Institute",
+      "orcid": "0000-0001-5267-1672"
+    }
+  ],
+  "license": "MIT",
+  "keywords": [
+    "mass spectrometry",
+    "proteomics",
+    "MS1-only search",
+    "false discovery rate",
+    "retention time prediction",
+    "Rust"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/pgarrett-scripps/uno",
+      "relation": "isSupplementTo",
+      "scheme": "url"
+    }
+  ]
+}

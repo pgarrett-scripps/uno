@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.0] - unreleased
+
+First public release, on crates.io as `uno-ms` (command `uno`).
+
+- Build on the published koth-ms crate (0.12.0) instead of a sibling `koth_ff`
+  checkout. Thermo `.raw` input now uses koth-ms's pure-Rust reader, needs no
+  .NET runtime, and is on by default (`--no-default-features` drops it).
+- Packages renamed for crates.io: `uno` -> `uno-ms` (binary still `uno`),
+  `uno-core` -> `uno-ms-core`, `uno-lightgbm-sys` -> `uno-ms-lightgbm-sys`,
+  `uno-rt-train` -> `uno-ms-rt-train` (not published; binary still
+  `uno-rt-train`). Library names are unchanged (`uno_core`, `uno_lightgbm_sys`).
+- sequoia-boost comes from crates.io (0.2) and Sage from its upstream git
+  repository; no sibling checkouts are needed to build.
+- The bundled RT and IM CNN weights moved into `crates/uno-core/models/`
+  (symlinked from `models/`) so they ship inside the crate.
+- The `uno` binary finds the vendored LightGBM library through the sys crate's
+  `links` metadata, so the rpath is correct for crates.io builds.
+- Release metadata: CITATION.cff, .zenodo.json, CI, and a release workflow that
+  publishes the crates when a GitHub release is published.
+
+## Pre-release development history
+
 ## Unreleased — KOTH 0.7.0 compatibility
 
 - Require the sibling KOTH dependency at version 0.7.0 and record the released source revision. Pin additive isotope-evidence defaults in both raw profiles and update the standalone feature configuration.
