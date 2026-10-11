@@ -122,6 +122,11 @@ are returned unchanged. Validation showed fewer empty low-input runs with
 Build artifacts (`target/`), the Python virtualenv (`.venv/`), RT training data
 (`data/`), and scratch outputs (`experiments/`) are intentionally not tracked.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
+Report security issues privately as described in [SECURITY.md](SECURITY.md).
+
 ## License
 
 MIT © Patrick Garrett
