@@ -41,6 +41,4 @@ sequoia-boost = "0.2"
 # In-process feature finding straight from raw data (mzML / Bruker .d / Thermo
 # .raw), so uno can run without a prior biosaur2 pass. Bruker .d (`tdf`) is on by
 # default; Thermo .raw (`thermo`) uses koth-ms's pure-Rust sage-plus-raw reader.
-# TODO(release): koth-ms 0.12.0 is not on crates.io yet (koth PR #6); switch to
-# `koth-ms = { version = "0.12.0", default-features = false, features = ["tdf"] }`.
-koth-ms = { git = "https://github.com/pgarrett-scripps/koth", branch = "deps/sage-plus-0.12.0", default-features = false, features = ["tdf"] }
+koth-ms = { version = "0.12.0", default-features = false, features = ["tdf"] }

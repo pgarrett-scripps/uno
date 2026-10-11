@@ -1482,7 +1482,8 @@ dependencies = [
 [[package]]
 name = "koth-core"
 version = "0.12.0"
-source = "git+https://github.com/pgarrett-scripps/koth?branch=deps%2Fsage-plus-0.12.0#4701bf93a89b78617aaf0afd30aa878f13b1515a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2dff773993260ca39aec8d340dc91380f38f541354a83b2cebccb290a1a3470b"
 dependencies = [
  "log",
  "rand 0.8.6",
@@ -1496,7 +1497,8 @@ dependencies = [
 [[package]]
 name = "koth-ms"
 version = "0.12.0"
-source = "git+https://github.com/pgarrett-scripps/koth?branch=deps%2Fsage-plus-0.12.0#4701bf93a89b78617aaf0afd30aa878f13b1515a"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "feaa729b572c0817f3c1a71b28be290ba01e5adb1facb801d02e51199ca5ff68"
 dependencies = [
  "anyhow",
  "arrow",
