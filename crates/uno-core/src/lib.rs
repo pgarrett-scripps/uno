@@ -4,16 +4,26 @@
 //! consensus matrices. Long-format bundles retain original feature quality and
 //! per-run observations for shared-database batch search.
 
-pub mod calibrate;
+// Structural lints: numeric kernels index several parallel buffers and scoring
+// passes many parallel slices; rewriting these for clippy would hurt clarity.
+#![allow(
+    clippy::too_many_arguments,
+    clippy::type_complexity,
+    clippy::needless_range_loop,
+    clippy::large_enum_variant
+)]
+
 mod broad_rt;
+pub mod calibrate;
+pub mod cell_evidence;
 pub mod database;
 pub mod decoy;
+pub mod digest;
 pub mod group;
 pub mod im;
 mod im_cache;
 pub mod input;
 pub mod joint;
-pub mod cell_evidence;
 pub mod long_input;
 pub mod mass;
 pub mod matching;
@@ -58,7 +68,7 @@ pub fn seed_mix(seed: u64) -> u64 {
 ///
 /// The benchmark inputs these tests need are gitignored (multi-gigabyte), so a
 /// fresh clone cannot run them. Three tests used to hard-code
-/// `/home/patrick-garrett/...` and silently `return` when it was missing, which
+/// an absolute path under one home directory and silently `return` when it was missing, which
 /// reports as PASSED. That is the failure mode that let `uno` sit un-compilable at
 /// HEAD behind a green `cargo check`.
 ///
@@ -77,8 +87,14 @@ pub(crate) fn test_input(rel: &str) -> Option<std::path::PathBuf> {
         return Some(p);
     }
     if std::env::var("UNO_REQUIRE_TEST_DATA").as_deref() == Ok("1") {
-        panic!("UNO_REQUIRE_TEST_DATA=1 but test input is missing: {}", p.display());
+        panic!(
+            "UNO_REQUIRE_TEST_DATA=1 but test input is missing: {}",
+            p.display()
+        );
     }
-    eprintln!("SKIP: test input not present: {} (set UNO_REQUIRE_TEST_DATA=1 to make this a failure)", p.display());
+    eprintln!(
+        "SKIP: test input not present: {} (set UNO_REQUIRE_TEST_DATA=1 to make this a failure)",
+        p.display()
+    );
     None
 }

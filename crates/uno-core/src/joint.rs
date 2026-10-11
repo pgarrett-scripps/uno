@@ -52,29 +52,55 @@ pub const NAMES: [&str; 14] = [
 /// Otherwise a candidate found on an eligible member could be scored using a
 /// different observation that the user's isotope/quality settings excluded.
 pub fn restrict_observations(matrix: &mut crate::FeatureMatrix, cfg: &crate::MatchConfig) {
-    let Some(groups) = matrix.joint_evidence.take() else { return; };
+    let Some(groups) = matrix.joint_evidence.take() else {
+        return;
+    };
     let cells = matrix.joint_cell_evidence.take();
     let mut retained_cells = Vec::new();
     let mut features = Vec::new();
     let mut retained = Vec::new();
-    for (i, (mut f, mut group)) in std::mem::take(&mut matrix.features).into_iter().zip(groups).enumerate() {
+    for (i, (mut f, mut group)) in std::mem::take(&mut matrix.features)
+        .into_iter()
+        .zip(groups)
+        .enumerate()
+    {
         let before = group.len();
         group.retain(|o| crate::matching::passes(&o.feature, cfg));
-        if group.is_empty() { continue; }
+        if group.is_empty() {
+            continue;
+        }
         if group.len() != before {
-            let representative = group.iter().max_by(|a, b| {
-                a.feature.n_isotopes.is_some_and(|n| n >= 3.0)
-                    .cmp(&b.feature.n_isotopes.is_some_and(|n| n >= 3.0))
-                    .then(a.feature.combined_score.total_cmp(&b.feature.combined_score))
-                    .then_with(|| (b.run_id, b.observation_id).cmp(&(a.run_id, a.observation_id)))
-            }).unwrap();
+            let representative = group
+                .iter()
+                .max_by(|a, b| {
+                    a.feature
+                        .n_isotopes
+                        .is_some_and(|n| n >= 3.0)
+                        .cmp(&b.feature.n_isotopes.is_some_and(|n| n >= 3.0))
+                        .then(
+                            a.feature
+                                .combined_score
+                                .total_cmp(&b.feature.combined_score),
+                        )
+                        .then_with(|| {
+                            (b.run_id, b.observation_id).cmp(&(a.run_id, a.observation_id))
+                        })
+                })
+                .unwrap();
             let intensities = f.intensities;
             f = representative.feature.clone();
             f.intensities = intensities;
-            f.n_contributing_runs = group.iter().map(|o| o.run_id).collect::<std::collections::HashSet<_>>().len() as u32;
+            f.n_contributing_runs = group
+                .iter()
+                .map(|o| o.run_id)
+                .collect::<std::collections::HashSet<_>>()
+                .len() as u32;
         }
-        if let Some(cells) = &cells { retained_cells.push(cells[i]); }
-        features.push(f); retained.push(group);
+        if let Some(cells) = &cells {
+            retained_cells.push(cells[i]);
+        }
+        features.push(f);
+        retained.push(group);
     }
     matrix.features = features;
     matrix.joint_evidence = Some(retained);
@@ -84,7 +110,7 @@ pub fn restrict_observations(matrix: &mut crate::FeatureMatrix, cfg: &crate::Mat
 fn med(v: &mut [f64]) -> f64 {
     v.sort_unstable_by(f64::total_cmp);
     let n = v.len();
-    if n % 2 == 0 {
+    if n.is_multiple_of(2) {
         (v[n / 2 - 1] + v[n / 2]) / 2.0
     } else {
         v[n / 2]

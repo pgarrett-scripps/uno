@@ -33,7 +33,12 @@ fn main() -> Result<()> {
         .map(|l| l.split('\t').next().unwrap_or("").to_string())
         .collect();
     let max = *sizes.iter().max().context("no sizes")?;
-    anyhow::ensure!(seqs.len() >= max, "library has {} peptides, need {}", seqs.len(), max);
+    anyhow::ensure!(
+        seqs.len() >= max,
+        "library has {} peptides, need {}",
+        seqs.len(),
+        max
+    );
 
     // warm-up: thread pool creation and first-touch allocations
     std::hint::black_box(model.predict_many(&seqs[..max]));

@@ -1,9 +1,20 @@
 [package]
-name = "uno-core"
+name = "uno-ms-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Search, scoring, FDR and quantitative contrast library behind the uno MS1-only search engine"
+keywords = ["mass-spectrometry","proteomics","ms1","fdr"]
+categories = ["science"]
+readme = "../../README.md"
+
+# The library keeps its original name, so code says `uno_core::`.
+[lib]
+name = "uno_core"
 
 [dependencies]
 serde.workspace = true
@@ -13,7 +24,6 @@ rayon.workspace = true
 rustc-hash.workspace = true
 anyhow.workspace = true
 log.workspace = true
-sage-core.workspace = true
 gbdt.workspace = true
 uno-lightgbm-sys.workspace = true
 sequoia-boost.workspace = true

@@ -1,6 +1,6 @@
 //! uno-rt-train — Phase 4: distill a DeepLC RT model into a fast pure-Rust gbdt.
 //!
-//! Input is a `SEQUENCE\tRT` label file (DeepLC predictions, e.g. sherlock's
+//! Input is a `SEQUENCE\tRT` label file (DeepLC predictions, e.g. a
 //! `rt_deeplc.tsv`). We featurize with the shared Klammer features, train a
 //! gbdt regressor, report the held-out distillation residual (student vs
 //! teacher), and serialize the model.
@@ -94,7 +94,11 @@ fn main() -> Result<()> {
     if let Some(seq_file) = &cli.predict_seqs {
         let model = uno_core::RtModel::load(&cli.out)?;
         let text = std::fs::read_to_string(seq_file)?;
-        let seqs: Vec<&str> = text.lines().map(|l| l.trim()).filter(|s| !s.is_empty()).collect();
+        let seqs: Vec<&str> = text
+            .lines()
+            .map(|l| l.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
         let preds = model.predict_many(&seqs);
         let mut out = String::with_capacity(seqs.len() * 24);
         for (s, p) in seqs.iter().zip(&preds) {
@@ -111,31 +115,39 @@ fn main() -> Result<()> {
     // Load labels + featurize. IM mode is charge-aware (im2deep CSV); RT mode
     // is a plain SEQUENCE\tRT file.
     let t = Instant::now();
-    let (feats, ys, feature_size): (Vec<Vec<f32>>, Vec<f64>, usize) = if let Some(p) = &cli.im_labels
-    {
-        let (seqs, charges, ims) = read_im2deep_csv(p)?;
-        if seqs.is_empty() {
-            bail!("no IM labels parsed from {}", p.display());
-        }
-        eprintln!("loaded {} (seq, charge, 1/K0) IM labels in {:.1}s", seqs.len(), t.elapsed().as_secs_f64());
-        let feats = seqs
-            .iter()
-            .zip(&charges)
-            .map(|(s, &z)| im_features(s, z).into_iter().map(|x| x as f32).collect())
-            .collect();
-        (feats, ims, IM_N_FEATURES)
-    } else {
-        let (seqs, rts) = read_label_tsv(&cli.labels)?;
-        if seqs.is_empty() {
-            bail!("no labels parsed from {}", cli.labels.display());
-        }
-        eprintln!("loaded {} (sequence, rt) labels in {:.1}s", seqs.len(), t.elapsed().as_secs_f64());
-        let feats = seqs
-            .iter()
-            .map(|s| rt_features(s).into_iter().map(|x| x as f32).collect())
-            .collect();
-        (feats, rts, RT_N_FEATURES)
-    };
+    let (feats, ys, feature_size): (Vec<Vec<f32>>, Vec<f64>, usize) =
+        if let Some(p) = &cli.im_labels {
+            let (seqs, charges, ims) = read_im2deep_csv(p)?;
+            if seqs.is_empty() {
+                bail!("no IM labels parsed from {}", p.display());
+            }
+            eprintln!(
+                "loaded {} (seq, charge, 1/K0) IM labels in {:.1}s",
+                seqs.len(),
+                t.elapsed().as_secs_f64()
+            );
+            let feats = seqs
+                .iter()
+                .zip(&charges)
+                .map(|(s, &z)| im_features(s, z).into_iter().map(|x| x as f32).collect())
+                .collect();
+            (feats, ims, IM_N_FEATURES)
+        } else {
+            let (seqs, rts) = read_label_tsv(&cli.labels)?;
+            if seqs.is_empty() {
+                bail!("no labels parsed from {}", cli.labels.display());
+            }
+            eprintln!(
+                "loaded {} (sequence, rt) labels in {:.1}s",
+                seqs.len(),
+                t.elapsed().as_secs_f64()
+            );
+            let feats = seqs
+                .iter()
+                .map(|s| rt_features(s).into_iter().map(|x| x as f32).collect())
+                .collect();
+            (feats, rts, RT_N_FEATURES)
+        };
 
     // Build train / val splits.
     let mut train: DataVec = Vec::new();
@@ -178,19 +190,32 @@ fn main() -> Result<()> {
         let model = sequoia_boost::prelude::train(&params, &dtrain, cli.iterations)?;
         eprintln!("trained (sequoia) in {:.1}s", t.elapsed().as_secs_f64());
         let mut vflat: Vec<f32> = Vec::with_capacity(val_feat.len() * ncol);
-        for f in &val_feat { vflat.extend_from_slice(f); }
+        for f in &val_feat {
+            vflat.extend_from_slice(f);
+        }
         let dval = DMatrix::from_dense(&vflat, val_feat.len(), ncol)?;
         let preds = model.predict(&dval)?;
         let (r2, mae, rmse) = regression_metrics(&val_y, &preds);
         // Relative error is the metric that matters for an IM gate: it is compared
         // against the population spread of 1/K0 about the mass/charge trend.
-        let mut rel: Vec<f64> = val_y.iter().zip(&preds)
+        let mut rel: Vec<f64> = val_y
+            .iter()
+            .zip(&preds)
             .filter(|(&y, _)| y > 0.0)
-            .map(|(&y, &p)| ((y - p as f64) / y).abs()).collect();
+            .map(|(&y, &p)| ((y - p as f64) / y).abs())
+            .collect();
         rel.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        let p68 = rel.get((rel.len() as f64 * 0.6827) as usize).copied().unwrap_or(f64::NAN);
-        eprintln!("validation: R^2 = {:.4}  MAE = {:.4}  RMSE = {:.4}  relative sigma = {:.2}%",
-            r2, mae, rmse, p68 * 100.0);
+        let p68 = rel
+            .get((rel.len() as f64 * 0.6827) as usize)
+            .copied()
+            .unwrap_or(f64::NAN);
+        eprintln!(
+            "validation: R^2 = {:.4}  MAE = {:.4}  RMSE = {:.4}  relative sigma = {:.2}%",
+            r2,
+            mae,
+            rmse,
+            p68 * 100.0
+        );
         model.save_binary(&cli.out)?;
         eprintln!("saved sequoia model to {}", cli.out.display());
         return Ok(());

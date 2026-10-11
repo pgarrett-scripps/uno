@@ -65,7 +65,8 @@ impl Bundle {
             .to_owned();
         ensure!(
             (1..=3).contains(&b.schema_version),
-            "unsupported long-matrix schema version {} (supported: 1, 2, 3)", b.schema_version
+            "unsupported long-matrix schema version {} (supported: 1, 2, 3)",
+            b.schema_version
         );
         ensure!(
             !b.runs.is_empty() && b.reference_run_id < b.runs.len(),
@@ -157,26 +158,48 @@ impl Bundle {
         // passed KOTH's cross-run group-confidence gate; do not silently restore
         // the removed seed floor. Original feature anchor checks still apply.
         let seed_floor = if self.schema_version == 1 {
-            self.config.as_ref()
+            self.config
+                .as_ref()
                 .and_then(|c| c.pointer("/lfq/consensus/min_seed_combined_score"))
-                .and_then(serde_json::Value::as_f64).unwrap_or(0.75)
-        } else { 0.0 };
-        ensure!(seed_floor.is_finite() && (0.0..=1.0).contains(&seed_floor), "invalid joint bootstrap quality floor");
+                .and_then(serde_json::Value::as_f64)
+                .unwrap_or(0.75)
+        } else {
+            0.0
+        };
+        ensure!(
+            seed_floor.is_finite() && (0.0..=1.0).contains(&seed_floor),
+            "invalid joint bootstrap quality floor"
+        );
         let mut source_ids = HashMap::new();
-        let run_ids: Vec<usize> = self.runs.iter().map(|r| {
-            r.sha256.as_ref().map_or(r.run_id, |hash| *source_ids.entry(hash).or_insert(r.run_id))
-        }).collect();
+        let run_ids: Vec<usize> = self
+            .runs
+            .iter()
+            .map(|r| {
+                r.sha256
+                    .as_ref()
+                    .map_or(r.run_id, |hash| *source_ids.entry(hash).or_insert(r.run_id))
+            })
+            .collect();
         self.observations(|o| {
             if let Some(c) = o.consensus_id {
                 let mut f = o.feature();
-                f.mass = o.aligned_mass.context("joint input requires aligned mass for every member")?;
-                f.rt = o.aligned_rt.context("joint input requires aligned RT for every member")?;
+                f.mass = o
+                    .aligned_mass
+                    .context("joint input requires aligned mass for every member")?;
+                f.rt = o
+                    .aligned_rt
+                    .context("joint input requires aligned RT for every member")?;
                 f.im = o.aligned_im;
-                ensure!(f.charge == matrix.features[c].charge, "member/consensus charge mismatch");
+                ensure!(
+                    f.charge == matrix.features[c].charge,
+                    "member/consensus charge mismatch"
+                );
                 f.mz = f.mass / f.charge as f64 + 1.007_276_466_621;
                 groups[c].push(crate::joint::Observation {
                     bootstrap_eligible: matrix.features[c].combined_score >= seed_floor,
-                    run_id: run_ids[o.run_id], observation_id: o.observation_id, feature: f,
+                    run_id: run_ids[o.run_id],
+                    observation_id: o.observation_id,
+                    feature: f,
                 });
             }
             Ok(())
@@ -184,7 +207,8 @@ impl Bundle {
         // Cell table was fully validated by load_consensus above. Canonical source
         // IDs prevent duplicate input files from inflating extraction support.
         let mut cell_summaries = vec![crate::cell_evidence::Summary::default(); self.n_consensus];
-        let mut rdr = csv::ReaderBuilder::new().delimiter(b'\t')
+        let mut rdr = csv::ReaderBuilder::new()
+            .delimiter(b'\t')
             .from_path(self.root.join(&self.cells.path))?;
         for row in rdr.deserialize::<Cell>() {
             let e = row?;
@@ -196,29 +220,50 @@ impl Bundle {
         let mut retained_cells = Vec::new();
         let mut retained = Vec::new();
         let mut retained_groups = Vec::new();
-        for ((cell, mut group), summary) in matrix.features.into_iter().zip(groups).zip(cell_summaries) {
+        for ((cell, mut group), summary) in
+            matrix.features.into_iter().zip(groups).zip(cell_summaries)
+        {
             group.sort_by_key(|o| (o.run_id, o.observation_id));
             // The same source table submitted twice must not become two pieces of
             // evidence; retain the first source's aligned observation deterministically.
             group.dedup_by_key(|o| (o.run_id, o.observation_id));
             let n_runs = group.iter().map(|o| o.run_id).collect::<HashSet<_>>().len();
-            if n_runs < min_runs.max(1) as usize { continue; }
+            if n_runs < min_runs.max(1) as usize {
+                continue;
+            }
             // A real member supplies calibration coordinates AND its own shape.
             // Three-isotope members qualify for UNO's existing anchor criterion.
-            let representative = group.iter().max_by(|a, b| {
-                let a_iso = a.feature.n_isotopes.is_some_and(|n| n >= 3.0);
-                let b_iso = b.feature.n_isotopes.is_some_and(|n| n >= 3.0);
-                a_iso.cmp(&b_iso).then(a.feature.combined_score.total_cmp(&b.feature.combined_score))
-                    .then_with(|| (b.run_id, b.observation_id).cmp(&(a.run_id, a.observation_id)))
-            }).context("joint group has no original members")?;
+            let representative = group
+                .iter()
+                .max_by(|a, b| {
+                    let a_iso = a.feature.n_isotopes.is_some_and(|n| n >= 3.0);
+                    let b_iso = b.feature.n_isotopes.is_some_and(|n| n >= 3.0);
+                    a_iso
+                        .cmp(&b_iso)
+                        .then(
+                            a.feature
+                                .combined_score
+                                .total_cmp(&b.feature.combined_score),
+                        )
+                        .then_with(|| {
+                            (b.run_id, b.observation_id).cmp(&(a.run_id, a.observation_id))
+                        })
+                })
+                .context("joint group has no original members")?;
             let mut f = representative.feature.clone();
             f.intensities = cell.intensities; // exactly one integrated LFQ value per cell
             f.n_contributing_runs = n_runs as u32;
-            retained.push(f); retained_groups.push(group);
+            retained.push(f);
+            retained_groups.push(group);
             retained_cells.push(summary.values(n_sources));
         }
-        log::info!("joint matrix: {} groups, {} original observations, {} runs, min_runs={}",
-            retained.len(), retained_groups.iter().map(Vec::len).sum::<usize>(), self.runs.len(), min_runs.max(1));
+        log::info!(
+            "joint matrix: {} groups, {} original observations, {} runs, min_runs={}",
+            retained.len(),
+            retained_groups.iter().map(Vec::len).sum::<usize>(),
+            self.runs.len(),
+            min_runs.max(1)
+        );
         matrix.features = retained;
         matrix.joint_evidence = Some(retained_groups);
         matrix.joint_cell_evidence = Some(retained_cells);
@@ -255,12 +300,26 @@ impl Bundle {
         let mut rdr = csv::ReaderBuilder::new()
             .delimiter(b'\t')
             .from_path(self.root.join(&self.cells.path))?;
-        let release_columns = ["group_score", "group_qvalue", "lfq_ownership_status",
-            "lfq_owned_samples", "lfq_excluded_samples", "lfq_competing_consensus_id",
-            "lfq_preceding_signal_fraction"];
-        let required = match self.schema_version { 1 => 0, 2 => 2, _ => release_columns.len() };
+        let release_columns = [
+            "group_score",
+            "group_qvalue",
+            "lfq_ownership_status",
+            "lfq_owned_samples",
+            "lfq_excluded_samples",
+            "lfq_competing_consensus_id",
+            "lfq_preceding_signal_fraction",
+        ];
+        let required = match self.schema_version {
+            1 => 0,
+            2 => 2,
+            _ => release_columns.len(),
+        };
         for field in &release_columns[..required] {
-            ensure!(rdr.headers()?.iter().any(|h| h == *field), "schema {} requires column {field}", self.schema_version);
+            ensure!(
+                rdr.headers()?.iter().any(|h| h == *field),
+                "schema {} requires column {field}",
+                self.schema_version
+            );
         }
         for row in rdr.deserialize::<Cell>() {
             let e = row?;
@@ -274,8 +333,13 @@ impl Bundle {
             if self.schema_version >= 2 {
                 let evidence = (e.group_score.unwrap(), e.group_qvalue.unwrap());
                 if let Some(previous) = group_evidence[c] {
-                    ensure!(previous == evidence, "inconsistent group confidence across cells");
-                } else { group_evidence[c] = Some(evidence); }
+                    ensure!(
+                        previous == evidence,
+                        "inconsistent group confidence across cells"
+                    );
+                } else {
+                    group_evidence[c] = Some(evidence);
+                }
             }
             ensure!(
                 matches!(e.extraction_kind.as_str(), "target" | "decoy"),
@@ -504,27 +568,59 @@ impl Bundle {
         if self.schema_version >= 2 {
             let score = e.group_score.context("schema 2/3 requires group_score")?;
             let q = e.group_qvalue.context("schema 2/3 requires group_qvalue")?;
-            let limit = self.config.as_ref()
+            let limit = self
+                .config
+                .as_ref()
                 .and_then(|c| c.pointer("/lfq/consensus/max_group_qvalue"))
                 .and_then(serde_json::Value::as_f64)
                 .context("schema 2/3 requires max_group_qvalue in manifest config")?;
-            ensure!(score.is_finite() && q.is_finite() && (0.0..=1.0).contains(&q)
-                && limit.is_finite() && (0.0..=1.0).contains(&limit), "invalid group confidence");
-            ensure!(q <= limit && e.n_contributing_runs >= 2,
-                "group fails declared confidence or original-run support requirement");
+            ensure!(
+                score.is_finite()
+                    && q.is_finite()
+                    && (0.0..=1.0).contains(&q)
+                    && limit.is_finite()
+                    && (0.0..=1.0).contains(&limit),
+                "invalid group confidence"
+            );
+            ensure!(
+                q <= limit && e.n_contributing_runs >= 2,
+                "group fails declared confidence or original-run support requirement"
+            );
         }
         if self.schema_version >= 3 {
-            let status = e.lfq_ownership_status.as_deref().context("schema 3 requires ownership status")?;
-            ensure!(matches!(status, "exclusive" | "residual" | "shared_signal_only" | "ambiguous_residual"),
-                "invalid LFQ ownership status");
-            let owned = e.lfq_owned_samples.context("schema 3 requires owned-sample count")?;
-            e.lfq_excluded_samples.context("schema 3 requires excluded-sample count")?;
-            let fraction = e.lfq_preceding_signal_fraction.context("schema 3 requires preceding signal fraction")?;
-            ensure!(fraction.is_finite() && (0.0..=1.0).contains(&fraction), "invalid preceding signal fraction");
-            ensure!(e.lfq_competing_consensus_id.is_none_or(|c| c < self.n_consensus && c != e.consensus_id),
-                "invalid competing consensus identity");
+            let status = e
+                .lfq_ownership_status
+                .as_deref()
+                .context("schema 3 requires ownership status")?;
+            ensure!(
+                matches!(
+                    status,
+                    "exclusive" | "residual" | "shared_signal_only" | "ambiguous_residual"
+                ),
+                "invalid LFQ ownership status"
+            );
+            let owned = e
+                .lfq_owned_samples
+                .context("schema 3 requires owned-sample count")?;
+            e.lfq_excluded_samples
+                .context("schema 3 requires excluded-sample count")?;
+            let fraction = e
+                .lfq_preceding_signal_fraction
+                .context("schema 3 requires preceding signal fraction")?;
+            ensure!(
+                fraction.is_finite() && (0.0..=1.0).contains(&fraction),
+                "invalid preceding signal fraction"
+            );
+            ensure!(
+                e.lfq_competing_consensus_id
+                    .is_none_or(|c| c < self.n_consensus && c != e.consensus_id),
+                "invalid competing consensus identity"
+            );
             if matches!(status, "shared_signal_only" | "ambiguous_residual") {
-                ensure!(e.lfq_intensity == 0.0 && owned == 0, "suppressed LFQ signal must have zero intensity and ownership");
+                ensure!(
+                    e.lfq_intensity == 0.0 && owned == 0,
+                    "suppressed LFQ signal must have zero intensity and ownership"
+                );
             }
         }
         Ok(())
@@ -750,8 +846,9 @@ mod tests {
         let text = std::fs::read_to_string(&p).unwrap();
         let mut out = String::new();
         for (i, line) in text.lines().enumerate() {
-            if i == 0 { out.push_str(&format!("{line}\taligned_mass\taligned_rt\n")); }
-            else {
+            if i == 0 {
+                out.push_str(&format!("{line}\taligned_mass\taligned_rt\n"));
+            } else {
                 let cols: Vec<_> = line.split('\t').collect();
                 out.push_str(&format!("{line}\t{}\t{}\n", cols[5], cols[8]));
             }
@@ -766,7 +863,11 @@ mod tests {
         let text = std::fs::read_to_string(&p).unwrap();
         let mut out = String::new();
         for (i, line) in text.lines().enumerate() {
-            let columns = if i == 0 { "group_score\tgroup_qvalue" } else { "2.3\t0.03" };
+            let columns = if i == 0 {
+                "group_score\tgroup_qvalue"
+            } else {
+                "2.3\t0.03"
+            };
             out.push_str(&format!("{line}\t{columns}"));
             if version >= 3 {
                 out.push_str(if i == 0 {
@@ -782,7 +883,8 @@ mod tests {
     fn open_release(f: &Fixture, version: u32) -> Result<Bundle> {
         f.open(); // refresh table hashes after each fixture edit
         let path = f.0.join("matrix_manifest.json");
-        let mut manifest: serde_json::Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let mut manifest: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         manifest["schema_version"] = version.into();
         manifest["config"] = serde_json::json!({"lfq":{"consensus":{"max_group_qvalue":0.05}}});
         std::fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
@@ -809,13 +911,19 @@ mod tests {
         let f = release_fixture(3);
         for name in ["cells.tsv", "observations.tsv"] {
             let p = f.0.join(name);
-            let text = std::fs::read_to_string(&p).unwrap().replace("\t0.9\t", "\t0.6\t");
+            let text = std::fs::read_to_string(&p)
+                .unwrap()
+                .replace("\t0.9\t", "\t0.6\t");
             std::fs::write(p, text).unwrap();
         }
         let legacy = f.open().load_joint(1).unwrap();
-        assert!(legacy.joint_evidence.unwrap()[0].iter().all(|o| !o.bootstrap_eligible));
+        assert!(legacy.joint_evidence.unwrap()[0]
+            .iter()
+            .all(|o| !o.bootstrap_eligible));
         let release = open_release(&f, 3).unwrap().load_joint(1).unwrap();
-        assert!(release.joint_evidence.unwrap()[0].iter().all(|o| o.bootstrap_eligible));
+        assert!(release.joint_evidence.unwrap()[0]
+            .iter()
+            .all(|o| o.bootstrap_eligible));
         assert_eq!(legacy.features, release.features);
     }
 
@@ -823,9 +931,14 @@ mod tests {
     fn suppressed_lfq_retains_original_evidence_but_not_quantitative_support() {
         let f = release_fixture(3);
         let p = f.0.join("cells.tsv");
-        let text = std::fs::read_to_string(&p).unwrap()
+        let text = std::fs::read_to_string(&p)
+            .unwrap()
             .replace("\t123456.789\t0.001\tfalse", "\t0\t0.001\tfalse")
-            .replacen("\texclusive\t10\t0\t\t0", "\tshared_signal_only\t0\t10\t\t1", 1);
+            .replacen(
+                "\texclusive\t10\t0\t\t0",
+                "\tshared_signal_only\t0\t10\t\t1",
+                1,
+            );
         std::fs::write(p, text).unwrap();
         let m = open_release(&f, 3).unwrap().load_joint(1).unwrap();
         assert_eq!(m.features[0].intensities, vec![0.0, 65.0, 5.0]);
@@ -840,7 +953,10 @@ mod tests {
             ("\t2.3\t0.03", "\tNaN\t0.03"),
             ("group_qvalue", "missing_group_qvalue"),
             ("lfq_competing_consensus_id", "missing_competitor_column"),
-            ("\texclusive\t10\t0\t\t0", "\tambiguous_residual\t0\t10\t\t1"), // nonzero suppressed intensity
+            (
+                "\texclusive\t10\t0\t\t0",
+                "\tambiguous_residual\t0\t10\t\t1",
+            ), // nonzero suppressed intensity
             ("\texclusive\t10\t0\t\t0", "\texclusive\t10\t0\t1\t0"), // nonexistent competitor
             ("\texclusive\t10\t0\t\t0", "\texclusive\t10\t0\t\t1.1"),
         ] {
@@ -848,17 +964,23 @@ mod tests {
             let p = f.0.join("cells.tsv");
             let text = std::fs::read_to_string(&p).unwrap().replace(old, new);
             std::fs::write(p, text).unwrap();
-            assert!(open_release(&f, 3).unwrap().load_joint(1).is_err(), "accepted {new}");
+            assert!(
+                open_release(&f, 3).unwrap().load_joint(1).is_err(),
+                "accepted {new}"
+            );
         }
         let f = release_fixture(3);
         let p = f.0.join("cells.tsv");
-        let text = std::fs::read_to_string(&p).unwrap().replacen("\t2.3\t0.03", "\t2.4\t0.03", 1);
+        let text = std::fs::read_to_string(&p)
+            .unwrap()
+            .replacen("\t2.3\t0.03", "\t2.4\t0.03", 1);
         std::fs::write(p, text).unwrap();
         assert!(open_release(&f, 3).unwrap().load_joint(1).is_err());
     }
     #[test]
     fn joint_loader_preserves_alternatives_and_quant_cells_without_mbr_evidence() {
-        let f = Fixture::new(); with_aligned_coordinates(&f);
+        let f = Fixture::new();
+        with_aligned_coordinates(&f);
         let m = f.open().load_joint(1).unwrap();
         assert_eq!(m.len(), 1);
         let g = &m.joint_evidence.as_ref().unwrap()[0];
@@ -874,7 +996,8 @@ mod tests {
     }
     #[test]
     fn joint_cells_use_extraction_q_without_adding_observations_or_decoy_cells() {
-        let f = Fixture::new(); with_aligned_coordinates(&f);
+        let f = Fixture::new();
+        with_aligned_coordinates(&f);
         let before = f.open().load_joint(1).unwrap();
         let values = before.joint_cell_evidence.as_ref().unwrap()[0];
         assert_eq!(values[0], 1.0);
@@ -891,11 +1014,18 @@ mod tests {
         assert_eq!(before.features, after.features);
         assert_eq!(before.joint_cell_evidence, after.joint_cell_evidence);
         assert_eq!(after.joint_evidence.as_ref().unwrap()[0].len(), 3);
-        assert!(f.open().load_joint(3).unwrap().joint_cell_evidence.unwrap().is_empty());
+        assert!(f
+            .open()
+            .load_joint(3)
+            .unwrap()
+            .joint_cell_evidence
+            .unwrap()
+            .is_empty());
     }
     #[test]
     fn duplicate_sources_do_not_inflate_cell_support() {
-        let f = Fixture::new(); with_aligned_coordinates(&f);
+        let f = Fixture::new();
+        with_aligned_coordinates(&f);
         let mut b = f.open();
         b.runs[0].sha256 = Some("same-source".into());
         b.runs[1].sha256 = Some("same-source".into());
@@ -907,58 +1037,98 @@ mod tests {
     }
     #[test]
     fn weak_groups_remain_searchable_without_defining_bootstrap_calibration() {
-        let f = Fixture::new(); with_aligned_coordinates(&f);
+        let f = Fixture::new();
+        with_aligned_coordinates(&f);
         for name in ["observations.tsv", "cells.tsv"] {
             let p = f.0.join(name);
-            let text = std::fs::read_to_string(&p).unwrap()
-                .replace("\t0.9\t", "\t0.7\t").replace("\t0.8\t", "\t0.6\t");
+            let text = std::fs::read_to_string(&p)
+                .unwrap()
+                .replace("\t0.9\t", "\t0.7\t")
+                .replace("\t0.8\t", "\t0.6\t");
             std::fs::write(p, text).unwrap();
         }
         let m = f.open().load_joint(1).unwrap();
         assert_eq!(m.len(), 1);
-        assert!(m.joint_evidence.as_ref().unwrap()[0].iter().all(|o| !o.bootstrap_eligible));
+        assert!(m.joint_evidence.as_ref().unwrap()[0]
+            .iter()
+            .all(|o| !o.bootstrap_eligible));
     }
     #[test]
     fn joint_loader_rejects_member_charge_mismatch() {
-        let f = Fixture::new(); with_aligned_coordinates(&f);
+        let f = Fixture::new();
+        with_aligned_coordinates(&f);
         let p = f.0.join("observations.tsv");
-        let text = std::fs::read_to_string(&p).unwrap().replace("501.069276466\t2", "501.069276466\t3");
+        let text = std::fs::read_to_string(&p)
+            .unwrap()
+            .replace("501.069276466\t2", "501.069276466\t3");
         std::fs::write(p, text).unwrap();
         assert!(f.open().load_joint(1).is_err());
     }
     #[test]
     fn joint_matching_searches_member_windows_once_and_treats_decoys_equally() {
-        let f = Fixture::new(); with_aligned_coordinates(&f);
+        let f = Fixture::new();
+        with_aligned_coordinates(&f);
         let m = f.open().load_joint(1).unwrap();
-        let db = crate::PeptideDb { n_targets: 2, n_decoys: 1,
-            peptides: [(1000.123456789, false), (1000.125, false), (1000.125, true)].iter()
-                .map(|&(mass, decoy)| crate::TheoPeptide { sequence: "PEPTIDE".into(), mass, decoy,
-                    missed_cleavages: 0, proteins: vec!["protein".into()] }).collect() };
-        let cfg = crate::MatchConfig { ppm_tolerance: 0.1, isotope_offsets: vec![0], ..Default::default() };
+        let db = crate::PeptideDb {
+            n_targets: 2,
+            n_decoys: 1,
+            peptides: [(1000.123456789, false), (1000.125, false), (1000.125, true)]
+                .iter()
+                .map(|&(mass, decoy)| crate::TheoPeptide {
+                    sequence: "PEPTIDE".into(),
+                    mass,
+                    decoy,
+                    missed_cleavages: 0,
+                    proteins: vec!["protein".into()],
+                })
+                .collect(),
+        };
+        let cfg = crate::MatchConfig {
+            ppm_tolerance: 0.1,
+            isotope_offsets: vec![0],
+            ..Default::default()
+        };
         let matches = crate::match_features_topk(&m, &db, &cfg, 50);
-        assert_eq!(matches.iter().map(|p| p.peptide_idx).collect::<Vec<_>>(), vec![0, 1, 2]);
-        let mut single = m.clone(); single.joint_evidence = None;
+        assert_eq!(
+            matches.iter().map(|p| p.peptide_idx).collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+        let mut single = m.clone();
+        single.joint_evidence = None;
         assert_eq!(crate::match_features_topk(&single, &db, &cfg, 50).len(), 1);
-        let strict = crate::MatchConfig { min_isotopes: 4, ..cfg };
+        let strict = crate::MatchConfig {
+            min_isotopes: 4,
+            ..cfg
+        };
         let matches = crate::match_features_topk(&m, &db, &strict, 50);
-        assert_eq!(matches.iter().map(|p| p.peptide_idx).collect::<Vec<_>>(), vec![1, 2]);
+        assert_eq!(
+            matches.iter().map(|p| p.peptide_idx).collect::<Vec<_>>(),
+            vec![1, 2]
+        );
     }
     #[test]
     fn matching_quality_gates_also_restrict_joint_scoring_observations() {
-        let f = Fixture::new(); with_aligned_coordinates(&f);
+        let f = Fixture::new();
+        with_aligned_coordinates(&f);
         let mut m = f.open().load_joint(1).unwrap();
         let before = m.features.clone();
         crate::joint::restrict_observations(&mut m, &crate::MatchConfig::default());
         assert_eq!(before, m.features);
         let cells = m.joint_cell_evidence.clone();
         let intensities = m.features[0].intensities.clone();
-        let cfg = crate::MatchConfig { min_isotopes: 4, ..Default::default() };
+        let cfg = crate::MatchConfig {
+            min_isotopes: 4,
+            ..Default::default()
+        };
         crate::joint::restrict_observations(&mut m, &cfg);
         assert_eq!(m.features[0].n_isotopes, Some(4.0));
         assert_eq!(m.features[0].intensities, intensities);
         assert_eq!(m.joint_evidence.as_ref().unwrap()[0].len(), 1);
         assert_eq!(m.joint_cell_evidence, cells);
-        let cfg = crate::MatchConfig { min_isotopes: 5, ..Default::default() };
+        let cfg = crate::MatchConfig {
+            min_isotopes: 5,
+            ..Default::default()
+        };
         crate::joint::restrict_observations(&mut m, &cfg);
         assert!(m.is_empty());
         assert!(m.joint_cell_evidence.unwrap().is_empty());

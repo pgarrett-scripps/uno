@@ -1,0 +1,150 @@
+name: Release
+
+# Publish a GitHub release (`gh release create v0.1.0 --notes-file ...`) and
+# this runs: the release IS the trigger and creates the tag. It reruns CI,
+# builds the Linux x86_64 binary, attaches it to that release, and publishes
+# uno-ms-lightgbm-sys, uno-ms-core and uno-ms to crates.io in dependency
+# order. Draft releases do not fire; publishing one later does.
+#
+# Manual runs (workflow_dispatch) build and package but publish nothing.
+#
+# Publishing needs a crates.io API token in the repository secret
+# CARGO_REGISTRY_TOKEN. Zenodo mints its DOI from the published release
+# through its GitHub integration.
+#
+# crates.io rejects git dependencies: koth-ms must be a crates.io version
+# before the first release, or the package job fails (on purpose)
+# before anything is published.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  verify:
+    name: Verify release identity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install cffconvert==2.0.0
+      - run: cffconvert --validate
+      - uses: extractions/setup-just@v2
+      - run: just cite-check
+      - name: Tag and crate versions must match
+        if: github.event_name == 'release'
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          want="${RELEASE_TAG#v}"
+          for crate in uno-ms uno-ms-core uno-ms-lightgbm-sys; do
+            have=$(cargo metadata --no-deps --format-version 1 \
+                   | python3 -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"] == sys.argv[1]))' "$crate")
+            if [ "$want" != "$have" ]; then
+              echo "release is tagged $RELEASE_TAG but $crate is $have" >&2
+              exit 1
+            fi
+          done
+      - name: Check crate publishing credential is configured
+        if: github.event_name == 'release'
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "Configure the CARGO_REGISTRY_TOKEN repository secret before releasing." >&2
+            exit 1
+          fi
+
+  ci:
+    needs: verify
+    uses: ./.github/workflows/ci.yml
+
+  package:
+    name: Verify crate packages
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo publish --dry-run --locked -p uno-ms-lightgbm-sys -p uno-ms-core -p uno-ms
+
+  build:
+    name: Build linux-x86_64
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release --locked -p uno-ms --bin uno
+      # The binary's rpath points at the build tree, so ship the LightGBM
+      # library next to it and add $ORIGIN to its search path.
+      - name: Package
+        run: |
+          stage="uno-linux-x86_64"
+          mkdir -p "$stage" dist
+          cp target/release/uno crates/uno-lightgbm-sys/vendor/lib_lightgbm.so README.md LICENSE CITATION.cff "$stage"/
+          sudo apt-get install -y patchelf
+          patchelf --set-rpath '$ORIGIN' "$stage/uno"
+          "$stage/uno" --version
+          tar czf "dist/$stage.tar.gz" "$stage"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: uno-linux-x86_64
+          path: dist/*
+          if-no-files-found: error
+
+  publish:
+    name: Attach binary and publish crates
+    needs: [build, package]
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: uno-*
+          path: ${{ runner.temp }}/uno-dist
+          merge-multiple: true
+      - name: Attach downloads to the release that triggered this run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/uno-dist"/* --clobber
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: Swatinem/rust-cache@v2
+      # Irreversible steps last, in dependency order. cargo publish waits until
+      # each version is in the index before returning. A rerun skips crates
+      # whose version is already on crates.io.
+      - name: Publish crates
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          version="${RELEASE_TAG#v}"
+          for crate in uno-ms-lightgbm-sys uno-ms-core uno-ms; do
+            if curl -fsS -A "uno-release (github.com/pgarrett-scripps/uno)" "https://crates.io/api/v1/crates/$crate/$version" > /dev/null 2>&1; then
+              echo "$crate $version is already on crates.io; skipping"
+            else
+              cargo publish --locked -p "$crate"
+            fi
+          done
+      - name: Record Zenodo follow-up
+        run: |
+          echo 'Zenodo archives this published release through its GitHub integration.' >> "$GITHUB_STEP_SUMMARY"
+          echo 'Check https://zenodo.org/account/settings/github/ for the DOI or any archival error.' >> "$GITHUB_STEP_SUMMARY"

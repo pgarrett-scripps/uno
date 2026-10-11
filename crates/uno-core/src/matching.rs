@@ -73,7 +73,9 @@ pub(crate) fn passes(feature: &crate::input::Feature, cfg: &MatchConfig) -> bool
     feature.charge >= cfg.min_charge
         && feature.combined_score >= cfg.min_combined_score
         && (cfg.min_isotopes == 0
-            || feature.n_isotopes.is_none_or(|n| n >= cfg.min_isotopes as f64))
+            || feature
+                .n_isotopes
+                .is_none_or(|n| n >= cfg.min_isotopes as f64))
 }
 
 /// Search the union of member mass windows once per aligned group. Overlapping
@@ -83,24 +85,42 @@ fn joint_matches(matrix: &FeatureMatrix, fi: usize, db: &PeptideDb, cfg: &MatchC
     let feature = &matrix.features[fi];
     let mut out = Vec::new();
     for &offset in &cfg.isotope_offsets {
-        let mut windows: Vec<(f64, f64)> = group.iter().filter(|o| passes(&o.feature, cfg))
+        let mut windows: Vec<(f64, f64)> = group
+            .iter()
+            .filter(|o| passes(&o.feature, cfg))
             .filter_map(|o| {
                 let c = o.feature.mass - offset as f64 * NEUTRON;
-                (c > 0.0).then(|| (c * (1.0 - cfg.ppm_tolerance * 1e-6), c * (1.0 + cfg.ppm_tolerance * 1e-6)))
-            }).collect();
+                (c > 0.0).then_some({
+                    (
+                        c * (1.0 - cfg.ppm_tolerance * 1e-6),
+                        c * (1.0 + cfg.ppm_tolerance * 1e-6),
+                    )
+                })
+            })
+            .collect();
         windows.sort_by(|a, b| a.0.total_cmp(&b.0));
         let mut merged: Vec<(f64, f64)> = Vec::new();
         for (lo, hi) in windows {
-            if let Some(last) = merged.last_mut().filter(|p| p.1 >= lo) { last.1 = last.1.max(hi); }
-            else { merged.push((lo, hi)); }
+            if let Some(last) = merged.last_mut().filter(|p| p.1 >= lo) {
+                last.1 = last.1.max(hi);
+            } else {
+                merged.push((lo, hi));
+            }
         }
         let center = feature.mass - offset as f64 * NEUTRON;
         for (lo, hi) in merged {
             let start = db.peptides.partition_point(|p| p.mass < lo);
             for (j, pep) in db.peptides[start..].iter().enumerate() {
-                if pep.mass > hi { break; }
-                out.push(Pfm { feature_idx: fi as u32, peptide_idx: (start + j) as u32,
-                    isotope_offset: offset, mass_error_ppm: (pep.mass - center) / center * 1e6, decoy: pep.decoy });
+                if pep.mass > hi {
+                    break;
+                }
+                out.push(Pfm {
+                    feature_idx: fi as u32,
+                    peptide_idx: (start + j) as u32,
+                    isotope_offset: offset,
+                    mass_error_ppm: (pep.mass - center) / center * 1e6,
+                    decoy: pep.decoy,
+                });
             }
         }
     }
@@ -118,7 +138,9 @@ pub fn match_features(matrix: &FeatureMatrix, db: &PeptideDb, cfg: &MatchConfig)
         .par_iter()
         .enumerate()
         .flat_map_iter(|(fi, feature)| {
-            if matrix.joint_evidence.is_some() { return joint_matches(matrix, fi, db, cfg).into_iter(); }
+            if matrix.joint_evidence.is_some() {
+                return joint_matches(matrix, fi, db, cfg).into_iter();
+            }
             let mut out = Vec::new();
             if !passes(feature, cfg) {
                 return out.into_iter();
@@ -176,7 +198,11 @@ pub fn match_features_topk(
             let mut decoys: Vec<Pfm> = Vec::new();
             if matrix.joint_evidence.is_some() {
                 for pfm in joint_matches(matrix, fi, db, cfg) {
-                    if pfm.decoy { decoys.push(pfm); } else { targets.push(pfm); }
+                    if pfm.decoy {
+                        decoys.push(pfm);
+                    } else {
+                        targets.push(pfm);
+                    }
                 }
             } else if passes(feature, cfg) {
                 for &offset in &cfg.isotope_offsets {
@@ -209,7 +235,10 @@ pub fn match_features_topk(
             }
             for bucket in [&mut targets, &mut decoys] {
                 bucket.sort_by(|a, b| {
-                    a.mass_error_ppm.abs().partial_cmp(&b.mass_error_ppm.abs()).unwrap()
+                    a.mass_error_ppm
+                        .abs()
+                        .partial_cmp(&b.mass_error_ppm.abs())
+                        .unwrap()
                 });
                 bucket.truncate(k);
             }
@@ -257,7 +286,9 @@ mod tests {
         // All errors within tolerance. Necessary but weak: it holds for an empty
         // match set and for a set that matched the wrong peptides, so the checks
         // below assert the properties the search actually depends on.
-        assert!(pfms.iter().all(|p| p.mass_error_ppm.abs() <= cfg.ppm_tolerance + 1e-6));
+        assert!(pfms
+            .iter()
+            .all(|p| p.mass_error_ppm.abs() <= cfg.ppm_tolerance + 1e-6));
 
         // Targets and decoys must arrive in comparable numbers. The decoy database
         // is the null the whole FDR rests on, so a lopsided ratio means the null is
@@ -271,11 +302,15 @@ mod tests {
         // Every PFM must point at a real feature and a real peptide, and its charge
         // must be one the matcher was allowed to consider.
         assert!(pfms.iter().all(|p| (p.feature_idx as usize) < matrix.len()));
-        assert!(pfms.iter().all(|p| (p.peptide_idx as usize) < db.peptides.len()));
+        assert!(pfms
+            .iter()
+            .all(|p| (p.peptide_idx as usize) < db.peptides.len()));
 
         // The isotope offset is applied on the NEUTRAL mass in carbon-13 units, so
         // only the offsets the config lists may appear.
-        assert!(pfms.iter().all(|p| cfg.isotope_offsets.contains(&p.isotope_offset)));
+        assert!(pfms
+            .iter()
+            .all(|p| cfg.isotope_offsets.contains(&p.isotope_offset)));
 
         // Charges below the floor are skipped as non-peptide contaminants.
         assert!(pfms

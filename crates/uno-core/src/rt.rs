@@ -34,8 +34,8 @@ const KD: [f64; 20] = [
     4.2, -0.9, -1.3,
 ];
 const RC: [f64; 20] = [
-    1.1, 0.5, 0.2, 1.1, 10.9, 0.2, -3.1, 8.0, -3.1, 9.6, 5.0, -1.2, 2.1, -2.0, -4.1, -2.1, 0.6, 5.5,
-    11.1, 4.4,
+    1.1, 0.5, 0.2, 1.1, 10.9, 0.2, -3.1, 8.0, -3.1, 9.6, 5.0, -1.2, 2.1, -2.0, -4.1, -2.1, 0.6,
+    5.5, 11.1, 4.4,
 ];
 const EI: [f64; 20] = [
     0.62, 0.29, -0.90, -0.74, 1.19, 0.48, -0.40, 1.38, -1.50, 1.06, 0.64, -0.78, 0.12, -0.85,
@@ -82,7 +82,10 @@ pub fn rt_features(seq: &str) -> Vec<f64> {
     // [26, 26+N_POS_BINS*20) position-binned composition (numpy.array_split order).
     let pb = 26;
     for b in 0..N_POS_BINS {
-        let (lo, hi) = (split_bound(n, N_POS_BINS, b), split_bound(n, N_POS_BINS, b + 1));
+        let (lo, hi) = (
+            split_bound(n, N_POS_BINS, b),
+            split_bound(n, N_POS_BINS, b + 1),
+        );
         for &j in &idx[lo..hi] {
             v[pb + b * 20 + j] += 1.0;
         }
@@ -101,7 +104,12 @@ pub fn rt_features(seq: &str) -> Vec<f64> {
         max_kd = max_kd.max(KD[j]);
         min_kd = min_kd.min(KD[j]);
         ssr += RC[j] * (1.0 + if k < 3 { 0.3 } else { 0.0 });
-        moment += KD[j] * if n > 1 { k as f64 / (n - 1) as f64 } else { 0.0 };
+        moment += KD[j]
+            * if n > 1 {
+                k as f64 / (n - 1) as f64
+            } else {
+                0.0
+            };
         match AA[j] {
             b'P' => p_ct += 1.0,
             b'F' | b'W' | b'Y' => arom += 1.0,
@@ -146,31 +154,7 @@ enum RtBackend {
 }
 
 /// The supported pretrained CNN, embedded so installed binaries work anywhere.
-pub const DEFAULT_RT_CNN: &[u8] = include_bytes!("../../../models/rt_cnn_chrono_global_v3_ch32.urtc");
-
-#[cfg(test)]
-mod cnn_workflow_tests {
-    use super::*;
-
-    #[test]
-    fn bundled_cnn_is_portable_and_matches_training_package() {
-        assert_eq!(DEFAULT_RT_CNN, include_bytes!("../../uno-rt-train/python/uno_rt/data/default.urtc"));
-        let model = RtModel::bundled().unwrap();
-        let direct = crate::rt_cnn::RtCnn::from_bytes(DEFAULT_RT_CNN).unwrap();
-        assert_eq!(model.predict_seq("PEPTIDEK"), direct.predict_seq("PEPTIDEK"));
-        assert_eq!(model.fingerprint(), fingerprint_bytes(DEFAULT_RT_CNN));
-    }
-
-    #[test]
-    fn cnn_rejects_invalid_dimensions_normalization_and_version() {
-        for (offset, value) in [(4, 99u32), (12, 0), (16, 0), (24, 2), (28, u32::MAX)] {
-            let mut bytes = DEFAULT_RT_CNN.to_vec();
-            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
-            assert!(crate::rt_cnn::RtCnn::from_bytes(&bytes).is_err());
-        }
-        assert!(crate::rt_cnn::RtCnn::from_bytes(&DEFAULT_RT_CNN[..80]).is_err());
-    }
-}
+pub const DEFAULT_RT_CNN: &[u8] = include_bytes!("../models/rt_cnn_chrono_global_v3_ch32.urtc");
 
 /// A loaded RT model plus a content `fingerprint` (a stable hash of the model
 /// file bytes). The fingerprint keys the on-disk prediction cache
@@ -215,9 +199,14 @@ impl RtModel {
             RtBackend::Gbdt(model)
         };
         if !matches!(&backend, RtBackend::Cnn(_)) {
-            log::warn!("legacy RT backend: MLP/GBDT loading is deprecated; use a URTC CNN or --rt-library");
+            log::warn!(
+                "legacy RT backend: MLP/GBDT loading is deprecated; use a URTC CNN or --rt-library"
+            );
         }
-        Ok(RtModel { backend, fingerprint })
+        Ok(RtModel {
+            backend,
+            fingerprint,
+        })
     }
 
     /// Stable content hash of the model file, used as the prediction-cache key.
@@ -327,4 +316,34 @@ pub fn read_label_tsv(path: impl AsRef<Path>) -> Result<(Vec<String>, Vec<f64>)>
         }
     }
     Ok((seqs, rts))
+}
+
+#[cfg(test)]
+mod cnn_workflow_tests {
+    use super::*;
+
+    #[test]
+    fn bundled_cnn_is_portable_and_matches_training_package() {
+        assert_eq!(
+            DEFAULT_RT_CNN,
+            include_bytes!("../../uno-rt-train/python/uno_rt/data/default.urtc")
+        );
+        let model = RtModel::bundled().unwrap();
+        let direct = crate::rt_cnn::RtCnn::from_bytes(DEFAULT_RT_CNN).unwrap();
+        assert_eq!(
+            model.predict_seq("PEPTIDEK"),
+            direct.predict_seq("PEPTIDEK")
+        );
+        assert_eq!(model.fingerprint(), fingerprint_bytes(DEFAULT_RT_CNN));
+    }
+
+    #[test]
+    fn cnn_rejects_invalid_dimensions_normalization_and_version() {
+        for (offset, value) in [(4, 99u32), (12, 0), (16, 0), (24, 2), (28, u32::MAX)] {
+            let mut bytes = DEFAULT_RT_CNN.to_vec();
+            bytes[offset..offset + 4].copy_from_slice(&value.to_le_bytes());
+            assert!(crate::rt_cnn::RtCnn::from_bytes(&bytes).is_err());
+        }
+        assert!(crate::rt_cnn::RtCnn::from_bytes(&DEFAULT_RT_CNN[..80]).is_err());
+    }
 }

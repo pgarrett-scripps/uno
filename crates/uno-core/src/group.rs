@@ -119,7 +119,10 @@ pub fn build_groups(
             .iter()
             .filter(|&&g| h.decoy || confident.contains(&groups[g].leading))
             .max_by(|&&a, &&b| {
-                uniq_count.get(&a).copied().unwrap_or(0)
+                uniq_count
+                    .get(&a)
+                    .copied()
+                    .unwrap_or(0)
                     .cmp(&uniq_count.get(&b).copied().unwrap_or(0))
                     .then(groups[b].leading.cmp(&groups[a].leading))
             })

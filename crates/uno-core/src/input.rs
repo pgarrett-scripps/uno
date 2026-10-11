@@ -148,16 +148,24 @@ impl FeatureMatrix {
                 .position(|h| h == name)
                 .ok_or_else(|| anyhow!("aligned matrix missing column `{name}`"))
         };
-        let (c_mass, c_mz, c_charge, c_rt) =
-            (col("massCalib")?, col("mz")?, col("charge")?, col("rtApex")?);
+        let (c_mass, c_mz, c_charge, c_rt) = (
+            col("massCalib")?,
+            col("mz")?,
+            col("charge")?,
+            col("rtApex")?,
+        );
         let c_im = header.iter().position(|h| h == "im");
         let c_cs = header.iter().position(|h| h == "combined_score");
         let c_ncr = col("n_contributing_runs")?;
-        let evidence_cols: Vec<Option<usize>> = MATRIX_EVIDENCE_COLUMNS.iter()
-            .map(|name| header.iter().position(|h| h == *name)).collect();
+        let evidence_cols: Vec<Option<usize>> = MATRIX_EVIDENCE_COLUMNS
+            .iter()
+            .map(|name| header.iter().position(|h| h == *name))
+            .collect();
         let has_evidence = evidence_cols.iter().any(Option::is_some);
         if has_evidence && evidence_cols.iter().any(|c| c.is_none_or(|c| c >= c_ncr)) {
-            return Err(anyhow!("matrix evidence requires all nine named columns before n_contributing_runs"));
+            return Err(anyhow!(
+                "matrix evidence requires all nine named columns before n_contributing_runs"
+            ));
         }
         let mut matrix_evidence = has_evidence.then(Vec::new);
         // Run intensity columns are everything after `n_contributing_runs`.
@@ -165,7 +173,11 @@ impl FeatureMatrix {
         if first_run >= header.len() {
             return Err(anyhow!("aligned matrix has no run intensity columns"));
         }
-        let run_names: Vec<String> = header.iter().skip(first_run).map(|s| s.to_string()).collect();
+        let run_names: Vec<String> = header
+            .iter()
+            .skip(first_run)
+            .map(|s| s.to_string())
+            .collect();
 
         let parse = |rec: &csv::StringRecord, c: usize, what: &str, line: usize| -> Result<f64> {
             rec.get(c)
@@ -181,15 +193,27 @@ impl FeatureMatrix {
             if has_evidence {
                 for (i, c) in evidence_cols.iter().enumerate() {
                     let value = parse(&rec, c.unwrap(), MATRIX_EVIDENCE_COLUMNS[i], line)?;
-                    if !value.is_finite() || value < 0.0 || value > f32::MAX as f64
-                        || (matches!(i, 0 | 1 | 2 | 4 | 5) && value > 1.0) {
-                        return Err(anyhow!("line {line}: invalid matrix evidence {}", MATRIX_EVIDENCE_COLUMNS[i]));
+                    if !value.is_finite()
+                        || value < 0.0
+                        || value > f32::MAX as f64
+                        || (matches!(i, 0 | 1 | 2 | 4 | 5) && value > 1.0)
+                    {
+                        return Err(anyhow!(
+                            "line {line}: invalid matrix evidence {}",
+                            MATRIX_EVIDENCE_COLUMNS[i]
+                        ));
                     }
                     evidence[i] = value as f32;
                 }
             }
             let intensities: Vec<f64> = (first_run..header.len())
-                .map(|c| rec.get(c).unwrap_or("0").trim().parse::<f64>().unwrap_or(0.0))
+                .map(|c| {
+                    rec.get(c)
+                        .unwrap_or("0")
+                        .trim()
+                        .parse::<f64>()
+                        .unwrap_or(0.0)
+                })
                 .collect();
             // Reproducibility floor uses koth's `n_contributing_runs` — the number
             // of runs that DETECTED the feature, NOT the count of non-zero cells.
@@ -236,7 +260,13 @@ impl FeatureMatrix {
                 intensities,
             });
         }
-        Ok(FeatureMatrix { run_names, features, matrix_evidence, joint_evidence: None, joint_cell_evidence: None })
+        Ok(FeatureMatrix {
+            run_names,
+            features,
+            matrix_evidence,
+            joint_evidence: None,
+            joint_cell_evidence: None,
+        })
     }
 }
 
@@ -315,14 +345,17 @@ impl Layout {
         };
         // Find the first present of a set of alias names.
         let find_any = |names: &[&str]| -> Option<usize> {
-            names.iter().find_map(|&n| header.iter().position(|h| h == n))
+            names
+                .iter()
+                .find_map(|&n| header.iter().position(|h| h == n))
         };
 
         // Intensity: prefer apex, fall back to sum.
-        let (intensity, intensity_name) = match find_any(&["intensityApex", "intensitySum", "intensity"]) {
-            Some(i) => (Some(i), header.get(i).unwrap_or("intensity").to_string()),
-            None => (None, "intensity".to_string()),
-        };
+        let (intensity, intensity_name) =
+            match find_any(&["intensityApex", "intensitySum", "intensity"]) {
+                Some(i) => (Some(i), header.get(i).unwrap_or("intensity").to_string()),
+                None => (None, "intensity".to_string()),
+            };
 
         Ok(Layout {
             mass: find("massCalib")?,
@@ -410,17 +443,35 @@ mod tests {
     use super::*;
 
     fn matrix_fixture(evidence: bool, invalid: bool) -> std::path::PathBuf {
-        let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
-        let path = std::env::temp_dir().join(format!("uno-matrix-{}-{stamp}.tsv", std::process::id()));
-        let extra = if evidence { format!("{}\t", MATRIX_EVIDENCE_COLUMNS.join("\t")) } else { String::new() };
+        let stamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let path =
+            std::env::temp_dir().join(format!("uno-matrix-{}-{stamp}.tsv", std::process::id()));
+        let extra = if evidence {
+            format!("{}\t", MATRIX_EVIDENCE_COLUMNS.join("\t"))
+        } else {
+            String::new()
+        };
         let values = if evidence {
-            if invalid { "NaN\t0\t0\t0\t0\t0\t0\t0\t0\t" } else { "0.5\t0.25\t0.25\t2\t0.8\t0.9\t3\t1.2\t0.1\t" }
-        } else { "" };
-        std::fs::write(&path, format!(
-            "massCalib\tmz\tcharge\trtApex\t{extra}n_contributing_runs\tA\tB\n\
+            if invalid {
+                "NaN\t0\t0\t0\t0\t0\t0\t0\t0\t"
+            } else {
+                "0.5\t0.25\t0.25\t2\t0.8\t0.9\t3\t1.2\t0.1\t"
+            }
+        } else {
+            ""
+        };
+        std::fs::write(
+            &path,
+            format!(
+                "massCalib\tmz\tcharge\trtApex\t{extra}n_contributing_runs\tA\tB\n\
              1000\t501\t2\t10\t{values}1\t100\t0\n\
              1100\t551\t2\t12\t{values}2\t200\t300\n"
-        )).unwrap();
+            ),
+        )
+        .unwrap();
         path
     }
 
@@ -458,7 +509,9 @@ mod tests {
     #[test]
     fn matrix_evidence_rejects_partial_schema() {
         let path = matrix_fixture(true, false);
-        let text = std::fs::read_to_string(&path).unwrap().replace("matrix_median_abs_rt", "unexpected");
+        let text = std::fs::read_to_string(&path)
+            .unwrap()
+            .replace("matrix_median_abs_rt", "unexpected");
         std::fs::write(&path, text).unwrap();
         let error = FeatureMatrix::load_matrix(&path, 2).unwrap_err();
         std::fs::remove_file(path).unwrap();

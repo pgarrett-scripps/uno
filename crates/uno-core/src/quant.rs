@@ -120,21 +120,37 @@ pub fn profile_reassign(
     // per-run low floor for imputing missing cells (5th pct of detected)
     let mut per_run: Vec<Vec<f64>> = vec![Vec::new(); n_runs];
     for h in base {
-        for (r, &v) in matrix.features[h.feature_idx as usize].intensities.iter().enumerate().take(n_runs) {
-            if v > 0.0 { per_run[r].push(v.log2()); }
+        for (r, &v) in matrix.features[h.feature_idx as usize]
+            .intensities
+            .iter()
+            .enumerate()
+            .take(n_runs)
+        {
+            if v > 0.0 {
+                per_run[r].push(v.log2());
+            }
         }
     }
-    let run_floor: Vec<f64> = per_run.iter_mut().map(|v| {
-        v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        if v.is_empty() { 0.0 } else { v[v.len() / 20] }
-    }).collect();
+    let run_floor: Vec<f64> = per_run
+        .iter_mut()
+        .map(|v| {
+            v.sort_by(|a, b| a.partial_cmp(b).unwrap());
+            if v.is_empty() {
+                0.0
+            } else {
+                v[v.len() / 20]
+            }
+        })
+        .collect();
     let profile = |fi: usize| -> Vec<f64> {
         let ints = &matrix.features[fi].intensities;
-        (0..n_runs).map(|r| {
-            let v = ints.get(r).copied().unwrap_or(0.0);
-            let l = if v > 0.0 { v.log2() } else { run_floor[r] };
-            l - run_med[r] + grand
-        }).collect()
+        (0..n_runs)
+            .map(|r| {
+                let v = ints.get(r).copied().unwrap_or(0.0);
+                let l = if v > 0.0 { v.log2() } else { run_floor[r] };
+                l - run_med[r] + grand
+            })
+            .collect()
     };
     let variance = |p: &[f64]| -> f64 {
         let m = p.iter().sum::<f64>() / p.len() as f64;
@@ -145,7 +161,10 @@ pub fn profile_reassign(
     let mut prot_feats: HashMap<(bool, &str), Vec<usize>> = HashMap::new();
     for h in base {
         for prot in &db.peptides[h.peptide_idx as usize].proteins {
-            prot_feats.entry((h.decoy, prot.as_ref())).or_default().push(h.feature_idx as usize);
+            prot_feats
+                .entry((h.decoy, prot.as_ref()))
+                .or_default()
+                .push(h.feature_idx as usize);
         }
     }
     let prot_profile: HashMap<(bool, &str), Vec<f64>> = prot_feats
@@ -154,9 +173,17 @@ pub fn profile_reassign(
             let mut cols = vec![Vec::new(); n_runs];
             for &fi in feats {
                 let p = profile(fi);
-                for r in 0..n_runs { cols[r].push(p[r]); }
+                for r in 0..n_runs {
+                    cols[r].push(p[r]);
+                }
             }
-            let prof: Vec<f64> = cols.iter_mut().map(|c| { c.sort_by(|a,b| a.partial_cmp(b).unwrap()); c[c.len()/2] }).collect();
+            let prof: Vec<f64> = cols
+                .iter_mut()
+                .map(|c| {
+                    c.sort_by(|a, b| a.partial_cmp(b).unwrap());
+                    c[c.len() / 2]
+                })
+                .collect();
             (*k, prof)
         })
         .collect();
@@ -173,14 +200,20 @@ pub fn profile_reassign(
             let v = variance(&p) >= min_var;
             (p, v)
         });
-        if !*varies { continue; }
+        if !*varies {
+            continue;
+        }
         let fp = fp.clone();
         for prot in &db.peptides[pi as usize].proteins {
             if let Some(pp) = prot_profile.get(&(decoy, prot.as_ref())) {
-                if variance(pp) < min_var { continue; }
+                if variance(pp) < min_var {
+                    continue;
+                }
                 let c = pearson(&fp, pp);
                 let e = best.entry(fi).or_insert((f64::NEG_INFINITY, pi, decoy));
-                if c > e.0 { *e = (c, pi, decoy); }
+                if c > e.0 {
+                    *e = (c, pi, decoy);
+                }
             }
         }
     }
@@ -189,11 +222,23 @@ pub fn profile_reassign(
     for (fi, (c, pi, decoy)) in best {
         if c >= min_corr {
             let prev = by_feat.get(&fi).map(|h| h.peptide_idx);
-            if prev != Some(pi) { moved += 1; }
-            by_feat.insert(fi, PeptideHit { peptide_idx: pi, feature_idx: fi, decoy });
+            if prev != Some(pi) {
+                moved += 1;
+            }
+            by_feat.insert(
+                fi,
+                PeptideHit {
+                    peptide_idx: pi,
+                    feature_idx: fi,
+                    decoy,
+                },
+            );
         }
     }
-    log::info!("profile reassignment: {} features re-routed by quant profile", moved);
+    log::info!(
+        "profile reassignment: {} features re-routed by quant profile",
+        moved
+    );
     // Same reason as in `resolve_feature_competition`: emit in feature order, not
     // HashMap order. This is the opt-in `--profile-reassign` path, which WAS used
     // for the reported quantitation, so it is on the live path to `--out-lfq`.
@@ -210,7 +255,11 @@ pub fn profile_reassign(
 /// species and makes the constant background appear to drift. Returns
 /// `(offset_per_run, grand_mean)`; apply as `log2(v) - offset[r] + grand`.
 /// Falls back to all detected cells if too few complete cases.
-fn run_normalizers(matrix: &FeatureMatrix, peptides: &[PeptideHit], n_runs: usize) -> (Vec<f64>, f64) {
+fn run_normalizers(
+    matrix: &FeatureMatrix,
+    peptides: &[PeptideHit],
+    n_runs: usize,
+) -> (Vec<f64>, f64) {
     let mut complete: Vec<Vec<f64>> = vec![Vec::new(); n_runs];
     let mut all: Vec<Vec<f64>> = vec![Vec::new(); n_runs];
     for h in peptides {
@@ -227,15 +276,22 @@ fn run_normalizers(matrix: &FeatureMatrix, peptides: &[PeptideHit], n_runs: usiz
     }
     let med = |v: &mut Vec<f64>| -> f64 {
         v.sort_by(|a, b| a.partial_cmp(b).unwrap());
-        if v.is_empty() { 0.0 } else { v[v.len() / 2] }
+        if v.is_empty() {
+            0.0
+        } else {
+            v[v.len() / 2]
+        }
     };
     let use_complete = complete.iter().map(|v| v.len()).min().unwrap_or(0) >= 200;
-    let src = if use_complete { &mut complete } else { &mut all };
-    let offs: Vec<f64> = src.iter_mut().map(|v| med(v)).collect();
+    let src = if use_complete {
+        &mut complete
+    } else {
+        &mut all
+    };
+    let offs: Vec<f64> = src.iter_mut().map(med).collect();
     let grand = offs.iter().sum::<f64>() / n_runs.max(1) as f64;
     (offs, grand)
 }
-
 
 fn pearson(x: &[f64], y: &[f64]) -> f64 {
     let n = x.len() as f64;
@@ -260,7 +316,6 @@ fn pearson(x: &[f64], y: &[f64]) -> f64 {
         sxy / (sxx * syy).sqrt()
     }
 }
-
 
 /// Protein-group abundance matrix — uno's quant deliverable (design-free).
 ///
@@ -313,7 +368,11 @@ mod determinism_tests {
             .collect();
         let n_targets = peptides.iter().filter(|p| !p.decoy).count();
         let n_decoys = peptides.len() - n_targets;
-        PeptideDb { peptides, n_targets, n_decoys }
+        PeptideDb {
+            peptides,
+            n_targets,
+            n_decoys,
+        }
     }
 
     /// `resolve_feature_competition` must return a stable ORDER, not just a stable set.
@@ -341,16 +400,25 @@ mod determinism_tests {
 
         // Several peptides contend for the same features, so the map is exercised.
         let hits: Vec<PeptideHit> = (0..6u32)
-            .map(|i| PeptideHit { peptide_idx: i, feature_idx: i % 3, decoy: false })
+            .map(|i| PeptideHit {
+                peptide_idx: i,
+                feature_idx: i % 3,
+                decoy: false,
+            })
             .collect();
 
         let first = resolve_feature_competition(&hits, &db, &prot_score);
         for _ in 0..12 {
             let again = resolve_feature_competition(&hits, &db, &prot_score);
-            assert_eq!(first, again, "feature competition output order is not stable");
+            assert_eq!(
+                first, again,
+                "feature competition output order is not stable"
+            );
         }
         // And the output really is in feature order.
         assert_eq!(first.len(), 3);
-        assert!(first.windows(2).all(|w| w[0].feature_idx < w[1].feature_idx));
+        assert!(first
+            .windows(2)
+            .all(|w| w[0].feature_idx < w[1].feature_idx));
     }
 }

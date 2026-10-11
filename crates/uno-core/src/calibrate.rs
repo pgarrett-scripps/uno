@@ -54,7 +54,10 @@ impl Calibration {
     pub(crate) fn affine(slope: f64, intercept: f64, xmin: f64, xmax: f64) -> Calibration {
         assert!(slope.is_finite() && slope > 0.0 && intercept.is_finite());
         assert!(xmin.is_finite() && xmax.is_finite() && xmax > xmin);
-        Calibration { x: vec![xmin,xmax], y: vec![slope*xmin+intercept,slope*xmax+intercept] }
+        Calibration {
+            x: vec![xmin, xmax],
+            y: vec![slope * xmin + intercept, slope * xmax + intercept],
+        }
     }
 
     /// Fit from `(abstract, observed)` pairs.
@@ -136,7 +139,11 @@ impl Calibration {
                 }
             }
             let xmid = bin[bin.len() / 2].0;
-            let yval = if ny > 0 { sy / ny as f64 } else { ymin + (peak as f64 + 0.5) / y_bins as f64 * yspan };
+            let yval = if ny > 0 {
+                sy / ny as f64
+            } else {
+                ymin + (peak as f64 + 0.5) / y_bins as f64 * yspan
+            };
             xk.push(xmid);
             yk.push(yval);
         }
@@ -145,7 +152,10 @@ impl Calibration {
         // would bias every noisy mode knot upward.
         let (mut xs, mut yraw) = (Vec::new(), Vec::new());
         for i in 0..xk.len() {
-            if xs.last().is_some_and(|&lx: &f64| (xk[i] - lx).abs() < 1e-12) {
+            if xs
+                .last()
+                .is_some_and(|&lx: &f64| (xk[i] - lx).abs() < 1e-12)
+            {
                 continue;
             }
             xs.push(xk[i]);
@@ -159,13 +169,22 @@ impl Calibration {
     /// small minority). Finds the largest line-consensus, then fits a monotone
     /// PWL on the inliers and expands. Returns the calibration and the indices
     /// of the inlier pairs (a likely-correct subset, usable as positives).
-    pub fn fit_ransac(pairs: &[(f64, f64)], thresh: f64, iters: usize) -> (Calibration, Vec<usize>) {
+    pub fn fit_ransac(
+        pairs: &[(f64, f64)],
+        thresh: f64,
+        iters: usize,
+    ) -> (Calibration, Vec<usize>) {
         Self::fit_ransac_seeded(pairs, thresh, iters, 0)
     }
 
     /// [`fit_ransac`](Self::fit_ransac) with the sampling stream salted by `seed`
     /// (0 = the shipped default stream; see [`crate::seed_mix`]).
-    pub fn fit_ransac_seeded(pairs: &[(f64, f64)], thresh: f64, iters: usize, seed: u64) -> (Calibration, Vec<usize>) {
+    pub fn fit_ransac_seeded(
+        pairs: &[(f64, f64)],
+        thresh: f64,
+        iters: usize,
+        seed: u64,
+    ) -> (Calibration, Vec<usize>) {
         // Work through a canonical (value-sorted) view of the finite pairs. The
         // sampling LCG below draws index *positions*, so without a fixed order the
         // same iteration would pick different points depending on how the caller
@@ -193,7 +212,9 @@ impl Calibration {
         // deterministic LCG
         let mut state: u64 = 0x2545_f491_4f6c_dd1d ^ crate::seed_mix(seed);
         let mut next = |m: usize| -> usize {
-            state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            state = state
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
             ((state >> 33) as usize) % m
         };
 
@@ -267,7 +288,11 @@ mod seed_tests {
         (0..200)
             .map(|i| {
                 let x = i as f64 * 0.1;
-                let y = if i % 17 == 0 { x * 2.0 + 30.0 } else { x * 2.0 + 1.0 + ((i % 7) as f64 - 3.0) * 0.05 };
+                let y = if i % 17 == 0 {
+                    x * 2.0 + 30.0
+                } else {
+                    x * 2.0 + 1.0 + ((i % 7) as f64 - 3.0) * 0.05
+                };
                 (x, y)
             })
             .collect()
@@ -294,7 +319,9 @@ mod seed_tests {
             let mut state: u64 = 0x2545_f491_4f6c_dd1d ^ crate::seed_mix(seed);
             (0..8)
                 .map(|_| {
-                    state = state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+                    state = state
+                        .wrapping_mul(6364136223846793005)
+                        .wrapping_add(1442695040888963407);
                     (state >> 33) as usize % 200
                 })
                 .collect::<Vec<_>>()

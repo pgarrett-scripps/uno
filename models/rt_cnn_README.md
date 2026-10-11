@@ -50,7 +50,7 @@ Honest = yeast-covered entrapment library; emp FDR from yeast IDs.
 | OLD Prosit ch64           |       546       |  1.5%   |    2.65 min   |  15k   |  66  |
 
 chrono ch32 = 81% of DeepLC's depth, pure-Rust, ~40x faster, no Python. Retrain/extend:
-see [`../crates/uno-rt-train/PRETRAIN_PLAN.md`](../crates/uno-rt-train/PRETRAIN_PLAN.md).
+see [RT models](../docs/rt-models.md). Only the default model ships in this repository.
 
 ## Global features (URTC v2) — the current lever
 DeepLC's edge over uno's CNN on run10 (residual σ 1.44 vs 5.07 min) traces partly

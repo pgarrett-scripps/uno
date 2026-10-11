@@ -41,7 +41,11 @@ extern "C" {
         field_type: c_int,
     ) -> c_int;
     fn LGBM_DatasetFree(handle: DatasetHandle) -> c_int;
-    fn LGBM_BoosterCreate(train_data: DatasetHandle, parameters: *const c_char, out: *mut BoosterHandle) -> c_int;
+    fn LGBM_BoosterCreate(
+        train_data: DatasetHandle,
+        parameters: *const c_char,
+        out: *mut BoosterHandle,
+    ) -> c_int;
     fn LGBM_BoosterUpdateOneIter(handle: BoosterHandle, is_finished: *mut c_int) -> c_int;
     fn LGBM_BoosterFree(handle: BoosterHandle) -> c_int;
     #[allow(clippy::too_many_arguments)]
@@ -116,7 +120,12 @@ impl LgbmBooster {
     /// a LightGBM parameter string, e.g. `"objective=binary num_leaves=31
     /// learning_rate=0.1 verbosity=-1"`. Runs exactly `num_iterations` boosting
     /// rounds (no early stopping -- the caller's CV loop controls that).
-    pub fn train(feats: &[Vec<f32>], labels: &[f32], params: &str, num_iterations: usize) -> Result<Self> {
+    pub fn train(
+        feats: &[Vec<f32>],
+        labels: &[f32],
+        params: &str,
+        num_iterations: usize,
+    ) -> Result<Self> {
         if feats.is_empty() {
             bail!("LightGBM train: empty feature matrix");
         }

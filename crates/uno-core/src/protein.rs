@@ -7,8 +7,8 @@
 //! by a binomial surprise (how unlikely its peptide count is by chance)
 //! concentrates the signal. This is how DirectMS1/ms1searchpy reach depth.
 
-use std::cmp::Ordering;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::cmp::Ordering;
 use std::collections::BinaryHeap;
 
 /// One candidate in the greedy-parsimony max-heap: a protein `key`, its score,
@@ -31,7 +31,9 @@ impl Ord for GreedyEntry<'_> {
     fn cmp(&self, other: &Self) -> Ordering {
         // scores are finite (binom tail clamped to [1e-300,1]), so total_cmp
         // matches the old partial_cmp().unwrap(); key breaks ties identically.
-        self.score.total_cmp(&other.score).then_with(|| self.key.cmp(&other.key))
+        self.score
+            .total_cmp(&other.score)
+            .then_with(|| self.key.cmp(&other.key))
     }
 }
 impl PartialOrd for GreedyEntry<'_> {
@@ -112,18 +114,18 @@ fn ln_gamma(x: f64) -> f64 {
     const G: [f64; 8] = [
         676.5203681218851,
         -1259.1392167224028,
-        771.32342877765313,
-        -176.61502916214059,
+        771.323_428_777_653_1,
+        -176.615_029_162_140_6,
         12.507343278686905,
         -0.13857109526572012,
-        9.9843695780195716e-6,
+        9.984_369_578_019_572e-6,
         1.5056327351493116e-7,
     ];
     if x < 0.5 {
         std::f64::consts::PI / ((std::f64::consts::PI * x).sin() * ln_gamma(1.0 - x).exp())
     } else {
         let x = x - 1.0;
-        let mut a = 0.99999999999980993;
+        let mut a = 0.999_999_999_999_809_9;
         let t = x + 7.5;
         for (i, &g) in G.iter().enumerate() {
             a += g / (x + (i as f64) + 1.0);
@@ -266,8 +268,10 @@ pub(crate) fn score_proteins_weighted(
     }
     // Weighted observed evidence per protein (sum of member peptides' posteriors).
     let mut prot_peps = prot_peps;
-    let mut obs_w: FxHashMap<(bool, &str), f64> =
-        prot_peps.iter().map(|(&k, v)| (k, v.iter().map(|&pi| w_of(pi)).sum())).collect();
+    let mut obs_w: FxHashMap<(bool, &str), f64> = prot_peps
+        .iter()
+        .map(|(&k, v)| (k, v.iter().map(|&pi| w_of(pi)).sum()))
+        .collect();
     let mut by_n: FxHashMap<usize, Vec<(bool, &str)>> = FxHashMap::default();
     for &k in prot_peps.keys() {
         let n = theo_of(&k);
@@ -430,7 +434,11 @@ pub(crate) fn score_proteins_weighted(
         Some(&cs) => p.binomial_score > cs || (p.binomial_score == cs && !p.decoy),
         None => true,
     });
-    let plus1 = if std::env::var("UNO_NO_FDR_PLUS1").is_ok() { 0.0 } else { 1.0 };
+    let plus1 = if std::env::var("UNO_NO_FDR_PLUS1").is_ok() {
+        0.0
+    } else {
+        1.0
+    };
     let (mut t, mut d) = (0usize, 0usize);
     for p in proteins.iter_mut() {
         if p.decoy {
@@ -438,7 +446,11 @@ pub(crate) fn score_proteins_weighted(
         } else {
             t += 1;
         }
-        p.q_value = if t == 0 { 1.0 } else { (d as f64 + plus1) / t as f64 };
+        p.q_value = if t == 0 {
+            1.0
+        } else {
+            (d as f64 + plus1) / t as f64
+        };
     }
     let mut run = f64::INFINITY;
     for i in (0..proteins.len()).rev() {
@@ -481,7 +493,12 @@ pub(crate) fn score_proteins_greedy(
         (decoy_seen as f64 / decoy_theo as f64).max(1e-9)
     };
     if std::env::var("UNO_LOG_HITRATE").is_ok() {
-        log::info!("score_proteins_greedy: hit_rate(p)={:.4} decoy_seen={} decoy_theo={}", hit_rate, decoy_seen, decoy_theo);
+        log::info!(
+            "score_proteins_greedy: hit_rate(p)={:.4} decoy_seen={} decoy_theo={}",
+            hit_rate,
+            decoy_seen,
+            decoy_theo
+        );
     }
     let mut score_cache: FxHashMap<(u32, usize), f64> = FxHashMap::default();
     let mut score_of = |key: &(bool, &str), n_obs: usize| -> f64 {
@@ -530,8 +547,11 @@ pub(crate) fn score_proteins_greedy(
             }
         }
         let decoy_theo_f = decoy_theo.max(1) as f64;
-        let mut decoy_obs_sum: f64 =
-            obs.iter().filter(|((d, _), _)| *d).map(|(_, &c)| c as f64).sum();
+        let mut decoy_obs_sum: f64 = obs
+            .iter()
+            .filter(|((d, _), _)| *d)
+            .map(|(_, &c)| c as f64)
+            .sum();
         fn best_for_n<'a>(
             n: usize,
             by_n: &FxHashMap<usize, Vec<(bool, &'a str)>>,
@@ -664,7 +684,11 @@ pub(crate) fn score_proteins_greedy(
     let mut heap: BinaryHeap<GreedyEntry> = prot_peps
         .iter()
         .filter(|(_, peps)| !peps.is_empty())
-        .map(|(&key, peps)| GreedyEntry { score: score_of(&key, peps.len()), key, n_obs: peps.len() })
+        .map(|(&key, peps)| GreedyEntry {
+            score: score_of(&key, peps.len()),
+            key,
+            n_obs: peps.len(),
+        })
         .collect();
     let mut proteins: Vec<ProteinId> = Vec::new();
     let (mut t, mut d) = (0usize, 0usize);
@@ -698,7 +722,11 @@ pub(crate) fn score_proteins_greedy(
             decoy,
             observed_peptides: obs,
             theoretical_peptides: theo,
-            coverage: if theo > 0 { obs as f64 / theo as f64 } else { 0.0 },
+            coverage: if theo > 0 {
+                obs as f64 / theo as f64
+            } else {
+                0.0
+            },
             binomial_score: score,
             mean_rt_diff: 0.0,
             mean_mass_z: 0.0,
@@ -708,7 +736,10 @@ pub(crate) fn score_proteins_greedy(
         if t > 20 && q > (fdr * 25.0).max(0.5) {
             break;
         }
-        let won: Vec<usize> = prot_peps.get(&key).map(|s| s.iter().copied().collect()).unwrap_or_default();
+        let won: Vec<usize> = prot_peps
+            .get(&key)
+            .map(|s| s.iter().copied().collect())
+            .unwrap_or_default();
         let mut affected: FxHashSet<(bool, &str)> = FxHashSet::default();
         for pi in won {
             if let Some(keys) = pep_prots.get(&pi) {
@@ -723,7 +754,11 @@ pub(crate) fn score_proteins_greedy(
         for k in affected {
             if let Some(peps) = prot_peps.get(&k) {
                 if !peps.is_empty() {
-                    heap.push(GreedyEntry { score: score_of(&k, peps.len()), key: k, n_obs: peps.len() });
+                    heap.push(GreedyEntry {
+                        score: score_of(&k, peps.len()),
+                        key: k,
+                        n_obs: peps.len(),
+                    });
                 }
             }
         }
@@ -834,8 +869,11 @@ pub(crate) fn score_proteins_feature_compete(
     let mut obs: FxHashMap<(bool, &str), usize> =
         prot_peps.iter().map(|(&k, v)| (k, v.len())).collect();
     let decoy_theo_f = decoy_theo.max(1) as f64;
-    let mut decoy_obs_sum: f64 =
-        obs.iter().filter(|((d, _), _)| *d).map(|(_, &c)| c as f64).sum();
+    let mut decoy_obs_sum: f64 = obs
+        .iter()
+        .filter(|((d, _), _)| *d)
+        .map(|(_, &c)| c as f64)
+        .sum();
 
     // Per-theoretical-count (bucket) selection of the max-observed protein.
     //
@@ -1019,7 +1057,11 @@ pub(crate) fn score_proteins_feature_compete(
     // (UNO_NO_FDR_PLUS1=1) raised the reported count slightly but did NOT improve
     // honest entrapment depth -- it just reports nearer the (still-conservative)
     // decoy-estimated FDR. Keep the honest default.
-    let plus1 = if std::env::var("UNO_NO_FDR_PLUS1").is_ok() { 0.0 } else { 1.0 };
+    let plus1 = if std::env::var("UNO_NO_FDR_PLUS1").is_ok() {
+        0.0
+    } else {
+        1.0
+    };
     let (mut t, mut d) = (0usize, 0usize);
     for p in proteins.iter_mut() {
         if p.decoy {
@@ -1027,7 +1069,11 @@ pub(crate) fn score_proteins_feature_compete(
         } else {
             t += 1;
         }
-        p.q_value = if t == 0 { 1.0 } else { (d as f64 + plus1) / t as f64 };
+        p.q_value = if t == 0 {
+            1.0
+        } else {
+            (d as f64 + plus1) / t as f64
+        };
     }
     let mut run = f64::INFINITY;
     for i in (0..proteins.len()).rev() {
@@ -1046,19 +1092,44 @@ mod joint_alternative_tests {
             ((false, "A"), [0, 1, 2].into_iter().collect()),
             ((false, "B"), [3, 4].into_iter().collect()),
             ((true, "D"), [5, 6].into_iter().collect()),
-        ].into_iter().collect();
+        ]
+        .into_iter()
+        .collect();
         let theo = [((false, "A"), 10), ((false, "B"), 20), ((true, "D"), 1000)]
-            .into_iter().collect();
-        let mut peaks: FxHashMap<usize, Vec<usize>> =
-            [(0, vec![0]), (1, vec![1]), (2, vec![2]), (3, vec![0]),
-             (4, vec![4]), (5, vec![5]), (6, vec![6])].into_iter().collect();
+            .into_iter()
+            .collect();
+        let mut peaks: FxHashMap<usize, Vec<usize>> = [
+            (0, vec![0]),
+            (1, vec![1]),
+            (2, vec![2]),
+            (3, vec![0]),
+            (4, vec![4]),
+            (5, vec![5]),
+            (6, vec![6]),
+        ]
+        .into_iter()
+        .collect();
         let single = score_proteins_feature_compete(observed.clone(), &peaks, &theo, 1000, 0.01);
         peaks.insert(3, vec![0, 7, 8]);
         let multiple = score_proteins_feature_compete(observed, &peaks, &theo, 1000, 0.01);
         assert_eq!(single[0].accession, "A");
         assert_eq!(multiple[0].accession, "A");
-        assert_eq!(single.iter().find(|p| p.accession == "B").unwrap().observed_peptides, 1);
+        assert_eq!(
+            single
+                .iter()
+                .find(|p| p.accession == "B")
+                .unwrap()
+                .observed_peptides,
+            1
+        );
         // Two alternate peaks preserve ONE peptide, not two extra observations.
-        assert_eq!(multiple.iter().find(|p| p.accession == "B").unwrap().observed_peptides, 2);
+        assert_eq!(
+            multiple
+                .iter()
+                .find(|p| p.accession == "B")
+                .unwrap()
+                .observed_peptides,
+            2
+        );
     }
 }

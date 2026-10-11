@@ -40,7 +40,11 @@ fn affine_align(y: &[f64], p: &[f64]) -> Vec<f64> {
         spy += pi * yi;
     }
     let denom = n * spp - sp * sp;
-    let a = if denom.abs() < 1e-12 { 1.0 } else { (n * spy - sp * sy) / denom };
+    let a = if denom.abs() < 1e-12 {
+        1.0
+    } else {
+        (n * spy - sp * sy) / denom
+    };
     let b = (sy - a * sp) / n;
     p.iter().map(|&pi| a * pi + b).collect()
 }
@@ -82,8 +86,14 @@ fn main() -> Result<()> {
     let aligned = affine_align(&ys, &preds);
     let (ar2, amae, armse, adt95) = metrics(&ys, &aligned);
 
-    println!("raw     : R2={:.4} MAE={:.3} RMSE={:.3} dt95={:.3}", r2, mae, rmse, dt95);
-    println!("aligned : R2={:.4} MAE={:.3} RMSE={:.3} dt95={:.3}", ar2, amae, armse, adt95);
+    println!(
+        "raw     : R2={:.4} MAE={:.3} RMSE={:.3} dt95={:.3}",
+        r2, mae, rmse, dt95
+    );
+    println!(
+        "aligned : R2={:.4} MAE={:.3} RMSE={:.3} dt95={:.3}",
+        ar2, amae, armse, adt95
+    );
     println!(
         "speed   : {:.0} pred/s parallel ({:.2}s/{} seqs) | {:.0} pred/s single-thread",
         seqs.len() as f64 / par,

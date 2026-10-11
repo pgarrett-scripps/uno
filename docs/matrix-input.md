@@ -6,10 +6,10 @@ UNO accepts long-bundle schema versions 1, 2, and 3. KOTH 0.7.0 writes schema 3;
 regenerate both features/hills and aligned LFQ bundles when upgrading because
 feature ranking, group admission, and signal ownership have changed.
 
-Use `benchmark/koth_align.toml` as the current alignment/LFQ profile:
+Use `tests/fixtures/koth_align.toml` as the current alignment/LFQ profile:
 
 ```sh
-koth_align BATCH_DIRECTORY --config benchmark/koth_align.toml --output BUNDLE
+koth_align BATCH_DIRECTORY --config tests/fixtures/koth_align.toml --output BUNDLE
 uno --matrix-long BUNDLE --matrix-joint --fasta proteins.fasta --out-proteins proteins.tsv
 ```
 
@@ -125,13 +125,10 @@ confident observations receive zero for the confident-cell medians and retain
 their zero support fractions. KOTH extraction q-values assess extraction errors;
 they are not UNO peptide or protein q-values.
 
-`benchmark/matrix_evidence.py` writes separate confidence-masked, quality-enriched,
-and all-zero-quality control matrices. The all-zero control holds the classifier
-dimension constant when testing the added evidence. Ordinary matrices and all
+Ordinary matrices and all
 single-run inputs keep the original feature-vector dimensions and order.
 
-This is an experimental interface under evaluation in the
-[fresh benchmark](koth-matrix-benchmark-plan.md), not a claim of improved accuracy.
+This is an experimental interface, not a claim of improved accuracy.
 # Experimental joint search
 
 Use `uno --matrix-long BUNDLE --matrix-joint --fasta DATABASE --out-proteins proteins.tsv`
