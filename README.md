@@ -1,52 +1,57 @@
-# uno — MS1-only search engine (Rust)
+# uno
 
-A Rust MS1-only protein identification engine, in the spirit of DirectMS1 /
-ms1searchpy. `uno` accepts a single-run biosaur2 or KOTH feature TSV (`--features`),
-finds features with embedded KOTH (`--raw`), or searches a KOTH aligned intensity
-matrix across several runs (`--matrix`). It assigns peptide/protein identities
-and estimates FDR with target/decoy competition.
+[![crates.io](https://img.shields.io/crates/v/uno-ms.svg)](https://crates.io/crates/uno-ms)
+[![docs.rs](https://docs.rs/uno-ms-core/badge.svg)](https://docs.rs/uno-ms-core)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23305248.svg)](https://doi.org/10.5281/zenodo.23305248)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-See [matrix input](docs/matrix-input.md) for multi-run searching and the
-experimental confidence-aware matrix schema. Matrix input retains cross-run
-intensities but omits some quality descriptors from individual feature tables.
+MS1-only peptide and protein identification for LC-MS proteomics, in Rust.
 
-Digestion follows [Sage](https://github.com/lazear/sage)'s database builder (ported into `uno-core`); retention-time prediction is a
-pure-Rust learned model, with an on-data calibration step per run.
+## What uno does
 
-## Experimental quantitative options
-
-`uno` includes `uno quant` ([details](crates/uno-core/src/quant/directms1/README.md)), a Rust
-DirectMS1Quant-style contrast analyzer in `uno-core`, and opt-in `--out-quant-evidence` exports
-from independent uno searches. The existing KOTH-matrix route remains the second
-quantitative option. Native-reference parity is tested; biological accuracy and
-error calibration are pending.
-
-## Workspace layout
-
-| directory | crates.io package | purpose |
-| --- | --- | --- |
-| `crates/uno-core` | `uno-ms-core` | search, scoring, FDR, and quantitative contrast library |
-| `crates/uno` | `uno-ms` | command-line binary `uno` |
-| `crates/uno-lightgbm-sys` | `uno-ms-lightgbm-sys` | FFI bindings to a vendored LightGBM |
-| `crates/uno-rt-train` | not published | legacy RT/IM tree-model research tools (`uno-rt-train` binary) |
-| `crates/uno-rt-train/python` | not published | optional PyTorch sequence-CNN trainer for `uno rt train` and `uno im train` |
+uno identifies proteins from MS1 features alone, with no MS/MS spectra, in the
+spirit of DirectMS1 and ms1searchpy. It reads a single-run feature table from
+biosaur2 or [koth](https://github.com/pgarrett-scripps/koth), or runs koth's
+feature finder in-process on mzML, Bruker `.d` or Thermo `.raw` data. It digests
+the FASTA database in silico (a port of Sage's database builder, with shuffled
+decoys), matches each feature to candidate peptides by mass within a ppm
+tolerance with isotope-error offsets, predicts retention time with a bundled
+sequence CNN calibrated to each run, and, on ion-mobility data, predicts ion
+mobility with a second CNN. Candidates are scored by their combined mass and
+retention-time deviation, rescored by a cross-validated gradient-boosted-tree
+classifier, and rolled up to proteins by a binomial score with greedy
+parsimony. FDR at peptide and protein level is estimated by target-decoy
+competition. A multi-run consensus matrix from koth can be searched as one
+cohort, and `uno quant` provides an experimental DirectMS1Quant-style
+two-condition contrast.
 
 ## Install
 
-uno is published on crates.io as `uno-ms` (the `uno` name there belongs to an
-unrelated crate); the installed command is still `uno`:
+The published command is `uno`; the crate is `uno-ms` (the `uno` name on
+crates.io belongs to an unrelated crate).
+
+**Platform: Linux x86_64 only.** The classifier backend links a vendored,
+prebuilt `lib_lightgbm.so` (LightGBM 4.6.0, from the manylinux PyPI wheel),
+and no other platform is built or tested.
+
+Prebuilt binary (no Rust toolchain needed):
+
+```sh
+curl -LO https://github.com/pgarrett-scripps/uno/releases/download/v0.1.0/uno-linux-x86_64.tar.gz
+tar xzf uno-linux-x86_64.tar.gz
+./uno-linux-x86_64/uno --version
+```
+
+The archive holds `uno` and `lib_lightgbm.so` side by side; keep them in the
+same directory.
+
+From crates.io (Rust 1.97 or newer):
 
 ```sh
 cargo install uno-ms
 ```
 
-This needs Rust 1.97 or newer. Bruker `.d` and Thermo `.raw` input (through
-[koth-ms](https://github.com/pgarrett-scripps/koth), pure Rust, no .NET runtime)
-are built in; `cargo install uno-ms --no-default-features` drops `.raw`.
-**Platform:** `cargo install uno-ms` currently supports Linux x86_64 only.
-LightGBM is linked from a vendored prebuilt `lib_lightgbm.so`.
-
-## Build from source
+From source, with the toolchain pinned in `rust-toolchain.toml` (1.97.1):
 
 ```sh
 git clone https://github.com/pgarrett-scripps/uno
@@ -54,79 +59,136 @@ cd uno
 cargo build --release   # binary at target/release/uno
 ```
 
-All dependencies are fetched by Cargo; no sibling checkouts are needed.
+Thermo `.raw` input is the `thermo` feature, on by default, through koth-ms's
+pure-Rust reader (no .NET runtime). `cargo install uno-ms --no-default-features`
+drops it; mzML and Bruker `.d` need no feature.
+
+## Quick start
+
+Search a single run from its biosaur2 or koth feature table:
+
+```sh
+uno --features run.features.tsv \
+    --fasta proteins.fasta \
+    --config example_config.toml \
+    --seed 0 \
+    --out-proteins proteins.tsv
+```
+
+Or let uno find the features itself from the converted mzML (or a `.d`
+directory or `.raw` file), using koth's bundled biosaur2-matching profile:
+
+```sh
+uno --raw run.mzML --fasta proteins.fasta --config example_config.toml \
+    --out-proteins proteins.tsv
+```
+
+`--config` is optional; the defaults are those in `example_config.toml`.
+`--seed` fixes decoy generation and every other random stream, so the output
+is a pure function of input and seed. `uno --help` lists every flag.
+
+## Inputs and outputs
+
+| Input | Flag | Format |
+| --- | --- | --- |
+| Feature table | `--features` | Tab-separated biosaur2 or koth table; required columns `massCalib`, `mz`, `charge`, `rtApex`; optional `im`/`ion_mobility`/`FAIMS`, `intensityApex` (or `intensitySum`), `nIsotopes`, `nScans` and koth quality columns |
+| Raw data | `--raw` | `.mzML`/`.mzML.gz`, Bruker `.d`, Thermo `.raw` (`thermo` feature); koth runs in-process, overridable with a `[koth]` table in the config |
+| koth consensus matrix | `--matrix` | koth `intensity_matrix.tsv` (`massCalib`, `mz`, `charge`, `rtApex`, `n_contributing_runs`, then one intensity column per run) |
+| koth long bundle | `--matrix-long` | `matrix_manifest.json` from `koth_align`; see [docs/matrix-input.md](docs/matrix-input.md) |
+| Protein database | `--fasta` | FASTA; decoys are generated by uno (`digest.decoy_tag`, default `rev_`) |
+| RT library | `--rt-library` | `peptide<TAB>rt` from an external predictor, replacing the bundled CNN; build its sequence list with `--dump-candidate-peptides` |
+
+| Output | Flag | Columns |
+| --- | --- | --- |
+| Proteins | `--out-proteins` | `accession`, `decoy`, `n_group_members`, `group_members`, `observed_peptides`, `theoretical_peptides`, `coverage`, `binomial_score`, `mean_rt_diff`, `q_value` |
+| Peptides | `--out-peptides` | `peptide`, `decoy`, `proteins`, `charge`, `mass`, `rt`, one intensity column per run (matrix input) |
+| Peptide scores | `--out-peptide-scores` | `peptide`, `decoy`, `proteins`, `feature_idx`, `ml`, `deviation`, `rank_fraction`, `in_ensemble`, `ml_selected`, ... (read by `uno quant`) |
+| Precursor matrix | `--out-lfq` | one row per peptide and charge with its intensity in each run (`--matrix` only) |
+| Protein abundance | `--out-abundance` | one row per protein group with its summed intensity per run (`--matrix` only) |
+| Quant evidence | `--out-quant-evidence` | single-run target and decoy MS1 evidence for `uno quant` |
+
+Targets and decoys are both written; filter on `decoy = 0` and `q_value`.
+
+## Models
+
+Two sequence CNNs are embedded in the binary, so a search needs no model path,
+Python, or download. The weights live in `crates/uno-core/models/` and are
+symlinked from `models/`:
+
+- `rt_cnn_chrono_global_v3_ch32.urtc`: retention-time CNN trained on the
+  Chronologer corpus with 11 global physicochemical features
+  ([models/rt_cnn_README.md](models/rt_cnn_README.md)). Predictions are
+  calibrated to each run at search time. `--rt-model custom.urtc` overrides it.
+- `im_cnn_public_20260914.uimc`: ion-mobility CNN (charge-aware) trained on
+  public TIMS CCS labels converted to proportional inverse mobility, charges 2-4,
+  lengths 7-30 ([models/im_cnn_README.md](models/im_cnn_README.md)). It adds a
+  soft classifier feature after the mass and RT shortlist, never a cutoff.
+  `--no-im` disables it; `--im-model adapted.uimc` overrides it.
+
+`uno rt train` and `uno im train` adapt these CNNs to another column or
+separation from a headered TSV of peptide sequences and observed values; they
+need the optional PyTorch package in `crates/uno-rt-train/python`. `uno rt
+inspect|evaluate` and `uno im inspect|predict|evaluate` run in pure Rust. See
+[docs/rt-models.md](docs/rt-models.md) and [docs/im-models.md](docs/im-models.md).
+
+`crates/uno-rt-train` (binary `uno-rt-train`, not on crates.io) is the legacy
+research tool that distilled DeepLC and im2deep predictions into tree models.
+It is not needed for search.
+
+## Configuration
+
+Every field is optional; [example_config.toml](example_config.toml) lists the
+defaults with comments. The keys that matter most:
+
+- `digest.missed_cleavages = 0`, `digest.min_len = 7`, `digest.max_len = 50`,
+  `digest.variable_mods = {}`: the DirectMS1 convention, fully tryptic with no
+  variable modifications, because MS1-only search cannot localize a modification.
+- `matching.ppm_tolerance = 10.0` and `matching.isotope_offsets = [-1, 0, 1]`.
+- `scoring.top_k = 50`: candidate peptides kept per feature before scoring.
+- `scoring.ml_rescore = true`: the gradient-boosted-tree rescorer
+  (pure-Rust sequoia-boost by default; `UNO_ML_LIGHTGBM=1` selects LightGBM).
+- `scoring.seed`, `digest.decoy_seed` and the per-stage `rt_seed`, `cv_seed`,
+  `classifier_seed` overrides; `--seed` sets the first two together.
+- A `[koth]` table overrides the bundled feature-finder profile for `--raw`.
+
+## Reproducing the paper
+
+The benchmark drivers, configurations and entrapment scorer used in the
+manuscript are released with the paper; the digest used there is
+`min_len = 7`, `max_len = 30`, `missed_cleavages = 0`, matching ms1searchpy's
+defaults so the comparison isolates the engines.
 
 ## Citation
 
-If you use uno, please cite it using the metadata in [CITATION.cff](CITATION.cff).
+Software (concept DOI, resolves to the latest version; metadata in
+[CITATION.cff](CITATION.cff)):
 
-## Run
-
-```sh
-cargo run --release -p uno-ms -- \
-  --features path/to/run.features.tsv \
-  --fasta path/to/proteins.fasta \
-  --config example_config.toml \
-  --out-proteins proteins.tsv
+```bibtex
+@software{garrett_uno,
+  author  = {Garrett, Patrick T. and Yates, John R., III},
+  title   = {uno: MS1-only peptide and protein identification},
+  year    = {2026},
+  version = {0.1.0},
+  doi     = {10.5281/zenodo.23305248},
+  url     = {https://github.com/pgarrett-scripps/uno}
+}
 ```
 
-See `example_config.toml` for all tunables (digest, mass tolerance, `top_k`) and
-their documented defaults. Search uses the embedded pretrained CNN by default;
-`--rt-model custom.urtc` selects a custom model. Training uses PyTorch; search,
-model inspection, and evaluation run entirely in Rust.
-
-See [Custom RT models](docs/rt-models.md) for `uno rt train`, `uno rt inspect`,
-`uno rt evaluate`, the data format, and the Python training API.
-`uno --help` lists every flag, including the external predictor
-RT-library workflow (`--dump-candidate-peptides` → `--rt-library`).
-
-## Experimental sequence-aware IM
-
-[IM models](docs/im-models.md) use the same sequence CNN and training workflow
-as RT, with charge added as an input. `uno im train` supports training from
-scratch and full-network adaptation; inspection, prediction, and independent
-evaluation use the Rust search predictor.
-
-The bundled IM CNN contributes a soft classifier feature by default after the
-mass/RT shortlist. RT remains the main separator; there is no IM cutoff. Use
-`--no-im` to disable it or `--im-model adapted.uimc` to use custom weights.
-Missing IM leaves the search unchanged. See the model guide for supported chemistry, units, and limitations.
-
-## Search reproducibility
-
-`--seed N` controls decoy generation and the default RT, cross-validation, and
-classifier random streams. Reuse the same seed for repeat searches;
-test multiple seeds to measure whether the result is stable. Keep the inputs,
-model, config, software version, and experimental environment settings fixed.
-
-Optional `scoring.rt_seed`, `scoring.cv_seed`, and `scoring.classifier_seed`
-settings override their individual streams, including when `--seed` is supplied.
-Leave them absent for shared-seed behavior; see `example_config.toml` for examples.
-Changing decoys also changes downstream peptide indexing, so an individual seed
-intervention is not a pure variance-component estimate.
-
-The current search includes bounded RT recovery:
-when the usual search and its evidence-retention retry find no target proteins
-at 1% FDR, UNO attempts one additional broad RT calibration. Successful results
-are returned unchanged. Validation showed fewer empty low-input runs with
-0–1% normal-path runtime overhead; variation between successful seeds remains.
-
-## Repository contents
-
-- `crates/` — the Rust workspace.
-- `models/` — notes on the bundled RT and IM CNNs (the weights ship in `crates/uno-core/models/`).
-- `docs/` — model, matrix-input and quantification notes.
-- `tools/quant-reference/` — the DirectMS1Quant reference used for parity checks.
-- `tests/fixtures/` — software regression-test configurations.
-
-Build artifacts (`target/`), the Python virtualenv (`.venv/`), RT training data
-(`data/`), and scratch outputs (`experiments/`) are intentionally not tracked.
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md).
-Report security issues privately as described in [SECURITY.md](SECURITY.md).
+Paper: Garrett, P. T. and Yates, J. R., III. "uno: An Integrated Engine for
+Fast MS1-Only Protein Identification." Manuscript in preparation.
 
 ## License
 
-MIT © Patrick Garrett
+MIT, see [LICENSE](LICENSE). The vendored LightGBM library is MIT
+(Microsoft/LightGBM).
+
+## Links
+
+- crates.io: [uno-ms](https://crates.io/crates/uno-ms),
+  [uno-ms-core](https://crates.io/crates/uno-ms-core),
+  [uno-ms-lightgbm-sys](https://crates.io/crates/uno-ms-lightgbm-sys)
+- docs.rs: [uno-ms-core](https://docs.rs/uno-ms-core)
+- Zenodo: [10.5281/zenodo.23305248](https://doi.org/10.5281/zenodo.23305248)
+- Feature finding: [koth](https://github.com/pgarrett-scripps/koth)
+- [CHANGELOG](CHANGELOG.md), [CONTRIBUTING](CONTRIBUTING.md),
+  [SECURITY](SECURITY.md)
