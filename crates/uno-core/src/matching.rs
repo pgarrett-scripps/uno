@@ -11,7 +11,7 @@ use crate::input::FeatureMatrix;
 use crate::mass::NEUTRON;
 use rayon::prelude::*;
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct MatchConfig {
     /// Mass tolerance in ppm for the feature<->peptide match.

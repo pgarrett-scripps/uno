@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased — effective-configuration report
+
+- Every run now prints its complete effective configuration to stderr, between
+  `# uno effective configuration` and `# end of effective configuration`. No
+  output file changes, so archived results stay byte-identical.
+- The report covers what the config format cannot: the tuned defaults no config
+  field exposes (`[tuned]`: 300 boosting rounds, depth 7, learning rate 0.05,
+  sequoia `min_child_weight` 80, the 14 tightest of 40 cumulative protein
+  inclusion bands, deviation cut max 8), the per-stage seeds as resolved, the
+  Bruker `.d` feature-quality gate when it is applied, and any `UNO_*`
+  environment override in effect.
+- Each line carries its provenance: `(tuned)`, `(derived)`, `(env)`,
+  `(overridden)` for a clamped field, `(inactive)` for a field the config format
+  accepts and no code path reads. Setting an inactive or clamped field from a
+  config file now also emits a warning naming the value the engine uses instead.
+- `example_config.toml` marks its own inactive and clamped fields, and points at
+  the stderr report as the record to keep with a result.
+
 ## Unreleased — KOTH 0.7.0 compatibility
 
 - Require the sibling KOTH dependency at version 0.7.0 and record the released source revision. Pin additive isotope-evidence defaults in both raw profiles and update the standalone feature configuration.

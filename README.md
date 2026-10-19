@@ -83,6 +83,16 @@ Missing IM leaves the search unchanged. See the model guide for supported chemis
 
 ## Search reproducibility
 
+Every run writes its effective configuration to stderr, between
+`# uno effective configuration` and `# end of effective configuration`. It is
+the complete set of settings the search used, not only the ones you passed:
+tuned defaults that no config field exposes are printed under `[tuned]`, the
+per-stage seeds are shown as resolved, and each line is marked `(tuned)`,
+`(derived)`, `(env)`, `(overridden)` when a field you set is clamped, or
+`(inactive)` when the config format accepts a field no code path reads. Keep
+that block with a result and the search is reconstructable from it; a config
+file alone is not enough. Capture it with `uno ... 2> run.config`.
+
 `--seed N` controls decoy generation and the default RT, cross-validation, and
 classifier random streams. Reuse the same seed for repeat searches;
 test multiple seeds to measure whether the result is stable. Keep the inputs,

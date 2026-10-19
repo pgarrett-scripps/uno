@@ -213,6 +213,93 @@ impl Config {
     }
 }
 
+/// Flatten a user's config file to `"section.field"` keys. Only the fields the
+/// user actually wrote are listed, so the effective-config report can warn about
+/// a setting that was asked for and then ignored without complaining about every
+/// shipped default.
+fn user_set_keys(text: &str) -> Vec<String> {
+    let Ok(toml::Value::Table(table)) = text.parse::<toml::Value>() else {
+        return Vec::new();
+    };
+    let mut keys = Vec::new();
+    for (section, value) in &table {
+        match value {
+            toml::Value::Table(fields) => {
+                for field in fields.keys() {
+                    keys.push(format!("{section}.{field}"));
+                }
+            }
+            _ => keys.push(section.clone()),
+        }
+    }
+    keys.sort();
+    keys
+}
+
+fn describe_rt_source(cli: &Cli) -> String {
+    match (&cli.rt_library, &cli.rt_model) {
+        (Some(p), _) => format!("external prediction library {}", p.display()),
+        (None, Some(p)) => format!("custom URTC model {}", p.display()),
+        (None, None) => "bundled CNN".to_string(),
+    }
+}
+
+fn describe_im_source(cli: &Cli) -> String {
+    if cli.no_im {
+        return "disabled (--no-im)".to_string();
+    }
+    match &cli.im_model {
+        Some(p) => format!("custom model {}", p.display()),
+        None => "bundled CNN".to_string(),
+    }
+}
+
+/// Print the effective configuration to stderr, once per process.
+///
+/// A reviewer must be able to see the settings a search really used, including
+/// the values tuned on development data and the fields the engine silently
+/// clamps or ignores (see [`uno_core::eff_config`]). This goes to stderr rather
+/// than a result file so that no output table changes: every TSV uno writes is
+/// byte-identical with and without it.
+fn emit_effective_config(
+    cli: &Cli,
+    config: &Config,
+    input_route: &str,
+    input_path: String,
+    matrix_min_runs: Option<u32>,
+    bruker_gate_applied: bool,
+) {
+    let user_set = match &cli.config {
+        Some(p) => std::fs::read_to_string(p).map(|s| user_set_keys(&s)).unwrap_or_default(),
+        None => Vec::new(),
+    };
+    let run = uno_core::eff_config::RunContext {
+        uno_version: env!("CARGO_PKG_VERSION").to_string(),
+        input_route: input_route.to_string(),
+        input_path,
+        fasta_path: cli.fasta.as_ref().map(|p| p.display().to_string()).unwrap_or_default(),
+        config_path: cli.config.as_ref().map(|p| p.display().to_string()),
+        matrix_min_runs,
+        rt_source: describe_rt_source(cli),
+        im_source: describe_im_source(cli),
+        cli_seed: cli.seed,
+        bruker_gate_applied,
+        user_set,
+    };
+    let report = uno_core::eff_config::render(
+        &config.digest,
+        &config.matching,
+        &config.scoring,
+        &config.protein,
+        &run,
+    );
+    eprintln!("{}", report.text);
+    // Also as warnings, so they survive a reader who skims past the block.
+    for w in &report.warnings {
+        log::warn!("{w}");
+    }
+}
+
 fn main() -> Result<()> {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
     let cli = Cli::parse();
@@ -229,9 +316,16 @@ fn main() -> Result<()> {
     };
     config.apply_cli_seed(cli.seed);
 
-    if let Some(out)=&cli.matrix_batch_out { return search_batch(&cli,&config,out); }
+    if let Some(out)=&cli.matrix_batch_out {
+        let input = cli.matrix_long.as_ref().map(|p| p.display().to_string()).unwrap_or_default();
+        emit_effective_config(&cli, &config, "--matrix-long --matrix-batch-out", input, None, false);
+        return search_batch(&cli,&config,out);
+    }
 
     let matrix_min_runs = cli.matrix_min_runs.unwrap_or(if cli.matrix_joint { 1 } else { 2 });
+    // Set by the Bruker route below, so the effective-config report can mark the
+    // feature-quality gate as derived rather than user-chosen.
+    let mut bruker_gate_applied = false;
     let t = Instant::now();
     let mut matrix = if let Some(path) = &cli.matrix_long {
         let bundle = uno_core::long_input::Bundle::open(path)?;
@@ -258,6 +352,7 @@ fn main() -> Result<()> {
                 if config.matching.min_isotopes == 0 && config.matching.min_combined_score == 0.0 {
                     config.matching.min_isotopes = 4;
                     config.matching.min_combined_score = 0.85;
+                    bruker_gate_applied = true;
                     log::info!(
                         "Bruker defaults: matching.min_isotopes=4, matching.min_combined_score=0.85 \
                          (timsTOF mass accuracy is ~3 ppm, so the search must be restricted to \
@@ -282,6 +377,24 @@ fn main() -> Result<()> {
         // clap's required_unless_present/conflicts_with guarantees exactly one.
         _ => bail!("provide exactly one of --features, --raw, or --matrix"),
     } };
+    let (input_route, input_path) = match (&cli.features, &cli.raw, &cli.matrix, &cli.matrix_long) {
+        (Some(p), ..) => ("--features", p.display().to_string()),
+        (_, Some(p), ..) => ("--raw", p.display().to_string()),
+        (_, _, Some(p), _) => ("--matrix", p.display().to_string()),
+        (_, _, _, Some(p)) => {
+            (if cli.matrix_joint { "--matrix-long --matrix-joint" } else { "--matrix-long" }, p.display().to_string())
+        }
+        _ => ("", String::new()),
+    };
+    let min_runs_applies = cli.matrix.is_some() || cli.matrix_long.is_some();
+    emit_effective_config(
+        &cli,
+        &config,
+        input_route,
+        input_path,
+        min_runs_applies.then_some(matrix_min_runs),
+        bruker_gate_applied,
+    );
     uno_core::joint::restrict_observations(&mut matrix, &config.matching);
     log::info!(
         "loaded {} features from input ({:.1}s)",

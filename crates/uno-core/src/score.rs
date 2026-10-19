@@ -45,7 +45,7 @@ fn feature_cmp(a: &Feature, b: &Feature) -> Ordering {
         .then(a.mz.partial_cmp(&b.mz).unwrap())
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct ScoreConfig {
     /// Joint-input ablation: use candidate-specific observations but disable

@@ -1,5 +1,12 @@
 # uno configuration. All fields optional; shown values are the defaults.
 # Verified against DigestConfig/MatchingConfig/ScoreConfig/ProteinConfig::default().
+#
+# This file is the config FORMAT, not the configuration a search runs with. Some
+# fields below are accepted and read by no code path, and some are clamped before
+# use; they are marked INACTIVE and CLAMPED here. Every run prints the complete
+# effective configuration to stderr, including the tuned defaults no field
+# exposes, each marked (tuned)/(derived)/(env)/(overridden)/(inactive). That block
+# is the record to keep with a result; this file cannot be.
 
 [digest]
 # DirectMS1/ms1searchpy convention: fully-tryptic (mc = 0) and NO variable mods.
@@ -21,12 +28,12 @@ static_mods = { C = 57.02146 }
 # Empty by default. Example of opting in: variable_mods = { M = [15.994915] }
 variable_mods = { }
 
-# Decoy generation: interior-residue shuffle against a per-protein residue pool,
-# plus a mass shift so a decoy is not a mass twin of its target.
-decoy_mass_shift = 11.0
+# Decoy generation: interior-residue shuffle against a global residue pool, so a
+# shuffled decoy already differs from its target in composition and in mass.
+decoy_mass_shift = 11.0   # CLAMPED: ignored while decoy_shuffle = true
 decoy_shuffle = true
 decoy_method = "shuffle"
-decoy_order = 2
+decoy_order = 2           # INACTIVE unless decoy_method is "markov" or "debruijn"
 # Independent decoy stream; --seed overrides this and scoring.seed together.
 decoy_seed = 0
 
@@ -58,10 +65,10 @@ top_k = 50
 # Combined mass+RT deviation threshold sweep and mass-anchor stage.
 mass_anchor = true
 mass_anchor_ppm = 10.0
-discriminant = "deviation"
-calibration_fdr = 0.01
-bootstrap_rounds = 2
-seed_min_runs_frac = 0.5
+discriminant = "deviation"  # INACTIVE: the deviation scorer is unconditional
+calibration_fdr = 0.01      # INACTIVE: the bootstrap selects its own provisional set
+bootstrap_rounds = 2        # INACTIVE: the round count is fixed in the engine
+seed_min_runs_frac = 0.5    # INACTIVE: the RANSAC seed does not read it
 rt_calibrated = false
 
 # Learned per-PFM rescorer: a cross-validated gradient-boosted-tree classifier over
@@ -73,7 +80,11 @@ rt_calibrated = false
 # selected on development entrapment depth; see the manuscript's disclosure.
 ml_rescore = true
 n_folds = 3
-iterations = 100
-max_depth = 6
-shrinkage = 0.1
-max_train_rows = 200000
+# The classifier does not take these three as written: it trains 300 rounds at
+# depth max(max_depth, 7) and learning rate min(shrinkage, 0.05). The [tuned]
+# section of the stderr report prints the values it actually uses, with the
+# UNO_ML_* variables that change them.
+iterations = 100            # INACTIVE: always 300 rounds
+max_depth = 6               # CLAMPED to a minimum of 7
+shrinkage = 0.1             # CLAMPED to a maximum of 0.05
+max_train_rows = 200000     # INACTIVE: rows are capped by the 3x negative balance

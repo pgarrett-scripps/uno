@@ -8,6 +8,7 @@ pub mod calibrate;
 mod broad_rt;
 pub mod database;
 pub mod decoy;
+pub mod eff_config;
 pub mod group;
 pub mod im;
 mod im_cache;
@@ -26,6 +27,7 @@ pub mod rt_mlp;
 pub mod score;
 
 pub use calibrate::Calibration;
+pub use eff_config::{Report as EffectiveConfigReport, RunContext as EffectiveConfigContext};
 pub use database::{DigestConfig, PeptideDb, TheoPeptide};
 pub use im::{im_features, ImModel, IM_N_FEATURES};
 pub use input::{Feature, FeatureMatrix};

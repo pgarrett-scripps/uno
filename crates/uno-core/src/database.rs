@@ -14,7 +14,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 /// Digestion + modification configuration. Mirrors Sage's database block.
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct DigestConfig {
     pub missed_cleavages: u8,

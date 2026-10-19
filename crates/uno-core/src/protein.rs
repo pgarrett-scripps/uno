@@ -40,7 +40,7 @@ impl PartialOrd for GreedyEntry<'_> {
     }
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct ProteinConfig {
     /// A peptide counts as "observed" if its winning feature match has
